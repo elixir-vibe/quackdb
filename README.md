@@ -33,3 +33,11 @@ end
 mix deps.get
 mix ci
 ```
+
+Integration tests are skipped by default. To run them against a Quack server:
+
+```sh
+QUACKDB_TEST_URI=http://localhost:9494 \
+QUACKDB_TEST_TOKEN=secret \
+mix test --include integration
+```
