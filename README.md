@@ -2,7 +2,7 @@
 
 Remote DuckDB Quack protocol client for Elixir.
 
-`quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and is designed as the foundation for a future Ecto adapter.
+`quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and includes an initial Ecto adapter for raw SQL queries.
 
 ## Status
 
@@ -14,8 +14,9 @@ QuackDB currently focuses on the remote protocol and DBConnection client core. I
 - common scalar DuckDB types
 - nested result values such as `LIST`, `STRUCT`, `ARRAY`, and `MAP`
 - normalized affected-row counts for `INSERT`, `UPDATE`, and `DELETE`
+- a minimal Ecto SQL adapter for `Repo.query/3`
 
-Ecto support is planned after the core client semantics are stable.
+Higher-level Ecto schema queries, migrations, and write planning are planned after the raw SQL adapter path is stable.
 
 ## Installation
 
@@ -142,11 +143,42 @@ result.rows
 #=> [[1]]
 ```
 
+### Ecto raw SQL
+
+QuackDB includes an initial Ecto SQL adapter for raw SQL queries:
+
+```elixir
+defmodule MyApp.AnalyticsRepo do
+  use Ecto.Repo,
+    otp_app: :my_app,
+    adapter: Ecto.Adapters.QuackDB
+end
+```
+
+Configure the repo with the same connection options used by `QuackDB.start_link/1`:
+
+```elixir
+config :my_app, MyApp.AnalyticsRepo,
+  uri: "http://[::1]:9494",
+  token: "super_secret"
+```
+
+Then use `Repo.query/3`:
+
+```elixir
+{:ok, result} = MyApp.AnalyticsRepo.query("SELECT 1 AS n")
+
+result.rows
+#=> [[1]]
+```
+
+This first Ecto milestone is intentionally limited to raw SQL. Schema queries, migrations, and Ecto-managed inserts/updates/deletes raise explicit unsupported-feature errors for now.
+
 ## Current limitations
 
 - Bind parameters are not exposed through this Quack client path yet.
 - Appends are represented at the protocol struct level but are not exposed as public API.
-- Ecto adapter support is not implemented yet.
+- Ecto support is limited to raw SQL through `Repo.query/3`.
 - The low-level protocol is experimental and tracks DuckDB's Quack extension behavior.
 
 ## Development

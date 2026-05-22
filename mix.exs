@@ -33,6 +33,7 @@ defmodule QuackDB.MixProject do
       {:db_connection, "~> 2.7"},
       {:req, "~> 0.5"},
       {:decimal, "~> 2.0"},
+      {:ecto_sql, "~> 3.13", optional: true},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end

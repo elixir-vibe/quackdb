@@ -162,11 +162,42 @@ DBConnection.transaction(conn, fn tx ->
 end)
 ```
 
+## Ecto raw SQL
+
+QuackDB includes an initial Ecto SQL adapter for raw SQL queries:
+
+```elixir
+defmodule MyApp.AnalyticsRepo do
+  use Ecto.Repo,
+    otp_app: :my_app,
+    adapter: Ecto.Adapters.QuackDB
+end
+```
+
+Configure the repo with the same options accepted by `QuackDB.start_link/1`:
+
+```elixir
+config :my_app, MyApp.AnalyticsRepo,
+  uri: "http://[::1]:9494",
+  token: "super_secret"
+```
+
+Then run raw SQL through the repo:
+
+```elixir
+{:ok, result} = MyApp.AnalyticsRepo.query("SELECT 1 AS n")
+
+result.rows
+#=> [[1]]
+```
+
+The first Ecto milestone is intentionally narrow. `Repo.query/3` works, while schema queries, migrations, and Ecto-managed writes raise explicit unsupported-feature errors.
+
 ## Current limitations
 
 - Bind parameters are not exposed by this Quack client path yet. Passing non-empty params returns `:parameters_not_supported`.
 - Append messages are defined at the protocol layer but not exposed as public API.
-- Ecto adapter support is planned but not implemented yet.
+- Ecto support is limited to raw SQL through `Repo.query/3`.
 - Quack is experimental and may change with DuckDB releases.
 
 ## Running QuackDB's integration tests
