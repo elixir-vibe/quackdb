@@ -9,7 +9,9 @@ defmodule QuackDB.Connection do
   alias QuackDB.Protocol.Message.ConnectionResponse
   alias QuackDB.Protocol.Message.Disconnect
   alias QuackDB.Protocol.Message.ErrorResponse
+  alias QuackDB.Protocol.DataChunk
   alias QuackDB.Protocol.Message.PrepareRequest
+  alias QuackDB.Protocol.Message.PrepareResponse
 
   defstruct [:uri, :token, :connection_id, :server, :transport, :client_version]
 
@@ -132,6 +134,19 @@ defmodule QuackDB.Connection do
 
   defp normalize_query_response({_header, %ErrorResponse{message: message}}) do
     {:error, Error.new(:server_error, message, source: :server)}
+  end
+
+  defp normalize_query_response({_header, %PrepareResponse{} = response}) do
+    rows = Enum.flat_map(response.results, &DataChunk.rows(&1, response.result_names))
+
+    {:ok,
+     %QuackDB.Result{
+       command: :select,
+       columns: response.result_names,
+       rows: rows,
+       num_rows: length(rows),
+       metadata: %{needs_more_fetch: response.needs_more_fetch, result_uuid: response.result_uuid}
+     }}
   end
 
   defp normalize_query_response({header, _body}) do

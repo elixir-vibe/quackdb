@@ -50,6 +50,46 @@ defmodule QuackDB.Protocol.Reader do
     end
   end
 
+  @spec read_int8(binary()) :: read_result(integer())
+  def read_int8(<<value::signed-8, rest::binary>>), do: {:ok, value, rest}
+  def read_int8(_binary), do: error(:truncated_int8, "expected an 8-bit signed integer")
+
+  @spec read_uint8(binary()) :: read_result(non_neg_integer())
+  def read_uint8(<<value::unsigned-8, rest::binary>>), do: {:ok, value, rest}
+  def read_uint8(_binary), do: error(:truncated_uint8, "expected an 8-bit unsigned integer")
+
+  @spec read_int16(binary()) :: read_result(integer())
+  def read_int16(<<value::little-signed-16, rest::binary>>), do: {:ok, value, rest}
+  def read_int16(_binary), do: error(:truncated_int16, "expected a 16-bit signed integer")
+
+  @spec read_uint16(binary()) :: read_result(non_neg_integer())
+  def read_uint16(<<value::little-unsigned-16, rest::binary>>), do: {:ok, value, rest}
+  def read_uint16(_binary), do: error(:truncated_uint16, "expected a 16-bit unsigned integer")
+
+  @spec read_int32(binary()) :: read_result(integer())
+  def read_int32(<<value::little-signed-32, rest::binary>>), do: {:ok, value, rest}
+  def read_int32(_binary), do: error(:truncated_int32, "expected a 32-bit signed integer")
+
+  @spec read_uint32(binary()) :: read_result(non_neg_integer())
+  def read_uint32(<<value::little-unsigned-32, rest::binary>>), do: {:ok, value, rest}
+  def read_uint32(_binary), do: error(:truncated_uint32, "expected a 32-bit unsigned integer")
+
+  @spec read_int64(binary()) :: read_result(integer())
+  def read_int64(<<value::little-signed-64, rest::binary>>), do: {:ok, value, rest}
+  def read_int64(_binary), do: error(:truncated_int64, "expected a 64-bit signed integer")
+
+  @spec read_uint64(binary()) :: read_result(non_neg_integer())
+  def read_uint64(<<value::little-unsigned-64, rest::binary>>), do: {:ok, value, rest}
+  def read_uint64(_binary), do: error(:truncated_uint64, "expected a 64-bit unsigned integer")
+
+  @spec read_float32(binary()) :: read_result(float())
+  def read_float32(<<value::little-float-32, rest::binary>>), do: {:ok, value, rest}
+  def read_float32(_binary), do: error(:truncated_float32, "expected a 32-bit float")
+
+  @spec read_float64(binary()) :: read_result(float())
+  def read_float64(<<value::little-float-64, rest::binary>>), do: {:ok, value, rest}
+  def read_float64(_binary), do: error(:truncated_float64, "expected a 64-bit float")
+
   @spec read_list(binary(), (binary() -> read_result(value))) :: read_result([value])
         when value: term()
   def read_list(binary, read_element) when is_function(read_element, 1) do

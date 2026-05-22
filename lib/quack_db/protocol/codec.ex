@@ -2,6 +2,8 @@ defmodule QuackDB.Protocol.Codec do
   @moduledoc false
 
   alias QuackDB.Error
+  alias QuackDB.Protocol.DataChunk
+  alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Message
   alias QuackDB.Protocol.Reader
   alias QuackDB.Protocol.Writer
@@ -14,6 +16,8 @@ defmodule QuackDB.Protocol.Codec do
   alias Message.FetchRequest
   alias Message.Header
   alias Message.PrepareRequest
+  alias Message.PrepareResponse
+  alias Message.FetchResponse
   alias Message.SuccessResponse
 
   @type decoded_message :: {Header.t(), struct()}
@@ -100,6 +104,14 @@ defmodule QuackDB.Protocol.Codec do
 
   defp decode_body(:fetch_request, binary) do
     decode_fetch_request(binary, %FetchRequest{})
+  end
+
+  defp decode_body(:prepare_response, binary) do
+    decode_prepare_response(binary, %PrepareResponse{})
+  end
+
+  defp decode_body(:fetch_response, binary) do
+    decode_fetch_response(binary, %FetchResponse{})
   end
 
   defp decode_body(:success_response, binary) do
@@ -247,6 +259,65 @@ defmodule QuackDB.Protocol.Codec do
     end
   end
 
+  defp decode_prepare_response(binary, response) do
+    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
+      cond do
+        field_id == QuackDB.Protocol.field_end() ->
+          {:ok, response, rest}
+
+        field_id == 1 ->
+          with {:ok, result_types, rest} <- Reader.read_list(rest, &LogicalType.decode/1) do
+            decode_prepare_response(rest, %{response | result_types: result_types})
+          end
+
+        field_id == 2 ->
+          with {:ok, result_names, rest} <- Reader.read_list(rest, &Reader.read_string/1) do
+            decode_prepare_response(rest, %{response | result_names: result_names})
+          end
+
+        field_id == 3 ->
+          with {:ok, needs_more_fetch, rest} <- Reader.read_bool(rest) do
+            decode_prepare_response(rest, %{response | needs_more_fetch: needs_more_fetch})
+          end
+
+        field_id == 4 ->
+          with {:ok, results, rest} <- read_chunk_pointer_list(rest) do
+            decode_prepare_response(rest, %{response | results: results})
+          end
+
+        field_id == 5 ->
+          with {:ok, result_uuid, rest} <- Reader.read_hugeint(rest) do
+            decode_prepare_response(rest, %{response | result_uuid: result_uuid})
+          end
+
+        true ->
+          error(:unknown_prepare_response_field, "unknown prepare response field #{field_id}")
+      end
+    end
+  end
+
+  defp decode_fetch_response(binary, response) do
+    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
+      cond do
+        field_id == QuackDB.Protocol.field_end() ->
+          {:ok, response, rest}
+
+        field_id == 1 ->
+          with {:ok, results, rest} <- read_chunk_pointer_list(rest) do
+            decode_fetch_response(rest, %{response | results: results})
+          end
+
+        field_id == 2 ->
+          with {:ok, batch_index, rest} <- Reader.read_optional_index(rest) do
+            decode_fetch_response(rest, %{response | batch_index: batch_index})
+          end
+
+        true ->
+          error(:unknown_fetch_response_field, "unknown fetch response field #{field_id}")
+      end
+    end
+  end
+
   defp decode_error_response(binary, response) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
@@ -272,6 +343,12 @@ defmodule QuackDB.Protocol.Codec do
         error(:unexpected_body_field, "expected an empty message body")
       end
     end
+  end
+
+  defp read_chunk_pointer_list(binary) do
+    Reader.read_list(binary, fn rest ->
+      Reader.read_nullable(rest, &DataChunk.decode_wrapper/1)
+    end)
   end
 
   defp encode_optional_header_field(nil), do: []
