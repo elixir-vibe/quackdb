@@ -7,6 +7,7 @@
 - Expanded read-only Ecto query generation with common aggregates, `like/2`, nil checks, and simple fragments.
 - Added a DuckDB type support guide and real-server integration coverage for scalar and nested type families.
 - Added UUID and ENUM result decoding.
+- Added conservative client-side SQL parameter formatting for raw queries and Ecto pinned parameters.
 
 ## 0.1.0 - 2026-05-23
 

@@ -39,11 +39,17 @@ defmodule QuackDB.DBConnectionTest do
     assert Exception.message(error) =~ "query: SELECT"
   end
 
-  test "rejects parameters explicitly" do
-    connection = start_supervised!({QuackDB, transport: transport(prepare: [])})
+  test "formats parameters as SQL literals before sending Quack prepare requests" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
 
-    assert {:error, %QuackDB.Error{code: :parameters_not_supported}} =
-             QuackDB.query(connection, "SELECT ?", [1])
+    connection =
+      start_supervised!({QuackDB, transport: transport(parent: parent, prepare: [chunk])})
+
+    assert {:ok, %QuackDB.Result{rows: [[1]]}} =
+             QuackDB.query(connection, "SELECT ? AS n", ["Robert'); DROP TABLE users;--"])
+
+    assert_received {:statement, "SELECT 'Robert''); DROP TABLE users;--' AS n"}
   end
 
   test "DBConnection transactions issue BEGIN and COMMIT" do

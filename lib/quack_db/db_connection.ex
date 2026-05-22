@@ -163,14 +163,17 @@ defmodule QuackDB.DBConnection do
     :ok
   end
 
-  defp declare_query(_query, params, _options, state) when params != [] do
-    error = Error.new(:parameters_not_supported, "Quack does not expose bind parameters yet")
-    {:error, error, state}
+  defp declare_query(%Query{} = query, params, options, state) do
+    with {:ok, statement} <- QuackDB.SQL.format(query.statement, params) do
+      do_declare_query(%{query | statement: statement}, options, state)
+    else
+      {:error, error} -> {:error, error, state}
+    end
   end
 
-  defp declare_query(%Query{} = query, _params, options, state) do
+  defp do_declare_query(%Query{} = query, options, state) do
     request =
-      %PrepareRequest{sql_query: IO.iodata_to_binary(query.statement)}
+      %PrepareRequest{sql_query: query.statement}
       |> Codec.encode(connection_id: state.connection_id)
 
     with {:ok, response} <- state.transport.(state.uri, request, options),
@@ -222,14 +225,17 @@ defmodule QuackDB.DBConnection do
      )}
   end
 
-  defp execute_statement(_query, params, _options, state) when params != [] do
-    error = Error.new(:parameters_not_supported, "Quack does not expose bind parameters yet")
-    {:error, error, state}
+  defp execute_statement(%Query{} = query, params, options, state) do
+    with {:ok, statement} <- QuackDB.SQL.format(query.statement, params) do
+      do_execute_statement(%{query | statement: statement}, options, state)
+    else
+      {:error, error} -> {:error, error, state}
+    end
   end
 
-  defp execute_statement(%Query{} = query, _params, options, state) do
+  defp do_execute_statement(%Query{} = query, options, state) do
     request =
-      %PrepareRequest{sql_query: IO.iodata_to_binary(query.statement)}
+      %PrepareRequest{sql_query: query.statement}
       |> Codec.encode(connection_id: state.connection_id)
 
     with {:ok, response} <- state.transport.(state.uri, request, options),

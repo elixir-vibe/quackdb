@@ -75,19 +75,22 @@ defmodule QuackDB.EctoAdapterTest do
     end
   end
 
-  test "returns explicit unsupported parameter errors for non-empty param lists" do
+  test "Repo.query/3 formats parameter lists as SQL literals" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+
     Application.put_env(:quackdb, QuackDB.EctoRepo,
       uri: "http://localhost:9494",
       token: "secret",
-      transport: transport(prepare: []),
+      transport: transport(parent: parent, prepare: [chunk]),
       pool_size: 1,
       log: false
     )
 
     start_supervised!(QuackDB.EctoRepo)
 
-    assert {:error, %QuackDB.Error{code: :parameters_not_supported}} =
-             QuackDB.EctoRepo.query("SELECT ?", [1])
+    assert {:ok, %{rows: [[1]]}} = QuackDB.EctoRepo.query("SELECT ? AS n", ["duck"])
+    assert_received {:statement, "SELECT 'duck' AS n"}
   end
 
   test "generates basic read-only Ecto select SQL" do

@@ -66,6 +66,17 @@ result.num_rows
 
 `rows` are row-oriented lists. This shape is convenient for DBConnection and future Ecto integration.
 
+QuackDB formats positional parameters as DuckDB SQL literals client-side because the current Quack request path does not expose server-side bind parameters:
+
+```elixir
+{:ok, result} = QuackDB.query(conn, "SELECT ? AS name, ? AS n", ["duck", 42])
+
+result.rows
+#=> [["duck", 42]]
+```
+
+Placeholders inside strings and comments are ignored while formatting, and unsupported parameter values raise explicit errors.
+
 ## Decode nested values
 
 DuckDB nested result types decode to ordinary Elixir values:
@@ -230,7 +241,7 @@ import Ecto.Query
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
-    where: event.id > 1 and like(event.name, "d%"),
+    where: event.id > ^min_id and like(event.name, "d%"),
     order_by: [asc: event.id],
     select: %{id: event.id, name: event.name, upper_name: fragment("upper(?)", event.name)}
 )
@@ -240,7 +251,7 @@ The first Ecto milestone is intentionally narrow. `Repo.query/3` and read-only `
 
 ## Current limitations
 
-- Bind parameters are not exposed by this Quack client path yet. Passing non-empty params returns `:parameters_not_supported`.
+- Server-side bind parameters are not exposed by this Quack client path yet. QuackDB formats supported parameter values as DuckDB SQL literals client-side.
 - Append messages are defined at the protocol layer but not exposed as public API.
 - Ecto support is limited to raw SQL through `Repo.query/3` and read-only table queries through `Repo.all/2`.
 - Quack is experimental and may change with DuckDB releases.

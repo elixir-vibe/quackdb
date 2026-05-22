@@ -61,6 +61,28 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | Sequence | Supported |
 | FSST | Unsupported |
 
+## SQL parameter literals
+
+QuackDB formats query parameters as DuckDB SQL literals client-side because the current Quack request path does not expose server-side bind parameters.
+
+Supported parameter values:
+
+- `nil`
+- booleans
+- integers
+- finite floats
+- `Decimal.t()`
+- strings
+- `{:blob, binary}`
+- `Date.t()`
+- `Time.t()`
+- `NaiveDateTime.t()`
+- `DateTime.t()`
+- `{:interval, months, days, micros}`
+- lists containing supported parameter values
+
+Unsupported parameter values raise explicit errors rather than being formatted lossy.
+
 ## Notes
 
 - Unsupported types should fail explicitly rather than silently returning lossy values.

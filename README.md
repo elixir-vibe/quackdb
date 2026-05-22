@@ -71,6 +71,17 @@ result.rows
 #=> [[1]]
 ```
 
+QuackDB formats positional parameters as DuckDB SQL literals client-side because the current Quack request path does not expose server-side bind parameters:
+
+```elixir
+{:ok, result} = QuackDB.query(conn, "SELECT ? AS name, ? AS n", ["duck", 42])
+
+result.rows
+#=> [["duck", 42]]
+```
+
+Placeholders inside strings and comments are ignored while formatting, and unsupported parameter values raise explicit errors.
+
 Results use compact IEx-friendly inspection so large result sets do not flood the console:
 
 ```elixir
@@ -217,7 +228,7 @@ import Ecto.Query
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
-    where: event.id > 1 and like(event.name, "d%"),
+    where: event.id > ^min_id and like(event.name, "d%"),
     order_by: [asc: event.id],
     select: %{id: event.id, name: event.name, upper_name: fragment("upper(?)", event.name)}
 )

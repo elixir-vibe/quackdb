@@ -156,6 +156,20 @@ defmodule QuackDB.Integration.QuackServerTest do
     assert insert.metadata[:duckdb_rows] == [[2]]
   end
 
+  test "formats raw query parameters against a real Quack server" do
+    connection = start_connection!()
+
+    assert {:ok, %QuackDB.Result{rows: [["duck", 42, ~D[2024-01-02]]]}} =
+             QuackDB.query(connection, "SELECT ? AS name, ? AS n, ? AS d", [
+               "duck",
+               42,
+               ~D[2024-01-02]
+             ])
+
+    assert {:ok, %QuackDB.Result{rows: [["Robert'); DROP TABLE users;--"]]}} =
+             QuackDB.query(connection, "SELECT ? AS safe", ["Robert'); DROP TABLE users;--"])
+  end
+
   test "Ecto Repo.all/2 executes simple read-only queries against a real Quack server" do
     start_repo!()
     table = "quackdb_ecto_all_#{System.unique_integer([:positive])}"
@@ -170,6 +184,23 @@ defmodule QuackDB.Integration.QuackServerTest do
       )
 
     assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
+  end
+
+  test "Ecto Repo.all/2 supports pinned parameters against a real Quack server" do
+    start_repo!()
+    table = "quackdb_ecto_params_#{System.unique_integer([:positive])}"
+    name = "duck"
+
+    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
+    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+
+    query =
+      from(event in table,
+        where: event.name == ^name,
+        select: %{id: event.id, name: event.name}
+      )
+
+    assert [%{id: 1, name: "duck"}] = QuackDB.IntegrationRepo.all(query)
   end
 
   test "Ecto Repo.all/2 supports aggregates and common predicates against a real Quack server" do
