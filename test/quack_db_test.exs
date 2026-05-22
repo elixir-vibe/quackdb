@@ -7,9 +7,10 @@ defmodule QuackDBTest do
   end
 
   test "returns an explicit not implemented error for queries" do
-    connection = start_supervised!({QuackDB.Connection, uri: "http://localhost:9494"})
+    connection =
+      start_supervised!({QuackDB.Connection, uri: "http://localhost:9494", connect: false})
 
-    assert {:error, %QuackDB.Error{code: :not_implemented}} =
+    assert {:error, %QuackDB.Error{code: :not_connected}} =
              QuackDB.query(connection, "SELECT 1")
   end
 end
