@@ -2,10 +2,9 @@ defmodule QuackDB.ConnectionTest do
   use ExUnit.Case, async: true
 
   alias QuackDB.Protocol.Codec
-  alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Message.ConnectionResponse
+  alias QuackDB.Protocol.Message.FetchRequest
   alias QuackDB.Protocol.Message.Header
-  alias QuackDB.Protocol.Writer
 
   test "performs a connection handshake on start" do
     transport = fn _uri, _request, _options ->
@@ -35,13 +34,7 @@ defmodule QuackDB.ConnectionTest do
     transport = fn _uri, request, _options ->
       send(parent, {:request, IO.iodata_to_binary(request)})
 
-      response = [
-        Codec.encode_header(%Header{type: :error_response, connection_id: "conn-1"}),
-        <<1::little-16, 12, "syntax error">>,
-        <<0xFFFF::little-16>>
-      ]
-
-      {:ok, IO.iodata_to_binary(response)}
+      {:ok, QuackDB.ProtocolFixtures.error_response("syntax error")}
     end
 
     connection =
@@ -62,20 +55,8 @@ defmodule QuackDB.ConnectionTest do
 
   test "materializes rows from prepare responses" do
     transport = fn _uri, _request, _options ->
-      response = [
-        Codec.encode_header(%Header{type: :prepare_response, connection_id: "conn-1"}),
-        Writer.field(1, Writer.list([integer_type()], &Function.identity/1)),
-        Writer.field(2, Writer.list(["n"], &Writer.string/1)),
-        Writer.field(3, Writer.bool(false)),
-        Writer.field(
-          4,
-          Writer.list([integer_chunk_wrapper([1])], &Writer.nullable(&1, fn chunk -> chunk end))
-        ),
-        Writer.field(5, Writer.hugeint(42)),
-        Writer.end_object()
-      ]
-
-      {:ok, IO.iodata_to_binary(response)}
+      chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+      {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk])}
     end
 
     connection =
@@ -87,6 +68,49 @@ defmodule QuackDB.ConnectionTest do
 
     assert {:ok, %QuackDB.Result{columns: ["n"], rows: [[1]], num_rows: 1}} =
              QuackDB.query(connection, "SELECT 1 AS n")
+  end
+
+  test "fetches remaining chunks when prepare response requires more data" do
+    parent = self()
+    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+    fetched_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2, 3])
+
+    fetch_agent = start_supervised!({Agent, fn -> 0 end})
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+      send(parent, {:request, request})
+
+      if match?({:ok, {%Header{type: :fetch_request}, %FetchRequest{}}}, Codec.decode(request)) do
+        fetch_count = Agent.get_and_update(fetch_agent, &{&1, &1 + 1})
+        chunks = if fetch_count == 0, do: [fetched_chunk], else: []
+        {:ok, QuackDB.ProtocolFixtures.fetch_response(chunks, batch_index: fetch_count)}
+      else
+        {:ok,
+         QuackDB.ProtocolFixtures.prepare_response(
+           chunks: [initial_chunk],
+           needs_more_fetch?: true,
+           result_uuid: 123
+         )}
+      end
+    end
+
+    connection =
+      start_supervised!(
+        {QuackDB.Connection, uri: "http://localhost:9494", connect: false, transport: transport}
+      )
+
+    :sys.replace_state(connection, &%{&1 | connection_id: "conn-1"})
+
+    assert {:ok, %QuackDB.Result{rows: [[1], [2], [3]], num_rows: 3}} =
+             QuackDB.query(connection, "SELECT n FROM numbers")
+
+    assert_received {:request, prepare_request}
+    assert_received {:request, fetch_request}
+    assert {:ok, {%Header{type: :prepare_request}, _}} = Codec.decode(prepare_request)
+
+    assert {:ok, {%Header{type: :fetch_request}, %FetchRequest{uuid: 123}}} =
+             Codec.decode(fetch_request)
   end
 
   test "fails start when the handshake returns a server error" do
@@ -104,32 +128,5 @@ defmodule QuackDB.ConnectionTest do
 
     assert {:error, %QuackDB.Error{code: :server_error, message: "Invalid token"}} =
              QuackDB.Connection.start_link(uri: "http://localhost:9494", transport: transport)
-  end
-
-  defp integer_type do
-    [Writer.field(100, Writer.uleb128(LogicalType.id(:integer))), Writer.end_object()]
-  end
-
-  defp integer_chunk_wrapper(values) do
-    [Writer.field(300, integer_chunk(values)), Writer.end_object()]
-  end
-
-  defp integer_chunk(values) do
-    [
-      Writer.field(100, Writer.uleb128(length(values))),
-      Writer.field(101, Writer.list([integer_type()], &Function.identity/1)),
-      Writer.field(102, Writer.list([integer_vector(values)], &Function.identity/1)),
-      Writer.end_object()
-    ]
-  end
-
-  defp integer_vector(values) do
-    payload = for value <- values, into: <<>>, do: <<value::little-signed-32>>
-
-    [
-      Writer.field(100, Writer.bool(false)),
-      Writer.field(102, Writer.blob(payload)),
-      Writer.end_object()
-    ]
   end
 end

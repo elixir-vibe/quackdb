@@ -346,9 +346,16 @@ defmodule QuackDB.Protocol.Codec do
   end
 
   defp read_chunk_pointer_list(binary) do
-    Reader.read_list(binary, fn rest ->
-      Reader.read_nullable(rest, &DataChunk.decode_wrapper/1)
-    end)
+    with {:ok, chunks, rest} <-
+           Reader.read_list(binary, fn rest ->
+             Reader.read_nullable(rest, &DataChunk.decode_wrapper/1)
+           end) do
+      if Enum.any?(chunks, &is_nil/1) do
+        error(:null_data_chunk, "encountered null DataChunk pointer in result list")
+      else
+        {:ok, chunks, rest}
+      end
+    end
   end
 
   defp encode_optional_header_field(nil), do: []

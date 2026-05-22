@@ -10,6 +10,8 @@ defmodule QuackDB.Connection do
   alias QuackDB.Protocol.Message.Disconnect
   alias QuackDB.Protocol.Message.ErrorResponse
   alias QuackDB.Protocol.DataChunk
+  alias QuackDB.Protocol.Message.FetchRequest
+  alias QuackDB.Protocol.Message.FetchResponse
   alias QuackDB.Protocol.Message.PrepareRequest
   alias QuackDB.Protocol.Message.PrepareResponse
 
@@ -72,7 +74,7 @@ defmodule QuackDB.Connection do
     reply =
       with {:ok, response} <- state.transport.(state.uri, request, options),
            {:ok, decoded} <- Codec.decode(response) do
-        normalize_query_response(decoded)
+        normalize_query_response(decoded, state, options)
       end
 
     {:reply, reply, state}
@@ -132,26 +134,87 @@ defmodule QuackDB.Connection do
     {:error, Error.new(:unexpected_message, message, source: :protocol)}
   end
 
-  defp normalize_query_response({_header, %ErrorResponse{message: message}}) do
+  defp normalize_query_response({_header, %ErrorResponse{message: message}}, _state, _options) do
     {:error, Error.new(:server_error, message, source: :server)}
   end
 
-  defp normalize_query_response({_header, %PrepareResponse{} = response}) do
-    rows = Enum.flat_map(response.results, &DataChunk.rows(&1, response.result_names))
+  defp normalize_query_response({_header, %PrepareResponse{} = response}, state, options) do
+    with {:ok, chunks} <- fetch_remaining_chunks(response, state, options) do
+      rows =
+        response.results
+        |> Kernel.++(chunks)
+        |> Enum.flat_map(&DataChunk.rows(&1, response.result_names))
 
-    {:ok,
-     %QuackDB.Result{
-       command: :select,
-       columns: response.result_names,
-       rows: rows,
-       num_rows: length(rows),
-       metadata: %{needs_more_fetch: response.needs_more_fetch, result_uuid: response.result_uuid}
-     }}
+      {:ok,
+       %QuackDB.Result{
+         command: :select,
+         columns: response.result_names,
+         rows: rows,
+         num_rows: length(rows),
+         metadata: %{
+           needs_more_fetch: response.needs_more_fetch,
+           result_uuid: response.result_uuid
+         }
+       }}
+    end
   end
 
-  defp normalize_query_response({header, _body}) do
+  defp normalize_query_response({header, _body}, _state, _options) do
     message = "decoding #{header.type} query responses is not implemented yet"
     {:error, Error.new(:not_implemented, message, source: :protocol)}
+  end
+
+  defp fetch_remaining_chunks(%PrepareResponse{needs_more_fetch: false}, _state, _options),
+    do: {:ok, []}
+
+  defp fetch_remaining_chunks(%PrepareResponse{} = response, state, options) do
+    fetch_chunks(response.result_uuid, state, options, [])
+  end
+
+  defp fetch_chunks(result_uuid, state, options, chunks) do
+    request =
+      %FetchRequest{uuid: result_uuid}
+      |> Codec.encode(connection_id: state.connection_id)
+
+    with {:ok, response} <- state.transport.(state.uri, request, options),
+         {:ok, decoded} <- Codec.decode(response) do
+      normalize_fetch_response(decoded, result_uuid, state, options, chunks)
+    end
+  end
+
+  defp normalize_fetch_response(
+         {_header, %FetchResponse{results: []}},
+         _result_uuid,
+         _state,
+         _options,
+         chunks
+       ) do
+    {:ok, Enum.reverse(chunks)}
+  end
+
+  defp normalize_fetch_response(
+         {_header, %FetchResponse{} = response},
+         result_uuid,
+         state,
+         options,
+         chunks
+       ) do
+    fetch_chunks(result_uuid, state, options, Enum.reverse(response.results, chunks))
+  end
+
+  defp normalize_fetch_response(
+         {_header, %ErrorResponse{message: message}},
+         _result_uuid,
+         _state,
+         _options,
+         _chunks
+       ) do
+    {:error, Error.new(:server_error, message, source: :server)}
+  end
+
+  defp normalize_fetch_response({header, _body}, _result_uuid, _state, _options, _chunks) do
+    message = "expected fetch response, got #{header.type}"
+    {:error, Error.new(:unexpected_message, message, source: :protocol)}
   end
 
   defp client_version do
