@@ -17,6 +17,8 @@ defmodule QuackDB.DBConnectionTest do
     assert query.result_uuid == 42
     assert result.rows == [[1]]
     assert result.command == :select
+    assert result.connection_id == "conn-1"
+    assert result.messages == []
   end
 
   test "query supports decode_mapper like Postgrex" do
@@ -25,6 +27,16 @@ defmodule QuackDB.DBConnectionTest do
 
     assert {:ok, %QuackDB.Result{rows: [%{n: 1}, %{n: 2}]}} =
              QuackDB.query(connection, "SELECT n", [], decode_mapper: fn [n] -> %{n: n} end)
+  end
+
+  test "attaches query and connection context to server errors" do
+    connection = start_supervised!({QuackDB, transport: transport_error("syntax error")})
+
+    assert {:error, %QuackDB.Error{} = error} = QuackDB.query(connection, "SELECT")
+    assert error.message == "syntax error"
+    assert error.query == "SELECT"
+    assert error.connection_id == "conn-1"
+    assert Exception.message(error) =~ "query: SELECT"
   end
 
   test "rejects parameters explicitly" do
@@ -81,6 +93,20 @@ defmodule QuackDB.DBConnectionTest do
 
         {:prepare, _statement} ->
           {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: prepare_chunks)}
+      end
+    end
+  end
+
+  defp transport_error(message) do
+    fn _uri, request, _request_options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
+          {:ok, QuackDB.ProtocolFixtures.error_response(message)}
       end
     end
   end

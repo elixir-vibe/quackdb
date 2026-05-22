@@ -168,19 +168,21 @@ defmodule QuackDB.DBConnection do
 
     with {:ok, response} <- state.transport.(state.uri, request, options),
          {:ok, decoded} <- Codec.decode(response),
-         {:ok, query, cursor, cursor_state} <- normalize_declare_response(decoded, query) do
+         {:ok, query, cursor, cursor_state} <- normalize_declare_response(decoded, query, state) do
       state = put_cursor_state(state, cursor.ref, cursor_state)
       {:ok, query, cursor, state}
     else
-      {:error, error} -> {:error, error, %{state | status: failed_status(state.status)}}
+      {:error, error} ->
+        {:error, annotate_error(error, query, state),
+         %{state | status: failed_status(state.status)}}
     end
   end
 
-  defp normalize_declare_response({_header, %ErrorResponse{message: message}}, _query) do
+  defp normalize_declare_response({_header, %ErrorResponse{message: message}}, _query, _state) do
     {:error, Error.new(:server_error, message, source: :server)}
   end
 
-  defp normalize_declare_response({_header, %PrepareResponse{} = response}, query) do
+  defp normalize_declare_response({_header, %PrepareResponse{} = response}, query, state) do
     ref = make_ref()
 
     query = %{
@@ -194,7 +196,8 @@ defmodule QuackDB.DBConnection do
       ref: ref,
       result_uuid: response.result_uuid,
       columns: response.result_names,
-      result_types: response.result_types
+      result_types: response.result_types,
+      connection_id: state.connection_id
     }
 
     cursor_state = %{
@@ -205,7 +208,7 @@ defmodule QuackDB.DBConnection do
     {:ok, query, cursor, cursor_state}
   end
 
-  defp normalize_declare_response({header, _body}, _query) do
+  defp normalize_declare_response({header, _body}, _query, _state) do
     {:error,
      Error.new(:unexpected_message, "expected prepare response, got #{header.type}",
        source: :protocol
@@ -227,7 +230,9 @@ defmodule QuackDB.DBConnection do
          {:ok, query, result} <- normalize_query_response(decoded, query, state, options) do
       {:ok, query, result, %{state | status: successful_status(state.status)}}
     else
-      {:error, error} -> {:error, error, %{state | status: failed_status(state.status)}}
+      {:error, error} ->
+        {:error, annotate_error(error, query, state),
+         %{state | status: failed_status(state.status)}}
     end
   end
 
@@ -256,6 +261,8 @@ defmodule QuackDB.DBConnection do
         columns: response.result_names,
         rows: rows,
         num_rows: length(rows),
+        connection_id: state.connection_id,
+        messages: [],
         metadata: %{
           needs_more_fetch: response.needs_more_fetch,
           result_uuid: response.result_uuid
@@ -364,6 +371,10 @@ defmodule QuackDB.DBConnection do
     %{state | cursors: Map.put(state.cursors, ref, cursor_state)}
   end
 
+  defp annotate_error(%Error{} = error, %Query{} = query, state) do
+    %Error{error | query: query.statement, connection_id: state.connection_id}
+  end
+
   defp materialize_rows(chunks, columns) do
     Enum.flat_map(chunks, &DataChunk.rows(&1, columns))
   end
@@ -430,11 +441,18 @@ defmodule QuackDB.DBConnection do
   end
 
   defp cursor_result(cursor, rows) do
-    %Result{command: :fetch, columns: cursor.columns, rows: rows, num_rows: length(rows)}
+    %Result{
+      command: :fetch,
+      columns: cursor.columns,
+      rows: rows,
+      num_rows: length(rows),
+      connection_id: cursor.connection_id,
+      messages: []
+    }
   end
 
   defp empty_result(command) do
-    %Result{command: command, columns: nil, rows: nil, num_rows: 0}
+    %Result{command: command, columns: nil, rows: nil, num_rows: 0, messages: []}
   end
 
   defp command(statement) do
