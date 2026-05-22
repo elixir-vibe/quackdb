@@ -202,6 +202,27 @@ result.rows
 #=> [[1]]
 ```
 
+Raw SQL can participate in Ecto transactions:
+
+```elixir
+{:ok, :committed} =
+  MyApp.AnalyticsRepo.transaction(fn ->
+    MyApp.AnalyticsRepo.query!("CREATE TEMP TABLE events(id INTEGER)")
+    MyApp.AnalyticsRepo.query!("INSERT INTO events VALUES (1), (2)")
+    :committed
+  end)
+```
+
+Use `Repo.rollback/1` to abort transaction work:
+
+```elixir
+{:error, :rolled_back} =
+  MyApp.AnalyticsRepo.transaction(fn ->
+    MyApp.AnalyticsRepo.query!("INSERT INTO events VALUES (3)")
+    MyApp.AnalyticsRepo.rollback(:rolled_back)
+  end)
+```
+
 The first Ecto milestone is intentionally narrow. `Repo.query/3` works, while schema queries, migrations, and Ecto-managed writes raise explicit unsupported-feature errors.
 
 ## Current limitations
