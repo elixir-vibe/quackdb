@@ -10,7 +10,10 @@ defmodule QuackDB.MixProject do
       deps: deps(),
       aliases: aliases(),
       package: package(),
-      description: "Remote DuckDB Quack protocol client for Elixir"
+      description: "Remote DuckDB Quack protocol client for Elixir",
+      source_url: "https://github.com/elixir-vibe/quackdb",
+      homepage_url: "https://github.com/elixir-vibe/quackdb",
+      docs: docs()
     ]
   end
 
@@ -43,7 +46,26 @@ defmodule QuackDB.MixProject do
   defp package do
     [
       licenses: ["MIT"],
-      links: %{}
+      links: %{
+        "GitHub" => "https://github.com/elixir-vibe/quackdb",
+        "DuckDB" => "https://duckdb.org/"
+      }
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: [
+        "README.md",
+        "guides/getting-started.md",
+        "docs/research.md",
+        "docs/postgrex-comparison.md"
+      ],
+      groups_for_extras: [
+        Guides: ~r/guides\//,
+        Research: ~r/docs\//
+      ]
     ]
   end
 end

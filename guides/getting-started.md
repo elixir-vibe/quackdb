@@ -1,0 +1,180 @@
+# Getting started
+
+QuackDB connects Elixir applications to a remote DuckDB process through DuckDB's experimental Quack protocol. The client talks to the Quack HTTP endpoint, decodes DuckDB result chunks, and exposes the connection through `DBConnection`.
+
+## Requirements
+
+- Elixir 1.19 or newer
+- DuckDB 1.5.3 or newer for the current Quack extension behavior
+- A running Quack server
+
+## Install
+
+Add `:quackdb` to your dependencies:
+
+```elixir
+def deps do
+  [
+    {:quackdb, "~> 0.1.0"}
+  ]
+end
+```
+
+Then fetch dependencies:
+
+```sh
+mix deps.get
+```
+
+## Start DuckDB with Quack
+
+Start a local DuckDB server with the `quack` extension loaded:
+
+```sh
+tail -f /dev/null | duckdb -init /dev/null \
+  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
+```
+
+On some systems, `quack:localhost` binds to IPv6 localhost. If `http://localhost:9494` does not connect, use `http://[::1]:9494`.
+
+## Connect from Elixir
+
+```elixir
+{:ok, conn} =
+  QuackDB.start_link(
+    uri: "http://[::1]:9494",
+    token: "super_secret"
+  )
+```
+
+`QuackDB.start_link/1` starts a `DBConnection` process. You can pass the connection to `QuackDB.query/4`, `QuackDB.prepare_execute/4`, `QuackDB.stream/4`, or DBConnection APIs.
+
+## Run a query
+
+```elixir
+{:ok, result} = QuackDB.query(conn, "SELECT 1 AS n")
+
+result.columns
+#=> ["n"]
+
+result.rows
+#=> [[1]]
+
+result.num_rows
+#=> 1
+```
+
+`rows` are row-oriented lists. This shape is convenient for DBConnection and future Ecto integration.
+
+## Decode nested values
+
+DuckDB nested result types decode to ordinary Elixir values:
+
+```elixir
+{:ok, result} =
+  QuackDB.query(conn, """
+  SELECT
+    [1, 2, 3] AS xs,
+    {'name': 'duck', 'count': 2} AS obj,
+    array_value(1, 2, 3) AS arr,
+    map(['a', 'b'], [1, 2]) AS m,
+    [{'a': 1}, {'a': 2}] AS nested
+  """)
+
+result.rows
+#=> [
+#=>   [
+#=>     [1, 2, 3],
+#=>     %{"name" => "duck", "count" => 2},
+#=>     [1, 2, 3],
+#=>     %{"a" => 1, "b" => 2},
+#=>     [%{"a" => 1}, %{"a" => 2}]
+#=>   ]
+#=> ]
+```
+
+## Stream large result sets
+
+QuackDB fetches additional result chunks when DuckDB reports that more rows are available. Use `QuackDB.stream/4` to process those chunks lazily:
+
+```elixir
+row_count =
+  conn
+  |> QuackDB.stream("SELECT i FROM range(0, 50_000) t(i)")
+  |> Enum.reduce(0, fn result, count -> count + result.num_rows end)
+
+row_count
+#=> 50_000
+```
+
+Each streamed item is a `%QuackDB.Result{}` containing one batch of rows.
+
+## Work with command results
+
+DuckDB returns affected counts as a `Count` result column for DML statements. QuackDB normalizes those into `num_rows`:
+
+```elixir
+{:ok, _} = QuackDB.query(conn, "CREATE TEMP TABLE events(id INTEGER)")
+{:ok, result} = QuackDB.query(conn, "INSERT INTO events VALUES (1), (2)")
+
+result.command
+#=> :insert
+
+result.num_rows
+#=> 2
+
+result.columns
+#=> nil
+
+result.rows
+#=> nil
+```
+
+The raw DuckDB count result stays available for debugging:
+
+```elixir
+result.metadata[:duckdb_columns]
+#=> ["Count"]
+
+result.metadata[:duckdb_rows]
+#=> [[2]]
+```
+
+## Inspect output in IEx
+
+QuackDB implements compact inspection for common structs so manual review stays readable:
+
+```elixir
+QuackDB.query!(conn, "SELECT i FROM range(0, 4) t(i)")
+#QuackDB.Result<command: :select, columns: ["i"], rows: 4, preview: [[0], [1], [2], :...], connection_id: "...", needs_more_fetch?: false>
+```
+
+The actual rows are still available through `result.rows`.
+
+## Transactions
+
+QuackDB implements `DBConnection` transaction callbacks with SQL statements:
+
+```elixir
+DBConnection.transaction(conn, fn tx ->
+  QuackDB.query!(tx, "CREATE TEMP TABLE tx_events(id INTEGER)")
+  QuackDB.query!(tx, "INSERT INTO tx_events VALUES (1)")
+end)
+```
+
+## Current limitations
+
+- Bind parameters are not exposed by this Quack client path yet. Passing non-empty params returns `:parameters_not_supported`.
+- Append messages are defined at the protocol layer but not exposed as public API.
+- Ecto adapter support is planned but not implemented yet.
+- Quack is experimental and may change with DuckDB releases.
+
+## Running QuackDB's integration tests
+
+With a server running locally:
+
+```sh
+QUACKDB_TEST_URI='http://[::1]:9494' \
+QUACKDB_TEST_TOKEN=super_secret \
+mix test --include integration
+```
