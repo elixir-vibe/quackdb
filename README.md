@@ -4,6 +4,9 @@ Remote DuckDB Quack protocol client for Elixir.
 
 `quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and includes an initial Ecto adapter for raw SQL queries.
 
+> [!WARNING]
+> QuackDB itself is experimental and not production-ready. The package API, result shapes, Ecto adapter behavior, and supported type coverage may change as the project evolves. It also targets DuckDB's experimental Quack protocol, which may change across DuckDB releases. Use it at your own risk, validate behavior against your DuckDB version, and avoid relying on it for critical production workloads yet.
+
 ## Status
 
 QuackDB currently focuses on the remote protocol and DBConnection client core. It supports:
