@@ -78,8 +78,23 @@ defmodule QuackDB do
 
   defp result_maps(%QuackDB.Result{columns: columns, rows: rows})
        when is_list(columns) and is_list(rows) do
-    Enum.map(rows, fn row -> columns |> Enum.zip(row) |> Map.new() end)
+    map_keys = disambiguate_columns(columns)
+    Enum.map(rows, fn row -> map_keys |> Enum.zip(row) |> Map.new() end)
   end
 
   defp result_maps(_result), do: []
+
+  defp disambiguate_columns(columns) do
+    {columns, _counts} =
+      Enum.map_reduce(columns, %{}, fn column, counts ->
+        counts = Map.update(counts, column, 1, &(&1 + 1))
+
+        case counts[column] do
+          1 -> {column, counts}
+          count -> {"#{column}_#{count}", counts}
+        end
+      end)
+
+    columns
+  end
 end

@@ -9,6 +9,7 @@
 - Added UUID and ENUM result decoding.
 - Added conservative client-side SQL parameter formatting for raw queries and Ecto pinned parameters.
 - Added row-level and map-level streaming helpers for large result sets.
+- Hardened streaming helper behavior around early halt, later fetch errors, and duplicate map column names.
 
 ## 0.1.0 - 2026-05-23
 

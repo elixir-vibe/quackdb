@@ -131,7 +131,7 @@ conn
 #=> [[0], [1], [2]]
 ```
 
-`QuackDB.maps/4` yields maps keyed by column names:
+`QuackDB.maps/4` yields maps keyed by column names. Duplicate column names are disambiguated with suffixes such as `_2` and `_3`:
 
 ```elixir
 conn

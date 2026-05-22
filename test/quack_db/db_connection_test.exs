@@ -101,6 +101,65 @@ defmodule QuackDB.DBConnectionTest do
     assert maps == [%{"n" => 1}, %{"n" => 2}]
   end
 
+  test "maps disambiguates duplicate column names" do
+    chunk =
+      QuackDB.ProtocolFixtures.scalar_chunk_wrapper([
+        {:integer, :int32, [1]},
+        {:integer, :int32, [2]},
+        {:integer, :int32, [3]}
+      ])
+
+    connection =
+      start_supervised!({QuackDB, transport: transport(prepare: [chunk], names: ["x", "x", "x"])})
+
+    assert {:ok, maps} =
+             DBConnection.transaction(connection, fn transaction_connection ->
+               transaction_connection
+               |> QuackDB.maps("SELECT 1 AS x, 2 AS x, 3 AS x")
+               |> Enum.to_list()
+             end)
+
+    assert maps == [%{"x" => 1, "x_2" => 2, "x_3" => 3}]
+  end
+
+  test "stream halts early without fetching remaining chunks" do
+    parent = self()
+    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1, 2])
+    fetched_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([3, 4])
+
+    connection =
+      start_supervised!(
+        {QuackDB, transport: stream_transport(initial_chunk, fetched_chunk, parent: parent)}
+      )
+
+    assert {:ok, rows} =
+             DBConnection.transaction(connection, fn transaction_connection ->
+               transaction_connection
+               |> QuackDB.rows("SELECT n")
+               |> Enum.take(1)
+             end)
+
+    assert rows == [[1]]
+    refute_received {:fetch, _count}
+  end
+
+  test "stream raises later fetch errors" do
+    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+
+    connection =
+      start_supervised!(
+        {QuackDB, transport: stream_error_transport(initial_chunk, "fetch failed")}
+      )
+
+    assert_raise QuackDB.Error, ~r/fetch failed/, fn ->
+      DBConnection.transaction(connection, fn transaction_connection ->
+        transaction_connection
+        |> QuackDB.rows("SELECT n")
+        |> Enum.to_list()
+      end)
+    end
+  end
+
   test "stream returns result batches" do
     initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
     fetched_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])
@@ -118,6 +177,7 @@ defmodule QuackDB.DBConnectionTest do
   defp transport(options) do
     parent = Keyword.get(options, :parent)
     prepare_chunks = Keyword.fetch!(options, :prepare)
+    names = Keyword.get(options, :names, ["n"])
 
     fn _uri, request, _request_options ->
       request
@@ -128,7 +188,7 @@ defmodule QuackDB.DBConnectionTest do
           {:ok, connection_response()}
 
         {:prepare, _statement} ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: prepare_chunks)}
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: prepare_chunks, names: names)}
       end
     end
   end
@@ -147,8 +207,9 @@ defmodule QuackDB.DBConnectionTest do
     end
   end
 
-  defp stream_transport(initial_chunk, fetched_chunk) do
+  defp stream_transport(initial_chunk, fetched_chunk, options \\ []) do
     fetch_agent = start_supervised!({Agent, fn -> 0 end}, id: {Agent, make_ref()})
+    parent = Keyword.get(options, :parent)
 
     fn _uri, request, _request_options ->
       request = IO.iodata_to_binary(request)
@@ -171,8 +232,35 @@ defmodule QuackDB.DBConnectionTest do
 
         {:ok, {%Header{type: :fetch_request}, _body}} ->
           fetch_count = Agent.get_and_update(fetch_agent, &{&1, &1 + 1})
+          if parent, do: send(parent, {:fetch, fetch_count})
           chunks = if fetch_count == 0, do: [fetched_chunk], else: []
           {:ok, QuackDB.ProtocolFixtures.fetch_response(chunks, batch_index: fetch_count)}
+      end
+    end
+  end
+
+  defp stream_error_transport(initial_chunk, message) do
+    fn _uri, request, _request_options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
+        when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+
+        {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
+          {:ok,
+           QuackDB.ProtocolFixtures.prepare_response(
+             chunks: [initial_chunk],
+             needs_more_fetch?: true,
+             result_uuid: 42
+           )}
+
+        {:ok, {%Header{type: :fetch_request}, _body}} ->
+          {:ok, QuackDB.ProtocolFixtures.error_response(message)}
       end
     end
   end

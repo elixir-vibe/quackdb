@@ -129,7 +129,7 @@ conn
 #=> [[0], [1], [2]]
 ```
 
-Use `QuackDB.maps/4` for row maps keyed by column names:
+Use `QuackDB.maps/4` for row maps keyed by column names. Duplicate column names are disambiguated with suffixes such as `_2` and `_3`:
 
 ```elixir
 conn
