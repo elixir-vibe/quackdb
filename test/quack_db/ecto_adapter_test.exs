@@ -67,6 +67,27 @@ defmodule QuackDB.EctoAdapterTest do
     assert result.metadata[:duckdb_rows] == [[2]]
   end
 
+  test "raises ArgumentError for non-list params like other Ecto SQL adapters" do
+    assert_raise ArgumentError, ~r/expected params to be a list/, fn ->
+      Ecto.Adapters.QuackDB.Connection.query(self(), "SELECT 1", %{bad: :params}, [])
+    end
+  end
+
+  test "returns explicit unsupported parameter errors for non-empty param lists" do
+    Application.put_env(:quackdb, QuackDB.EctoRepo,
+      uri: "http://localhost:9494",
+      token: "secret",
+      transport: transport(prepare: []),
+      pool_size: 1,
+      log: false
+    )
+
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {:error, %QuackDB.Error{code: :parameters_not_supported}} =
+             QuackDB.EctoRepo.query("SELECT ?", [1])
+  end
+
   test "schema query generation raises an explicit unsupported feature error" do
     assert_raise QuackDB.Error, ~r/Ecto schema queries are not supported yet/, fn ->
       Ecto.Adapters.QuackDB.Connection.all(%Ecto.Query{})

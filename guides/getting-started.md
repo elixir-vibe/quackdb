@@ -164,7 +164,18 @@ end)
 
 ## Ecto raw SQL
 
-QuackDB includes an initial Ecto SQL adapter for raw SQL queries:
+QuackDB includes an initial Ecto SQL adapter for raw SQL queries. The Ecto adapter is compiled when `ecto_sql` is available, so add Ecto SQL if your app does not already depend on it:
+
+```elixir
+def deps do
+  [
+    {:quackdb, "~> 0.1.0"},
+    {:ecto_sql, "~> 3.13"}
+  ]
+end
+```
+
+Then define a repo:
 
 ```elixir
 defmodule MyApp.AnalyticsRepo do

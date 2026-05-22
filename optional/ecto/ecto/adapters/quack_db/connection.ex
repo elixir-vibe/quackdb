@@ -18,6 +18,7 @@ defmodule Ecto.Adapters.QuackDB.Connection do
 
   @impl true
   def prepare_execute(connection, name, statement, params, options) do
+    ensure_list_params!(params)
     query = %QuackDB.Query{statement: IO.iodata_to_binary(statement)}
 
     case DBConnection.prepare_execute(
@@ -34,6 +35,8 @@ defmodule Ecto.Adapters.QuackDB.Connection do
 
   @impl true
   def execute(connection, %QuackDB.Query{} = query, params, options) do
+    ensure_list_params!(params)
+
     case DBConnection.execute(connection, query, params, options) do
       {:ok, query, result} -> {:ok, query, normalize_result(result)}
       {:error, %QuackDB.Error{} = error} -> {:error, error}
@@ -48,6 +51,8 @@ defmodule Ecto.Adapters.QuackDB.Connection do
 
   @impl true
   def query(connection, statement, params, options) do
+    ensure_list_params!(params)
+
     case prepare_execute(connection, "", statement, params, options) do
       {:ok, _query, result} -> {:ok, result}
       {:error, error} -> {:error, error}
@@ -61,6 +66,8 @@ defmodule Ecto.Adapters.QuackDB.Connection do
 
   @impl true
   def stream(connection, statement, params, options) do
+    ensure_list_params!(params)
+
     DBConnection.stream(connection, %QuackDB.Query{statement: statement}, params, options)
     |> Stream.map(&normalize_result/1)
   end
@@ -126,6 +133,12 @@ defmodule Ecto.Adapters.QuackDB.Connection do
   @impl true
   def table_exists_query(table) do
     {"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?", [table]}
+  end
+
+  defp ensure_list_params!(params) do
+    unless is_list(params) do
+      raise ArgumentError, "expected params to be a list, got: #{inspect(params)}"
+    end
   end
 
   defp normalize_result(%QuackDB.Result{} = result) do

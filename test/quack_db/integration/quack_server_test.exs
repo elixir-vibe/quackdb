@@ -1,3 +1,9 @@
+defmodule QuackDB.IntegrationRepo do
+  use Ecto.Repo,
+    otp_app: :quackdb,
+    adapter: Ecto.Adapters.QuackDB
+end
+
 defmodule QuackDB.Integration.QuackServerTest do
   use ExUnit.Case, async: false
 
@@ -131,6 +137,29 @@ defmodule QuackDB.Integration.QuackServerTest do
     assert message =~ "does not exist"
   end
 
+  test "Ecto Repo.query/3 works against a real Quack server" do
+    start_repo!()
+
+    assert {:ok, %{columns: ["n"], rows: [[1]], num_rows: 1, command: :select}} =
+             QuackDB.IntegrationRepo.query("SELECT 1 AS n")
+
+    table = "quackdb_ecto_#{System.unique_integer([:positive])}"
+
+    assert {:ok, %{command: :create, rows: nil, num_rows: 0}} =
+             QuackDB.IntegrationRepo.query("CREATE TEMP TABLE #{table}(id INTEGER)")
+
+    assert {:ok, %{command: :insert, rows: nil, num_rows: 2} = insert} =
+             QuackDB.IntegrationRepo.query("INSERT INTO #{table} VALUES (1), (2)")
+
+    assert insert.metadata[:duckdb_rows] == [[2]]
+
+    assert {:ok, 3} =
+             QuackDB.IntegrationRepo.transaction(fn ->
+               %{rows: [[sum]]} = QuackDB.IntegrationRepo.query!("SELECT SUM(id) FROM #{table}")
+               sum
+             end)
+  end
+
   test "propagates server errors with query context" do
     connection = start_connection!()
 
@@ -145,5 +174,16 @@ defmodule QuackDB.Integration.QuackServerTest do
     token = System.get_env("QUACKDB_TEST_TOKEN", "")
 
     start_supervised!({QuackDB, uri: uri, token: token})
+  end
+
+  defp start_repo! do
+    Application.put_env(:quackdb, QuackDB.IntegrationRepo,
+      uri: System.fetch_env!("QUACKDB_TEST_URI"),
+      token: System.get_env("QUACKDB_TEST_TOKEN", ""),
+      pool_size: 1,
+      log: false
+    )
+
+    start_supervised!(QuackDB.IntegrationRepo)
   end
 end
