@@ -172,6 +172,33 @@ defmodule QuackDB.Integration.QuackServerTest do
     assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
   end
 
+  test "Ecto Repo.all/2 supports aggregates and common predicates against a real Quack server" do
+    start_repo!()
+    table = "quackdb_ecto_agg_#{System.unique_integer([:positive])}"
+
+    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
+
+    QuackDB.IntegrationRepo.query!(
+      "INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose'), (3, NULL)"
+    )
+
+    query =
+      from(event in table,
+        where: like(event.name, "d%") and not is_nil(event.name),
+        select: %{count: count(event.id)}
+      )
+
+    assert [%{count: 1}] = QuackDB.IntegrationRepo.all(query)
+
+    fragment_query =
+      from(event in table,
+        where: event.id == 1,
+        select: %{upper_name: fragment("upper(?)", event.name)}
+      )
+
+    assert [%{upper_name: "DUCK"}] = QuackDB.IntegrationRepo.all(fragment_query)
+  end
+
   test "Ecto transactions commit through Repo.transaction/1" do
     start_repo!()
     table = "quackdb_ecto_commit_#{System.unique_integer([:positive])}"

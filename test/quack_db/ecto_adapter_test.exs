@@ -104,6 +104,24 @@ defmodule QuackDB.EctoAdapterTest do
              ~S[SELECT q0."id" AS "id", q0."name" AS "name" FROM "events" AS q0 WHERE ((q0."id" > 1) AND (q0."name" <> 'goose')) ORDER BY q0."id" ASC LIMIT 10 OFFSET 2]
   end
 
+  test "generates read-only Ecto SQL for aggregates and common predicates" do
+    query =
+      from(event in "events",
+        where: like(event.name, "d%") and not is_nil(event.name),
+        select: %{count: count(event.id)}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT COUNT(q0."id") AS "count" FROM "events" AS q0 WHERE ((q0."name" LIKE 'd%') AND (q0."name" IS NOT NULL))]
+  end
+
+  test "generates read-only Ecto SQL for fragments" do
+    query = from(event in "events", select: %{upper_name: fragment("upper(?)", event.name)})
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT upper(q0."name") AS "upper_name" FROM "events" AS q0]
+  end
+
   test "Repo.all/2 executes simple read-only Ecto queries" do
     parent = self()
 

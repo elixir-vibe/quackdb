@@ -236,12 +236,38 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       ["q0.", quote_identifier(field)]
     end
 
+    defp expr({aggregate, _meta, [expression]})
+         when aggregate in [:count, :avg, :sum, :min, :max] do
+      [aggregate |> Atom.to_string() |> String.upcase(), "(", expr(expression), ")"]
+    end
+
+    defp expr({:count, _meta, []}), do: "COUNT(*)"
+
+    defp expr({:fragment, _meta, parts}) do
+      Enum.map(parts, fn
+        {:raw, value} -> value
+        {:expr, expression} -> expr(expression)
+      end)
+    end
+
     defp expr({op, _meta, [left, right]}) when op in [:==, :!=, :>, :<, :>=, :<=] do
       ["(", expr(left), " ", operator(op), " ", expr(right), ")"]
     end
 
     defp expr({op, _meta, [left, right]}) when op in [:and, :or] do
       ["(", expr(left), " ", op |> Atom.to_string() |> String.upcase(), " ", expr(right), ")"]
+    end
+
+    defp expr({:like, _meta, [left, right]}) do
+      ["(", expr(left), " LIKE ", expr(right), ")"]
+    end
+
+    defp expr({:is_nil, _meta, [expression]}) do
+      ["(", expr(expression), " IS NULL)"]
+    end
+
+    defp expr({:not, _meta, [{:is_nil, _is_nil_meta, [expression]}]}) do
+      ["(", expr(expression), " IS NOT NULL)"]
     end
 
     defp expr({:^, _meta, [_index]}), do: "?"

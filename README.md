@@ -210,16 +210,16 @@ Use `Repo.rollback/1` to abort transaction work:
   end)
 ```
 
-Simple read-only Ecto queries against table names are also supported:
+Simple read-only Ecto queries against table names are also supported, including basic predicates, ordering, limits, aggregates, and fragments:
 
 ```elixir
 import Ecto.Query
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
-    where: event.id > 1,
+    where: event.id > 1 and like(event.name, "d%"),
     order_by: [asc: event.id],
-    select: %{id: event.id, name: event.name}
+    select: %{id: event.id, name: event.name, upper_name: fragment("upper(?)", event.name)}
 )
 ```
 
@@ -229,7 +229,7 @@ This first Ecto milestone is intentionally limited. Joins, grouped queries, migr
 
 - Bind parameters are not exposed through this Quack client path yet.
 - Appends are represented at the protocol struct level but are not exposed as public API.
-- Ecto support is limited to raw SQL through `Repo.query/3` and simple read-only table queries through `Repo.all/2`.
+- Ecto support is limited to raw SQL through `Repo.query/3` and read-only table queries through `Repo.all/2`.
 - The low-level protocol is experimental and tracks DuckDB's Quack extension behavior.
 
 ## Development

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Expanded read-only Ecto query generation with common aggregates, `like/2`, nil checks, and simple fragments.
+
 ## 0.1.0 - 2026-05-23
 
 ### Added
