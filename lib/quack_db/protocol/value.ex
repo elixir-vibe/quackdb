@@ -8,6 +8,7 @@ defmodule QuackDB.Protocol.Value do
 
   import Bitwise
 
+  alias QuackDB.Error
   alias QuackDB.Protocol.Reader
 
   @spec decode_fixed(binary(), map(), atom()) :: Reader.read_result(term())
@@ -16,6 +17,10 @@ defmodule QuackDB.Protocol.Value do
   end
 
   def decode_fixed(binary, _type, :int8), do: Reader.read_int8(binary)
+
+  def decode_fixed(binary, %{name: :enum} = type, :uint8),
+    do: decode_enum(binary, type, &Reader.read_uint8/1)
+
   def decode_fixed(binary, _type, :uint8), do: Reader.read_uint8(binary)
 
   def decode_fixed(binary, %{name: :decimal} = type, :int16) do
@@ -23,6 +28,10 @@ defmodule QuackDB.Protocol.Value do
   end
 
   def decode_fixed(binary, _type, :int16), do: Reader.read_int16(binary)
+
+  def decode_fixed(binary, %{name: :enum} = type, :uint16),
+    do: decode_enum(binary, type, &Reader.read_uint16/1)
+
   def decode_fixed(binary, _type, :uint16), do: Reader.read_uint16(binary)
 
   def decode_fixed(binary, %{name: :date}, :int32) do
@@ -35,6 +44,10 @@ defmodule QuackDB.Protocol.Value do
   end
 
   def decode_fixed(binary, _type, :int32), do: Reader.read_int32(binary)
+
+  def decode_fixed(binary, %{name: :enum} = type, :uint32),
+    do: decode_enum(binary, type, &Reader.read_uint32/1)
+
   def decode_fixed(binary, _type, :uint32), do: Reader.read_uint32(binary)
 
   def decode_fixed(binary, %{name: name}, :int64)
@@ -62,6 +75,8 @@ defmodule QuackDB.Protocol.Value do
   def decode_fixed(binary, %{name: :decimal} = type, :int128) do
     with {:ok, value, rest} <- read_int128(binary), do: {:ok, decimal(type, value), rest}
   end
+
+  def decode_fixed(binary, %{name: :uuid}, :int128), do: read_uuid(binary)
 
   def decode_fixed(binary, _type, :int128), do: read_int128(binary)
 
@@ -102,6 +117,42 @@ defmodule QuackDB.Protocol.Value do
     with {:ok, lower, rest} <- Reader.read_uint64(binary),
          {:ok, upper, rest} <- Reader.read_int64(rest) do
       {:ok, upper * (1 <<< 64) + lower, rest}
+    end
+  end
+
+  defp read_uuid(binary) do
+    with {:ok, lower, rest} <- Reader.read_uint64(binary),
+         {:ok, upper, rest} <- Reader.read_int64(rest) do
+      display_upper = Bitwise.bxor(upper &&& 0xFFFF_FFFF_FFFF_FFFF, 1 <<< 63)
+
+      hex =
+        String.pad_leading(Integer.to_string(display_upper, 16), 16, "0") <>
+          String.pad_leading(Integer.to_string(lower, 16), 16, "0")
+
+      uuid =
+        hex
+        |> String.downcase()
+        |> then(fn <<a::binary-size(8), b::binary-size(4), c::binary-size(4), d::binary-size(4),
+                     e::binary>> ->
+          Enum.join([a, b, c, d, e], "-")
+        end)
+
+      {:ok, uuid, rest}
+    end
+  end
+
+  defp decode_enum(binary, %{type_info: %{values: values}}, read_index) do
+    with {:ok, index, rest} <- read_index.(binary) do
+      case Enum.fetch(values, index) do
+        {:ok, value} ->
+          {:ok, value, rest}
+
+        :error ->
+          {:error,
+           Error.new(:enum_index_out_of_range, "ENUM index #{index} is out of range",
+             source: :protocol
+           )}
+      end
     end
   end
 

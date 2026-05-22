@@ -247,4 +247,4 @@ QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
 
-See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough and [`docs/research.md`](docs/research.md) for protocol notes.
+See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, and [`docs/research.md`](docs/research.md) for protocol notes.

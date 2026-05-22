@@ -236,9 +236,7 @@ defmodule QuackDB.Protocol.LogicalType do
           decode_type_info_field_200(rest, info)
 
         field_id == 201 ->
-          with {:ok, value, rest} <- Reader.read_uleb128(rest) do
-            decode_type_info(rest, Map.put(info, field_201_name(info), value))
-          end
+          decode_type_info_field_201(rest, info)
 
         true ->
           error(:unknown_type_info_field, "unknown logical type metadata field #{field_id}")
@@ -274,6 +272,18 @@ defmodule QuackDB.Protocol.LogicalType do
   defp decode_type_info_field_200(binary, info) do
     with {:ok, value, rest} <- Reader.read_string(binary),
          do: decode_type_info(rest, Map.put(info, :value, value))
+  end
+
+  defp decode_type_info_field_201(binary, %{type: 6} = info) do
+    with {:ok, values, rest} <- Reader.read_list(binary, &Reader.read_string/1) do
+      decode_type_info(rest, Map.put(info, :values, values))
+    end
+  end
+
+  defp decode_type_info_field_201(binary, info) do
+    with {:ok, value, rest} <- Reader.read_uleb128(binary) do
+      decode_type_info(rest, Map.put(info, field_201_name(info), value))
+    end
   end
 
   defp decode_child_type(binary), do: decode_child_type(binary, %{})

@@ -60,6 +60,7 @@ defmodule QuackDB.MixProject do
       extras: [
         "README.md",
         "guides/getting-started.md",
+        "guides/type-support.md",
         "docs/research.md",
         "docs/postgrex-comparison.md"
       ],

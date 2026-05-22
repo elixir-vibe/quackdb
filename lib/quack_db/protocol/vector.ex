@@ -325,6 +325,10 @@ defmodule QuackDB.Protocol.Vector do
 
   defp decode_string_like(%{name: name}, value) when name in [:blob, :bit], do: value
 
+  defp decode_string_like(%{name: :bignum}, _value) do
+    raise Error.new(:unsupported_type, "BIGNUM values are not implemented yet", source: :protocol)
+  end
+
   defp decode_string_like(_type, value) do
     if String.valid?(value) do
       value
