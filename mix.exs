@@ -7,7 +7,6 @@ defmodule QuackDB.MixProject do
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
-      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       aliases: aliases(),
       package: package(),
@@ -27,16 +26,6 @@ defmodule QuackDB.MixProject do
 
   def cli do
     [preferred_envs: [ci: :test]]
-  end
-
-  defp elixirc_paths(:test), do: ["lib", "optional/ecto"]
-
-  defp elixirc_paths(_env) do
-    if Code.ensure_loaded?(Ecto.Adapters.SQL) do
-      ["lib", "optional/ecto"]
-    else
-      ["lib"]
-    end
   end
 
   defp deps do
