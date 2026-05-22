@@ -1,5 +1,8 @@
 # QuackDB
 
+[![Hex.pm](https://img.shields.io/hexpm/v/quackdb.svg)](https://hex.pm/packages/quackdb)
+[![HexDocs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/quackdb)
+
 Remote DuckDB Quack protocol client for Elixir.
 
 `quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and includes an initial Ecto adapter for raw SQL queries.
