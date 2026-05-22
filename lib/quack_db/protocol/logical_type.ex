@@ -153,6 +153,40 @@ defmodule QuackDB.Protocol.LogicalType do
         :uint128
       ]
 
+  @spec child_type(t()) :: t()
+  def child_type(%__MODULE__{type_info: %{child_type: child_type}}), do: child_type
+
+  def child_type(type) do
+    raise Error.new(
+            :missing_child_type,
+            "logical type #{inspect(type.name)} does not have child metadata",
+            source: :protocol
+          )
+  end
+
+  @spec struct_children(t()) :: [%{name: String.t(), type: t()}]
+  def struct_children(%__MODULE__{type_info: %{children: children}}), do: children
+  def struct_children(%__MODULE__{name: name}) when name in [:union, :variant], do: []
+
+  def struct_children(type) do
+    raise Error.new(
+            :missing_struct_children,
+            "logical type #{inspect(type.name)} does not have struct children metadata",
+            source: :protocol
+          )
+  end
+
+  @spec array_size(t()) :: non_neg_integer()
+  def array_size(%__MODULE__{type_info: %{size: size}}), do: size
+
+  def array_size(type) do
+    raise Error.new(
+            :missing_array_size,
+            "logical type #{inspect(type.name)} does not have array size metadata",
+            source: :protocol
+          )
+  end
+
   defp decode_type(binary, type) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
@@ -217,7 +251,7 @@ defmodule QuackDB.Protocol.LogicalType do
          do: decode_type_info(rest, Map.put(info, :collation, collation))
   end
 
-  defp decode_type_info_field_200(binary, %{type: 4} = info) do
+  defp decode_type_info_field_200(binary, %{type: type} = info) when type in [4, 9] do
     with {:ok, child_type, rest} <- decode(binary),
          do: decode_type_info(rest, Map.put(info, :child_type, child_type))
   end

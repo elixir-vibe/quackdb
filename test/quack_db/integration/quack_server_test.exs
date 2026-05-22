@@ -65,6 +65,26 @@ defmodule QuackDB.Integration.QuackServerTest do
     assert List.last(rows) == [49_999]
   end
 
+  test "decodes nested DuckDB types from a real Quack server" do
+    connection = start_connection!()
+
+    assert {:ok, %QuackDB.Result{columns: ["xs", "obj", "arr", "m", "nested"]} = result} =
+             QuackDB.query(
+               connection,
+               "SELECT [1,2,3] AS xs, {'name': 'duck', 'count': 2} AS obj, array_value(1,2,3) AS arr, map(['a','b'], [1,2]) AS m, [{'a': 1}, {'a': 2}] AS nested"
+             )
+
+    assert result.rows == [
+             [
+               [1, 2, 3],
+               %{"name" => "duck", "count" => 2},
+               [1, 2, 3],
+               %{"a" => 1, "b" => 2},
+               [%{"a" => 1}, %{"a" => 2}]
+             ]
+           ]
+  end
+
   test "transactions roll back through DBConnection" do
     connection = start_connection!()
     table = "qrollback_#{System.unique_integer([:positive])}"
