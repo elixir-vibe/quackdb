@@ -129,6 +129,33 @@ defmodule QuackDB.Protocol.DataChunk do
     end
   end
 
+  defp decode_vector_body(binary, type, row_count, :dictionary) do
+    with {:ok, selection, rest} <- read_required(binary, 91, &read_selection(&1, row_count)),
+         {:ok, dictionary_count, rest} <- read_required(rest, 92, &Reader.read_uleb128/1),
+         {:ok, dictionary, rest} <-
+           decode_vector_object(rest, type, dictionary_count, %{
+             type: type,
+             vector_type: :flat,
+             values: []
+           }),
+         {:ok, values} <- select_dictionary_values(dictionary.values, selection) do
+      {:ok, %{type: type, vector_type: :dictionary, values: values}, rest}
+    end
+  end
+
+  defp decode_vector_body(binary, type, row_count, :sequence) do
+    with {:ok, start, rest} <- read_required(binary, 91, &Reader.read_sleb128/1),
+         {:ok, increment, rest} <- read_required(rest, 92, &Reader.read_sleb128/1),
+         {:ok, field_end, rest} <- Reader.read_field_id(rest),
+         :ok <- expect_vector_end(field_end) do
+      values =
+        for index <- 0..(row_count - 1)//1,
+            do: decode_sequence_value(type, start + increment * index)
+
+      {:ok, %{type: type, vector_type: :sequence, values: values}, rest}
+    end
+  end
+
   defp decode_vector_body(_binary, _type, _row_count, vector_type) do
     error(:unsupported_vector_type, "#{vector_type} vectors are not implemented yet")
   end
@@ -279,6 +306,23 @@ defmodule QuackDB.Protocol.DataChunk do
     Decimal.new(sign, abs(value), -scale)
   end
 
+  defp decode_sequence_value(%{name: :integer}, value), do: value
+  defp decode_sequence_value(%{name: :date}, value), do: Date.add(~D[1970-01-01], value)
+
+  defp decode_sequence_value(%{name: type}, value)
+       when type in [
+              :time,
+              :time_ns,
+              :timestamp_sec,
+              :timestamp_ms,
+              :timestamp,
+              :timestamp_ns,
+              :timestamp_tz
+            ],
+       do: temporal(type, value)
+
+  defp decode_sequence_value(_type, value), do: value
+
   defp temporal(:time, value), do: Time.add(~T[00:00:00], value, :microsecond)
 
   defp temporal(:timestamp_sec, value),
@@ -307,6 +351,38 @@ defmodule QuackDB.Protocol.DataChunk do
     with {:ok, blob, rest} <- Reader.read_blob(binary),
          :ok <- expect_blob_size(blob, expected_size) do
       {:ok, blob, rest}
+    end
+  end
+
+  defp read_selection(binary, row_count) do
+    expected_size = row_count * 4
+
+    with {:ok, blob, rest} <- Reader.read_blob(binary),
+         :ok <- expect_blob_size(blob, expected_size) do
+      {:ok, decode_selection(blob, []), rest}
+    end
+  end
+
+  defp decode_selection(<<>>, indexes), do: Enum.reverse(indexes)
+
+  defp decode_selection(<<index::little-unsigned-32, rest::binary>>, indexes) do
+    decode_selection(rest, [index | indexes])
+  end
+
+  defp select_dictionary_values(values, selection) do
+    Enum.reduce_while(selection, {:ok, []}, fn index, {:ok, selected} ->
+      case Enum.fetch(values, index) do
+        {:ok, value} ->
+          {:cont, {:ok, [value | selected]}}
+
+        :error ->
+          {:halt,
+           error(:dictionary_index_out_of_range, "dictionary index #{index} is out of range")}
+      end
+    end)
+    |> case do
+      {:ok, selected} -> {:ok, Enum.reverse(selected)}
+      error -> error
     end
   end
 

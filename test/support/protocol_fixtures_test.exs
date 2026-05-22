@@ -111,6 +111,26 @@ defmodule QuackDB.ProtocolFixtures do
 
   def vector(_type, :varchar, values), do: varchar_vector(values)
 
+  def dictionary_integer_vector(selection, dictionary_values) do
+    selection_payload = for index <- selection, into: <<>>, do: <<index::little-unsigned-32>>
+
+    [
+      Writer.field(90, Writer.uleb128(3)),
+      Writer.field(91, Writer.blob(selection_payload)),
+      Writer.field(92, Writer.uleb128(length(dictionary_values))),
+      integer_vector(dictionary_values)
+    ]
+  end
+
+  def sequence_integer_vector(start, increment) do
+    [
+      Writer.field(90, Writer.uleb128(4)),
+      Writer.field(91, Writer.sleb128(start)),
+      Writer.field(92, Writer.sleb128(increment)),
+      Writer.end_object()
+    ]
+  end
+
   def integer_vector(values) do
     validity = Enum.map(values, &(!is_nil(&1)))
     payload = for value <- values, into: <<>>, do: <<value || 0::little-signed-32>>
