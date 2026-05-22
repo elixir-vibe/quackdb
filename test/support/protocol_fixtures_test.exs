@@ -44,8 +44,40 @@ defmodule QuackDB.ProtocolFixtures do
     ])
   end
 
+  def scalar_chunk_wrapper(columns) do
+    row_count =
+      columns
+      |> List.first()
+      |> elem(2)
+      |> length()
+
+    types = Enum.map(columns, fn {type, _physical_type, _values} -> logical_type(type) end)
+
+    vectors =
+      Enum.map(columns, fn {type, physical_type, values} ->
+        vector(type, physical_type, values)
+      end)
+
+    [
+      Writer.field(300, data_chunk(row_count, types, vectors)),
+      Writer.end_object()
+    ]
+  end
+
   def integer_type do
-    [Writer.field(100, Writer.uleb128(LogicalType.id(:integer))), Writer.end_object()]
+    logical_type(:integer)
+  end
+
+  def logical_type(:decimal) do
+    [
+      Writer.field(100, Writer.uleb128(LogicalType.id(:decimal))),
+      Writer.field(101, Writer.nullable(decimal_type_info(18, 2), &Function.identity/1)),
+      Writer.end_object()
+    ]
+  end
+
+  def logical_type(type) do
+    [Writer.field(100, Writer.uleb128(LogicalType.id(type))), Writer.end_object()]
   end
 
   def integer_chunk_wrapper(values) do
@@ -53,13 +85,31 @@ defmodule QuackDB.ProtocolFixtures do
   end
 
   def integer_chunk(values) do
+    data_chunk(length(values), [integer_type()], [integer_vector(values)])
+  end
+
+  def data_chunk(row_count, types, vectors) do
     [
-      Writer.field(100, Writer.uleb128(length(values))),
-      Writer.field(101, Writer.list([integer_type()], &Function.identity/1)),
-      Writer.field(102, Writer.list([integer_vector(values)], &Function.identity/1)),
+      Writer.field(100, Writer.uleb128(row_count)),
+      Writer.field(101, Writer.list(types, &Function.identity/1)),
+      Writer.field(102, Writer.list(vectors, &Function.identity/1)),
       Writer.end_object()
     ]
   end
+
+  def vector(_type, :bool, values),
+    do: fixed_vector(values, 1, fn value -> <<if(value, do: 1, else: 0)>> end)
+
+  def vector(_type, :int32, values),
+    do: fixed_vector(values, 4, fn value -> <<value::little-signed-32>> end)
+
+  def vector(_type, :int64, values),
+    do: fixed_vector(values, 8, fn value -> <<value::little-signed-64>> end)
+
+  def vector(_type, :double, values),
+    do: fixed_vector(values, 8, fn value -> <<value::little-float-64>> end)
+
+  def vector(_type, :varchar, values), do: varchar_vector(values)
 
   def integer_vector(values) do
     validity = Enum.map(values, &(!is_nil(&1)))
@@ -73,6 +123,52 @@ defmodule QuackDB.ProtocolFixtures do
       Writer.end_object()
     ]
   end
+
+  defp fixed_vector(values, byte_size, encode_value) do
+    validity = Enum.map(values, &(!is_nil(&1)))
+    payload = for value <- values, into: <<>>, do: encode_value.(default_value(value))
+    has_validity? = Enum.any?(validity, &(&1 == false))
+
+    [
+      Writer.field(100, Writer.bool(has_validity?)),
+      maybe_validity_mask(validity, has_validity?),
+      Writer.field(102, Writer.blob(pad_payload(payload, byte_size, length(values)))),
+      Writer.end_object()
+    ]
+  end
+
+  defp varchar_vector(values) do
+    validity = Enum.map(values, &(!is_nil(&1)))
+    has_validity? = Enum.any?(validity, &(&1 == false))
+
+    encoded_values =
+      Enum.map(values, fn
+        nil -> <<>>
+        value when is_binary(value) -> value
+      end)
+
+    [
+      Writer.field(100, Writer.bool(has_validity?)),
+      maybe_validity_mask(validity, has_validity?),
+      Writer.field(102, Writer.list(encoded_values, &Writer.blob/1)),
+      Writer.end_object()
+    ]
+  end
+
+  defp decimal_type_info(width, scale) do
+    [
+      Writer.field(100, Writer.uleb128(2)),
+      Writer.field(200, Writer.uleb128(width)),
+      Writer.field(201, Writer.uleb128(scale)),
+      Writer.end_object()
+    ]
+  end
+
+  defp default_value(nil), do: 0
+  defp default_value(value), do: value
+
+  defp pad_payload(payload, byte_size, count) when byte_size(payload) == byte_size * count,
+    do: payload
 
   defp maybe_validity_mask(validity, true),
     do: Writer.field(101, Writer.blob(validity_mask(validity)))
