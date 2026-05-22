@@ -11,6 +11,7 @@
 - Added row-level and map-level streaming helpers for large result sets.
 - Hardened streaming helper behavior around early halt, later fetch errors, and duplicate map column names.
 - Added property tests for protocol reader/writer primitive roundtrips and malformed input handling.
+- Changed `BIT` result decoding from raw DuckDB payload bytes to readable bit strings.
 
 ## 0.1.0 - 2026-05-23
 

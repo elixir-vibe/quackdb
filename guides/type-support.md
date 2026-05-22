@@ -24,7 +24,7 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `BLOB` | `binary()` | Supported | Returned as raw bytes. |
 | `UUID` | UUID string | Supported | Returned in canonical lowercase UUID format. |
 | `ENUM` | `String.t()` | Supported | Returned as the enum label. |
-| `BIT` | `binary()` | Partial | Returned as DuckDB's serialized bit bytes for now. |
+| `BIT` | `String.t()` | Supported | Returned as a string of `0` and `1` characters. |
 | `BIGNUM` | — | Unsupported | Raises an explicit unsupported-type error. |
 | `GEOMETRY` | `binary()` | Partial | Treated as raw bytes; semantic geometry decoding is not implemented. |
 

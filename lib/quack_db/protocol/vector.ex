@@ -323,7 +323,8 @@ defmodule QuackDB.Protocol.Vector do
     (byte &&& 1 <<< rem(index, 8)) != 0
   end
 
-  defp decode_string_like(%{name: name}, value) when name in [:blob, :bit], do: value
+  defp decode_string_like(%{name: :blob}, value), do: value
+  defp decode_string_like(%{name: :bit}, value), do: decode_bitstring(value)
 
   defp decode_string_like(%{name: :bignum}, _value) do
     raise Error.new(:unsupported_type, "BIGNUM values are not implemented yet", source: :protocol)
@@ -337,6 +338,17 @@ defmodule QuackDB.Protocol.Vector do
               source: :protocol
             )
     end
+  end
+
+  defp decode_bitstring(<<padding, bytes::binary>>) when padding in 0..7 do
+    bytes
+    |> :binary.bin_to_list()
+    |> Enum.map_join(fn byte -> byte |> Integer.to_string(2) |> String.pad_leading(8, "0") end)
+    |> String.slice(padding..-1//1)
+  end
+
+  defp decode_bitstring(_value) do
+    raise Error.new(:invalid_bitstring, "expected DuckDB BIT payload", source: :protocol)
   end
 
   defp read_required(binary, expected_field_id, read_value) do
