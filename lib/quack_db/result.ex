@@ -29,6 +29,27 @@ defmodule QuackDB.Result do
             metadata: %{}
 end
 
+defimpl Inspect, for: QuackDB.Result do
+  import Inspect.Algebra
+
+  def inspect(result, opts) do
+    rows_count = QuackDB.Inspect.rows_summary(result.rows)
+    preview = QuackDB.Inspect.rows_preview(result.rows)
+    needs_more_fetch? = result.metadata[:needs_more_fetch]
+
+    fields = [
+      command: result.command,
+      columns: result.columns,
+      rows: rows_count,
+      preview: preview,
+      connection_id: QuackDB.Inspect.short_id(result.connection_id),
+      needs_more_fetch?: needs_more_fetch?
+    ]
+
+    concat(QuackDB.Inspect.container("QuackDB.Result", fields, opts))
+  end
+end
+
 if Code.ensure_loaded?(Table.Reader) do
   defimpl Table.Reader, for: QuackDB.Result do
     def init(%{columns: columns}) when columns in [nil, []] do

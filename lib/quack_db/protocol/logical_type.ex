@@ -304,3 +304,35 @@ defmodule QuackDB.Protocol.LogicalType do
     {:error, Error.new(code, message, source: :protocol)}
   end
 end
+
+defimpl Inspect, for: QuackDB.Protocol.LogicalType do
+  import Inspect.Algebra
+
+  def inspect(type, opts) do
+    fields = logical_type_fields(type)
+    concat(QuackDB.Inspect.container("QuackDB.LogicalType", fields, opts))
+  end
+
+  defp logical_type_fields(%{name: :decimal, type_info: %{width: width, scale: scale}} = type) do
+    [type: type.name, width: width, scale: scale]
+  end
+
+  defp logical_type_fields(%{name: name, type_info: %{child_type: child_type}})
+       when name in [:list, :map] do
+    [type: name, child: type_name(child_type)]
+  end
+
+  defp logical_type_fields(%{name: :array, type_info: %{child_type: child_type, size: size}}) do
+    [type: :array, child: type_name(child_type), size: size]
+  end
+
+  defp logical_type_fields(%{name: :struct, type_info: %{children: children}}) do
+    fields = Enum.map(children, fn %{name: name, type: type} -> {name, type_name(type)} end)
+    [type: :struct, fields: fields]
+  end
+
+  defp logical_type_fields(type), do: [type: type.name || type.id]
+
+  defp type_name(%{name: name}) when not is_nil(name), do: name
+  defp type_name(%{id: id}), do: id
+end

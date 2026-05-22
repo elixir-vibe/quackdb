@@ -56,3 +56,20 @@ defmodule QuackDB.Error do
   defp connection_message(nil), do: []
   defp connection_message(connection_id), do: ["\n    connection_id: ", connection_id]
 end
+
+defimpl Inspect, for: QuackDB.Error do
+  import Inspect.Algebra
+
+  def inspect(error, opts) do
+    fields = [
+      code: error.code,
+      source: error.source,
+      message: QuackDB.Inspect.truncate(error.message),
+      query: QuackDB.Inspect.truncate(error.query),
+      connection_id: QuackDB.Inspect.short_id(error.connection_id),
+      retriable?: error.retriable?
+    ]
+
+    concat(QuackDB.Inspect.container("QuackDB.Error", fields, opts))
+  end
+end

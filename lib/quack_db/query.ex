@@ -32,6 +32,20 @@ defimpl DBConnection.Query, for: QuackDB.Query do
   defp decode_rows(rows, mapper), do: Enum.map(rows, mapper)
 end
 
+defimpl Inspect, for: QuackDB.Query do
+  import Inspect.Algebra
+
+  def inspect(query, opts) do
+    fields = [
+      statement: QuackDB.Inspect.truncate(query.statement),
+      columns: query.columns,
+      result_uuid: query.result_uuid
+    ]
+
+    concat(QuackDB.Inspect.container("QuackDB.Query", fields, opts))
+  end
+end
+
 defimpl String.Chars, for: QuackDB.Query do
   def to_string(%QuackDB.Query{statement: statement}) do
     IO.iodata_to_binary(statement)
