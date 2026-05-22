@@ -67,12 +67,7 @@ defmodule QuackDB.DBConnectionTest do
     connection =
       start_supervised!({QuackDB, transport: stream_transport(initial_chunk, fetched_chunk)})
 
-    assert {:ok,
-            [
-              %QuackDB.Result{rows: [[1]]},
-              %QuackDB.Result{rows: [[2]]},
-              %QuackDB.Result{rows: []}
-            ]} =
+    assert {:ok, [%QuackDB.Result{rows: [[1]]}, %QuackDB.Result{rows: [[2]]}]} =
              DBConnection.transaction(connection, fn transaction_connection ->
                QuackDB.stream(transaction_connection, "SELECT n", [], max_rows: 1)
                |> Enum.to_list()

@@ -6,6 +6,7 @@ defmodule QuackDB.Protocol.DataChunk do
   alias QuackDB.Error
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Reader
+  alias QuackDB.Protocol.Value
 
   defstruct row_count: 0, types: [], columns: []
 
@@ -150,7 +151,7 @@ defmodule QuackDB.Protocol.DataChunk do
          :ok <- expect_vector_end(field_end) do
       values =
         for index <- 0..(row_count - 1)//1,
-            do: decode_sequence_value(type, start + increment * index)
+            do: Value.decode_sequence(type, start + increment * index)
 
       {:ok, %{type: type, vector_type: :sequence, values: values}, rest}
     end
@@ -219,126 +220,11 @@ defmodule QuackDB.Protocol.DataChunk do
   defp decode_fixed_values(binary, type, physical_type, remaining, validity, values) do
     index = length(values)
 
-    with {:ok, value, rest} <- decode_fixed_value(binary, type, physical_type) do
+    with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
       value = if valid?(validity, index), do: value, else: nil
       decode_fixed_values(rest, type, physical_type, remaining - 1, validity, [value | values])
     end
   end
-
-  defp decode_fixed_value(binary, _type, :bool) do
-    with {:ok, value, rest} <- Reader.read_uint8(binary), do: {:ok, value != 0, rest}
-  end
-
-  defp decode_fixed_value(binary, _type, :int8), do: Reader.read_int8(binary)
-  defp decode_fixed_value(binary, _type, :uint8), do: Reader.read_uint8(binary)
-
-  defp decode_fixed_value(binary, %{name: :decimal} = type, :int16) do
-    with {:ok, value, rest} <- Reader.read_int16(binary), do: {:ok, decimal(type, value), rest}
-  end
-
-  defp decode_fixed_value(binary, _type, :int16), do: Reader.read_int16(binary)
-  defp decode_fixed_value(binary, _type, :uint16), do: Reader.read_uint16(binary)
-
-  defp decode_fixed_value(binary, %{name: :date}, :int32) do
-    with {:ok, days, rest} <- Reader.read_int32(binary),
-         do: {:ok, Date.add(~D[1970-01-01], days), rest}
-  end
-
-  defp decode_fixed_value(binary, %{name: :decimal} = type, :int32) do
-    with {:ok, value, rest} <- Reader.read_int32(binary), do: {:ok, decimal(type, value), rest}
-  end
-
-  defp decode_fixed_value(binary, _type, :int32), do: Reader.read_int32(binary)
-  defp decode_fixed_value(binary, _type, :uint32), do: Reader.read_uint32(binary)
-
-  defp decode_fixed_value(binary, %{name: name}, :int64)
-       when name in [
-              :time,
-              :time_ns,
-              :timestamp_sec,
-              :timestamp_ms,
-              :timestamp,
-              :timestamp_ns,
-              :timestamp_tz
-            ] do
-    with {:ok, value, rest} <- Reader.read_int64(binary), do: {:ok, temporal(name, value), rest}
-  end
-
-  defp decode_fixed_value(binary, %{name: :decimal} = type, :int64) do
-    with {:ok, value, rest} <- Reader.read_int64(binary), do: {:ok, decimal(type, value), rest}
-  end
-
-  defp decode_fixed_value(binary, _type, :int64), do: Reader.read_int64(binary)
-  defp decode_fixed_value(binary, _type, :uint64), do: Reader.read_uint64(binary)
-  defp decode_fixed_value(binary, _type, :float), do: Reader.read_float32(binary)
-  defp decode_fixed_value(binary, _type, :double), do: Reader.read_float64(binary)
-
-  defp decode_fixed_value(binary, %{name: :decimal} = type, :int128) do
-    with {:ok, value, rest} <- read_int128(binary), do: {:ok, decimal(type, value), rest}
-  end
-
-  defp decode_fixed_value(binary, _type, :int128), do: read_int128(binary)
-
-  defp decode_fixed_value(binary, _type, :uint128) do
-    with {:ok, lower, rest} <- Reader.read_uint64(binary),
-         {:ok, upper, rest} <- Reader.read_uint64(rest) do
-      {:ok, upper * (1 <<< 64) + lower, rest}
-    end
-  end
-
-  defp decode_fixed_value(binary, _type, :interval) do
-    with {:ok, months, rest} <- Reader.read_int32(binary),
-         {:ok, days, rest} <- Reader.read_int32(rest),
-         {:ok, micros, rest} <- Reader.read_int64(rest) do
-      {:ok, {:interval, months, days, micros}, rest}
-    end
-  end
-
-  defp read_int128(binary) do
-    with {:ok, lower, rest} <- Reader.read_uint64(binary),
-         {:ok, upper, rest} <- Reader.read_int64(rest) do
-      {:ok, upper * (1 <<< 64) + lower, rest}
-    end
-  end
-
-  defp decimal(%{type_info: %{scale: scale}}, value) do
-    sign = if value < 0, do: -1, else: 1
-    Decimal.new(sign, abs(value), -scale)
-  end
-
-  defp decode_sequence_value(%{name: :integer}, value), do: value
-  defp decode_sequence_value(%{name: :date}, value), do: Date.add(~D[1970-01-01], value)
-
-  defp decode_sequence_value(%{name: type}, value)
-       when type in [
-              :time,
-              :time_ns,
-              :timestamp_sec,
-              :timestamp_ms,
-              :timestamp,
-              :timestamp_ns,
-              :timestamp_tz
-            ],
-       do: temporal(type, value)
-
-  defp decode_sequence_value(_type, value), do: value
-
-  defp temporal(:time, value), do: Time.add(~T[00:00:00], value, :microsecond)
-
-  defp temporal(:timestamp_sec, value),
-    do: NaiveDateTime.add(~N[1970-01-01 00:00:00], value, :second)
-
-  defp temporal(:timestamp_ms, value),
-    do: NaiveDateTime.add(~N[1970-01-01 00:00:00], value, :millisecond)
-
-  defp temporal(:timestamp, value),
-    do: NaiveDateTime.add(~N[1970-01-01 00:00:00], value, :microsecond)
-
-  defp temporal(:timestamp_tz, value),
-    do: DateTime.add(~U[1970-01-01 00:00:00Z], value, :microsecond)
-
-  defp temporal(:time_ns, value), do: {:time_ns, value}
-  defp temporal(:timestamp_ns, value), do: {:timestamp_ns, value}
 
   defp maybe_read_validity(binary, false, _row_count), do: {:ok, nil, binary}
 

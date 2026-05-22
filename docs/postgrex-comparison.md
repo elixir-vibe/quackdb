@@ -175,8 +175,6 @@ Implemented pieces:
 
 Still worth improving:
 
-- Avoid emitting a final empty stream result when the server signals completion with an empty fetch response.
-- Move shared query execution out of the legacy `QuackDB.Connection` GenServer and either delete or deprecate that module.
 - Add richer transaction tests against a real Quack server.
-- Split `DataChunk` further into `Vector` and `Value` modules.
+- Split vector decoding out of `DataChunk` once LIST/STRUCT/ARRAY support lands.
 

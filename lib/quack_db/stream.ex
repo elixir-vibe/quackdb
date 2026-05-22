@@ -19,7 +19,10 @@ defimpl Enumerable, for: QuackDB.Stream do
       opts: options
     }
 
-    DBConnection.reduce(db_stream, acc, fun)
+    DBConnection.reduce(db_stream, acc, fn
+      %QuackDB.Result{rows: []}, acc -> {:cont, acc}
+      result, acc -> fun.(result, acc)
+    end)
   end
 
   def member?(_stream, _value), do: {:error, __MODULE__}
