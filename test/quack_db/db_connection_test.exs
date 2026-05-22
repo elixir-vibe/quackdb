@@ -21,6 +21,20 @@ defmodule QuackDB.DBConnectionTest do
     assert result.messages == []
   end
 
+  test "ping returns ok when the connection can query" do
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+    connection = start_supervised!({QuackDB, transport: transport(prepare: [chunk])})
+
+    assert :ok = QuackDB.ping(connection)
+  end
+
+  test "ping returns query errors" do
+    connection = start_supervised!({QuackDB, transport: transport_error("ping failed")})
+
+    assert {:error, %QuackDB.Error{message: "ping failed", query: "SELECT 1"}} =
+             QuackDB.ping(connection)
+  end
+
   test "query supports decode_mapper like Postgrex" do
     chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1, 2])
     connection = start_supervised!({QuackDB, transport: transport(prepare: [chunk])})

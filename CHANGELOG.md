@@ -13,6 +13,7 @@
 - Added property tests for protocol reader/writer primitive roundtrips and malformed input handling.
 - Changed `BIT` result decoding from raw DuckDB payload bytes to readable bit strings.
 - Added compact inspect implementations for streams, cursors, and data chunks.
+- Added `QuackDB.ping/2` and documented supervision/connection options.
 
 ## 0.1.0 - 2026-05-23
 

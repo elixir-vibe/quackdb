@@ -47,11 +47,13 @@ On some systems, `quack:localhost` binds to IPv6 localhost. If `http://localhost
   )
 ```
 
-`QuackDB.start_link/1` starts a `DBConnection` process. You can pass the connection to `QuackDB.query/4`, `QuackDB.prepare_execute/4`, `QuackDB.stream/4`, or DBConnection APIs.
+`QuackDB.start_link/1` starts a `DBConnection` process. You can pass the connection to `QuackDB.ping/2`, `QuackDB.query/4`, `QuackDB.prepare_execute/4`, `QuackDB.stream/4`, or DBConnection APIs.
 
 ## Run a query
 
 ```elixir
+:ok = QuackDB.ping(conn)
+
 {:ok, result} = QuackDB.query(conn, "SELECT 1 AS n")
 
 result.columns
@@ -273,6 +275,26 @@ The first Ecto milestone is intentionally narrow. `Repo.query/3` and read-only `
 - Append messages are defined at the protocol layer but not exposed as public API.
 - Ecto support is limited to raw SQL through `Repo.query/3` and read-only table queries through `Repo.all/2`.
 - Quack is experimental and may change with DuckDB releases.
+
+## Supervision and connection options
+
+Use QuackDB under your application supervisor when you want a long-lived connection pool:
+
+```elixir
+children = [
+  {QuackDB,
+   uri: "http://[::1]:9494",
+   token: "super_secret",
+   name: MyApp.QuackDB,
+   pool_size: 5}
+]
+```
+
+The client accepts QuackDB options such as `:uri`, `:token`, and `:transport`, plus DBConnection pool options such as `:name`, `:pool_size`, `:queue_target`, `:queue_interval`, and per-call `:timeout`.
+
+```elixir
+QuackDB.query(MyApp.QuackDB, "SELECT 1", [], timeout: 10_000)
+```
 
 ## Running QuackDB's integration tests
 

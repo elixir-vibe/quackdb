@@ -40,6 +40,14 @@ defmodule QuackDB do
     end
   end
 
+  @spec ping(DBConnection.conn(), Keyword.t()) :: :ok | {:error, Exception.t()}
+  def ping(connection, options \\ []) do
+    case query(connection, "SELECT 1", [], options) do
+      {:ok, _result} -> :ok
+      {:error, _error} = error -> error
+    end
+  end
+
   @spec prepare(DBConnection.conn(), iodata(), Keyword.t()) ::
           {:ok, Query.t()} | {:error, Exception.t()}
   def prepare(connection, statement, options \\ []) do

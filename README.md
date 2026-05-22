@@ -62,6 +62,8 @@ tail -f /dev/null | duckdb -init /dev/null \
 ### Query
 
 ```elixir
+:ok = QuackDB.ping(conn)
+
 {:ok, result} = QuackDB.query(conn, "SELECT 1 AS n")
 
 result.columns
@@ -262,6 +264,26 @@ This first Ecto milestone is intentionally limited. Joins, grouped queries, migr
 - Appends are represented at the protocol struct level but are not exposed as public API.
 - Ecto support is limited to raw SQL through `Repo.query/3` and read-only table queries through `Repo.all/2`.
 - The low-level protocol is experimental and tracks DuckDB's Quack extension behavior.
+
+## Supervision and connection options
+
+Use QuackDB under your application supervisor when you want a long-lived connection pool:
+
+```elixir
+children = [
+  {QuackDB,
+   uri: "http://[::1]:9494",
+   token: "super_secret",
+   name: MyApp.QuackDB,
+   pool_size: 5}
+]
+```
+
+The client accepts QuackDB options such as `:uri`, `:token`, and `:transport`, plus DBConnection pool options such as `:name`, `:pool_size`, `:queue_target`, `:queue_interval`, and `:timeout` on individual calls.
+
+```elixir
+QuackDB.query(MyApp.QuackDB, "SELECT 1", [], timeout: 10_000)
+```
 
 ## Development
 
