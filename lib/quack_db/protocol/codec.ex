@@ -1,5 +1,11 @@
 defmodule QuackDB.Protocol.Codec do
-  @moduledoc false
+  @moduledoc """
+  Encoder and decoder for top-level Quack protocol messages.
+
+  This module converts between message structs and wire-format binaries. It is
+  kept independent from HTTP, DBConnection, and public client APIs so protocol
+  compatibility can be tested in isolation.
+  """
 
   alias QuackDB.Error
   alias QuackDB.Protocol.DataChunk

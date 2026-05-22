@@ -1,8 +1,16 @@
 defmodule QuackDB.Protocol.Message do
-  @moduledoc false
+  @moduledoc """
+  Struct definitions for Quack protocol messages.
+
+  These structs represent the protocol layer only. Encoding and decoding live in
+  `QuackDB.Protocol.Codec`, while transport and DBConnection concerns stay in
+  higher-level modules.
+  """
 
   defmodule Header do
-    @moduledoc false
+    @moduledoc """
+    Message envelope metadata shared by every Quack request and response.
+    """
 
     @type t :: %__MODULE__{
             type: atom(),
@@ -14,7 +22,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule ConnectionRequest do
-    @moduledoc false
+    @moduledoc """
+    Client handshake request sent before issuing queries.
+    """
 
     @type t :: %__MODULE__{
             auth_string: String.t(),
@@ -32,7 +42,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule ConnectionResponse do
-    @moduledoc false
+    @moduledoc """
+    Server handshake response with DuckDB and Quack protocol version metadata.
+    """
 
     @type t :: %__MODULE__{
             server_duckdb_version: String.t(),
@@ -44,7 +56,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule PrepareRequest do
-    @moduledoc false
+    @moduledoc """
+    Request to prepare and execute a SQL statement on the remote DuckDB server.
+    """
 
     @type t :: %__MODULE__{sql_query: String.t()}
 
@@ -52,7 +66,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule PrepareResponse do
-    @moduledoc false
+    @moduledoc """
+    Initial query response containing schema metadata, first chunks, and fetch state.
+    """
 
     @type t :: %__MODULE__{
             result_types: [term()],
@@ -70,7 +86,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule FetchRequest do
-    @moduledoc false
+    @moduledoc """
+    Request for more result chunks associated with a remote result UUID.
+    """
 
     @type t :: %__MODULE__{uuid: integer()}
 
@@ -78,7 +96,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule FetchResponse do
-    @moduledoc false
+    @moduledoc """
+    Response carrying additional result chunks for a prepared query.
+    """
 
     @type t :: %__MODULE__{results: [term()], batch_index: non_neg_integer() | nil}
 
@@ -86,7 +106,12 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule AppendRequest do
-    @moduledoc false
+    @moduledoc """
+    Quack append request structure.
+
+    Appends are not exposed by the public client yet, but the message shape is
+    kept here for protocol completeness.
+    """
 
     @type t :: %__MODULE__{
             schema_name: String.t(),
@@ -98,7 +123,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule SuccessResponse do
-    @moduledoc false
+    @moduledoc """
+    Empty success response used by protocol operations without result data.
+    """
 
     @type t :: %__MODULE__{}
 
@@ -106,7 +133,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule Disconnect do
-    @moduledoc false
+    @moduledoc """
+    Request to close a remote Quack connection.
+    """
 
     @type t :: %__MODULE__{}
 
@@ -114,7 +143,9 @@ defmodule QuackDB.Protocol.Message do
   end
 
   defmodule ErrorResponse do
-    @moduledoc false
+    @moduledoc """
+    Server-side Quack error response.
+    """
 
     @type t :: %__MODULE__{message: String.t()}
 

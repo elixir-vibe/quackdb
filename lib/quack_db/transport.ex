@@ -1,5 +1,10 @@
 defmodule QuackDB.Transport do
-  @moduledoc false
+  @moduledoc """
+  HTTP transport for Quack binary requests.
+
+  Sends encoded protocol messages with DuckDB-compatible content negotiation and
+  normalizes HTTP/client failures into `QuackDB.Error` values.
+  """
 
   alias QuackDB.Error
 

@@ -3,6 +3,13 @@ defmodule QuackDB.Stream do
   Lazy stream returned by `QuackDB.stream/4`.
   """
 
+  @type t :: %__MODULE__{
+          conn: DBConnection.conn(),
+          query: QuackDB.Query.t(),
+          params: [term()],
+          options: Keyword.t()
+        }
+
   defstruct [:conn, :query, :params, :options]
 end
 

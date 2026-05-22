@@ -1,5 +1,11 @@
 defmodule QuackDB.Protocol.Reader do
-  @moduledoc false
+  @moduledoc """
+  Binary reader primitives for the Quack wire format.
+
+  Provides field ids, LEB128 integers, strings/blobs, nullable values, optional
+  indexes, fixed-width numbers, and DuckDB hugeint decoding with structured
+  protocol errors on malformed input.
+  """
 
   import Bitwise
 

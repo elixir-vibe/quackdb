@@ -1,5 +1,10 @@
 defmodule QuackDB.Protocol.Value do
-  @moduledoc false
+  @moduledoc """
+  Scalar value conversion for decoded DuckDB vectors.
+
+  Converts fixed-width physical values into Elixir terms such as booleans,
+  integers, floats, `Date`, `DateTime`, `Decimal`, and tagged DuckDB intervals.
+  """
 
   import Bitwise
 

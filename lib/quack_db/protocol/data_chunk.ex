@@ -1,5 +1,11 @@
 defmodule QuackDB.Protocol.DataChunk do
-  @moduledoc false
+  @moduledoc """
+  Decoder for DuckDB Quack `DataChunk` payloads.
+
+  Data chunks carry a row count, logical types, and column vectors. This module
+  validates the chunk wrapper and converts decoded vectors into row-oriented
+  results for the current DBConnection/Ecto-facing API.
+  """
 
   alias QuackDB.Error
   alias QuackDB.Protocol.LogicalType
