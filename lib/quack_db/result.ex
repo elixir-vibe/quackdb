@@ -8,7 +8,18 @@ defmodule QuackDB.Result do
   information available.
   """
 
-  @type command :: :select | :insert | :update | :delete | :begin | :commit | :rollback | atom()
+  @type command ::
+          :select
+          | :insert
+          | :update
+          | :delete
+          | :create
+          | :drop
+          | :alter
+          | :begin
+          | :commit
+          | :rollback
+          | atom()
 
   @type t :: %__MODULE__{
           command: command() | nil,
@@ -27,6 +38,28 @@ defmodule QuackDB.Result do
             connection_id: nil,
             messages: nil,
             metadata: %{}
+
+  @affecting_commands [:insert, :update, :delete]
+  @schema_commands [:create, :drop, :alter]
+
+  @spec normalize(t()) :: t()
+  def normalize(%__MODULE__{command: command, columns: ["Count"], rows: [[count]]} = result)
+      when command in @affecting_commands and is_integer(count) and count >= 0 do
+    %{result | columns: nil, rows: nil, num_rows: count, metadata: raw_count_metadata(result)}
+  end
+
+  def normalize(%__MODULE__{command: command, columns: ["Count"], rows: []} = result)
+      when command in @schema_commands do
+    %{result | columns: nil, rows: nil, num_rows: 0, metadata: raw_count_metadata(result)}
+  end
+
+  def normalize(%__MODULE__{} = result), do: result
+
+  defp raw_count_metadata(result) do
+    result.metadata
+    |> Map.put(:duckdb_columns, result.columns)
+    |> Map.put(:duckdb_rows, result.rows)
+  end
 end
 
 defimpl Inspect, for: QuackDB.Result do

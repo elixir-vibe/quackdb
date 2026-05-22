@@ -85,6 +85,35 @@ defmodule QuackDB.Integration.QuackServerTest do
            ]
   end
 
+  test "normalizes command affected row counts from a real Quack server" do
+    connection = start_connection!()
+    table = "quackdb_command_#{System.unique_integer([:positive])}"
+
+    assert {:ok, %QuackDB.Result{command: :create, columns: nil, rows: nil, num_rows: 0} = create} =
+             QuackDB.query(connection, "CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
+
+    assert create.metadata[:duckdb_columns] == ["Count"]
+    assert create.metadata[:duckdb_rows] == []
+
+    assert {:ok, %QuackDB.Result{command: :insert, columns: nil, rows: nil, num_rows: 2} = insert} =
+             QuackDB.query(connection, "INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+
+    assert insert.metadata[:duckdb_rows] == [[2]]
+
+    assert {:ok, %QuackDB.Result{command: :update, columns: nil, rows: nil, num_rows: 1} = update} =
+             QuackDB.query(connection, "UPDATE #{table} SET name = 'mallard' WHERE id = 1")
+
+    assert update.metadata[:duckdb_rows] == [[1]]
+
+    assert {:ok, %QuackDB.Result{command: :delete, columns: nil, rows: nil, num_rows: 1} = delete} =
+             QuackDB.query(connection, "DELETE FROM #{table} WHERE id = 2")
+
+    assert delete.metadata[:duckdb_rows] == [[1]]
+
+    assert {:ok, %QuackDB.Result{columns: ["name"], rows: [["mallard"]], num_rows: 1}} =
+             QuackDB.query(connection, "SELECT name FROM #{table}")
+  end
+
   test "transactions roll back through DBConnection" do
     connection = start_connection!()
     table = "qrollback_#{System.unique_integer([:positive])}"

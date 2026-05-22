@@ -256,18 +256,20 @@ defmodule QuackDB.DBConnection do
           result_uuid: response.result_uuid
       }
 
-      result = %Result{
-        command: command(query.statement),
-        columns: response.result_names,
-        rows: rows,
-        num_rows: length(rows),
-        connection_id: state.connection_id,
-        messages: [],
-        metadata: %{
-          needs_more_fetch: response.needs_more_fetch,
-          result_uuid: response.result_uuid
+      result =
+        %Result{
+          command: command(query.statement),
+          columns: response.result_names,
+          rows: rows,
+          num_rows: length(rows),
+          connection_id: state.connection_id,
+          messages: [],
+          metadata: %{
+            needs_more_fetch: response.needs_more_fetch,
+            result_uuid: response.result_uuid
+          }
         }
-      }
+        |> Result.normalize()
 
       {:ok, query, result}
     end
