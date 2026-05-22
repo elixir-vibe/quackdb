@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Scope: this file applies to the whole `quackdb_ex` repository.
+Scope: this file applies to the whole `quackdb` repository.
 
 - Build a remote DuckDB Quack protocol client first; keep Ecto as a layer on top of a DBConnection-ready core.
 - Prefer protocol correctness and explicit unsupported-feature errors over broad but lossy behavior.

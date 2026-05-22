@@ -2,7 +2,7 @@
 
 Remote DuckDB Quack protocol client for Elixir.
 
-`quackdb_ex` is intended to become a protocol-native, DBConnection-ready client for DuckDB's experimental Quack remote protocol. The first milestone is a correct low-level codec and client session layer; Ecto support will be built on top once the driver semantics are solid.
+`quackdb` is intended to become a protocol-native, DBConnection-ready client for DuckDB's experimental Quack remote protocol. The first milestone is a correct low-level codec and client session layer; Ecto support will be built on top once the driver semantics are solid.
 
 ## Status
 

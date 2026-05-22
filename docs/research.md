@@ -14,7 +14,7 @@ Build a remote DuckDB client for Elixir that is:
 
 Recommended package/module plan:
 
-- Hex package: `quackdb_ex`
+- Hex package: `quackdb`
 - Main namespace: `QuackDB`
 - Future Ecto adapter package or module: `Ecto.Adapters.QuackDB`
 
@@ -360,7 +360,7 @@ Best reference is `ecto_sqlite3` because it is complete and uses `?` placeholder
 
 Differentiation:
 
-> `quackdb_ex` is a remote DuckDB Quack protocol client, not an embedded driver, not a CLI wrapper, and not a DuckLake management library.
+> `quackdb` is a remote DuckDB Quack protocol client, not an embedded driver, not a CLI wrapper, and not a DuckLake management library.
 
 ## Constraints and risks
 
