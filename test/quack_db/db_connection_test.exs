@@ -66,6 +66,41 @@ defmodule QuackDB.DBConnectionTest do
     assert_received {:statement, "COMMIT"}
   end
 
+  test "rows and maps stream row-level results" do
+    initial_chunk = QuackDB.ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [1]}])
+    fetched_chunk = QuackDB.ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [2]}])
+
+    rows_connection =
+      start_supervised!(
+        {QuackDB, transport: stream_transport(initial_chunk, fetched_chunk)},
+        id: {QuackDB, :rows_stream}
+      )
+
+    assert {:ok, rows} =
+             DBConnection.transaction(rows_connection, fn transaction_connection ->
+               transaction_connection
+               |> QuackDB.rows("SELECT n", [], max_rows: 1)
+               |> Enum.to_list()
+             end)
+
+    assert rows == [[1], [2]]
+
+    maps_connection =
+      start_supervised!(
+        {QuackDB, transport: stream_transport(initial_chunk, fetched_chunk)},
+        id: {QuackDB, :maps_stream}
+      )
+
+    assert {:ok, maps} =
+             DBConnection.transaction(maps_connection, fn transaction_connection ->
+               transaction_connection
+               |> QuackDB.maps("SELECT n", [], max_rows: 1)
+               |> Enum.to_list()
+             end)
+
+    assert maps == [%{"n" => 1}, %{"n" => 2}]
+  end
+
   test "stream returns result batches" do
     initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
     fetched_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])
@@ -113,7 +148,7 @@ defmodule QuackDB.DBConnectionTest do
   end
 
   defp stream_transport(initial_chunk, fetched_chunk) do
-    fetch_agent = start_supervised!({Agent, fn -> 0 end})
+    fetch_agent = start_supervised!({Agent, fn -> 0 end}, id: {Agent, make_ref()})
 
     fn _uri, request, _request_options ->
       request = IO.iodata_to_binary(request)

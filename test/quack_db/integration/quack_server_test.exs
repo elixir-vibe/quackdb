@@ -73,6 +73,32 @@ defmodule QuackDB.Integration.QuackServerTest do
     assert List.last(rows) == [49_999]
   end
 
+  test "streams rows and maps from a real Quack server" do
+    connection = start_connection!()
+
+    assert {:ok, first_rows} =
+             DBConnection.transaction(connection, fn tx ->
+               tx
+               |> QuackDB.rows("SELECT i::INTEGER AS n FROM range(0, ?) t(i)", [50_000],
+                 max_rows: 1000
+               )
+               |> Enum.take(5)
+             end)
+
+    assert first_rows == [[0], [1], [2], [3], [4]]
+
+    assert {:ok, first_maps} =
+             DBConnection.transaction(connection, fn tx ->
+               tx
+               |> QuackDB.maps("SELECT i::INTEGER AS n FROM range(0, ?) t(i)", [50_000],
+                 max_rows: 1000
+               )
+               |> Enum.take(3)
+             end)
+
+    assert first_maps == [%{"n" => 0}, %{"n" => 1}, %{"n" => 2}]
+  end
+
   test "decodes nested DuckDB types from a real Quack server" do
     connection = start_connection!()
 

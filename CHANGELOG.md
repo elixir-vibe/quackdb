@@ -8,6 +8,7 @@
 - Added a DuckDB type support guide and real-server integration coverage for scalar and nested type families.
 - Added UUID and ENUM result decoding.
 - Added conservative client-side SQL parameter formatting for raw queries and Ecto pinned parameters.
+- Added row-level and map-level streaming helpers for large result sets.
 
 ## 0.1.0 - 2026-05-23
 

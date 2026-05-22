@@ -61,4 +61,25 @@ defmodule QuackDB do
       options: options
     }
   end
+
+  @spec rows(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: Enumerable.t()
+  def rows(connection, statement, params \\ [], options \\ []) do
+    connection
+    |> stream(statement, params, options)
+    |> Elixir.Stream.flat_map(&(&1.rows || []))
+  end
+
+  @spec maps(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: Enumerable.t()
+  def maps(connection, statement, params \\ [], options \\ []) do
+    connection
+    |> stream(statement, params, options)
+    |> Elixir.Stream.flat_map(&result_maps/1)
+  end
+
+  defp result_maps(%QuackDB.Result{columns: columns, rows: rows})
+       when is_list(columns) and is_list(rows) do
+    Enum.map(rows, fn row -> columns |> Enum.zip(row) |> Map.new() end)
+  end
+
+  defp result_maps(_result), do: []
 end

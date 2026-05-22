@@ -108,7 +108,9 @@ result.rows
 
 ### Streaming
 
-Use `QuackDB.stream/4` for large result sets:
+`QuackDB.query/4` materializes the full result. Use streaming helpers for large analytical result sets.
+
+`QuackDB.stream/4` yields `%QuackDB.Result{}` batches:
 
 ```elixir
 row_count =
@@ -118,6 +120,24 @@ row_count =
 
 row_count
 #=> 50_000
+```
+
+`QuackDB.rows/4` yields row lists:
+
+```elixir
+conn
+|> QuackDB.rows("SELECT i FROM range(0, ?) t(i)", [50_000])
+|> Enum.take(3)
+#=> [[0], [1], [2]]
+```
+
+`QuackDB.maps/4` yields maps keyed by column names:
+
+```elixir
+conn
+|> QuackDB.maps("SELECT i AS n FROM range(0, ?) t(i)", [50_000])
+|> Enum.take(2)
+#=> [%{"n" => 0}, %{"n" => 1}]
 ```
 
 ### Command results

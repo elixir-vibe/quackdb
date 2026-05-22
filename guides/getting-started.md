@@ -106,7 +106,9 @@ result.rows
 
 ## Stream large result sets
 
-QuackDB fetches additional result chunks when DuckDB reports that more rows are available. Use `QuackDB.stream/4` to process those chunks lazily:
+`QuackDB.query/4` materializes the full result. QuackDB fetches additional result chunks when DuckDB reports that more rows are available, but for large analytical results prefer streaming helpers.
+
+Use `QuackDB.stream/4` to process `%QuackDB.Result{}` batches lazily:
 
 ```elixir
 row_count =
@@ -118,7 +120,23 @@ row_count
 #=> 50_000
 ```
 
-Each streamed item is a `%QuackDB.Result{}` containing one batch of rows.
+Use `QuackDB.rows/4` for row-level streaming:
+
+```elixir
+conn
+|> QuackDB.rows("SELECT i FROM range(0, ?) t(i)", [50_000])
+|> Enum.take(3)
+#=> [[0], [1], [2]]
+```
+
+Use `QuackDB.maps/4` for row maps keyed by column names:
+
+```elixir
+conn
+|> QuackDB.maps("SELECT i AS n FROM range(0, ?) t(i)", [50_000])
+|> Enum.take(2)
+#=> [%{"n" => 0}, %{"n" => 1}]
+```
 
 ## Work with command results
 
