@@ -13,6 +13,20 @@ defmodule QuackDB.Stream do
   defstruct [:conn, :query, :params, :options]
 end
 
+defimpl Inspect, for: QuackDB.Stream do
+  import Inspect.Algebra
+
+  def inspect(stream, opts) do
+    fields = [
+      statement: QuackDB.Inspect.truncate(stream.query.statement),
+      params: length(stream.params || []),
+      options: stream.options
+    ]
+
+    concat(QuackDB.Inspect.container("QuackDB.Stream", fields, opts))
+  end
+end
+
 defimpl Enumerable, for: QuackDB.Stream do
   def reduce(%QuackDB.Stream{} = stream, acc, fun) do
     %QuackDB.Stream{conn: conn, query: query, params: params, options: options} = stream

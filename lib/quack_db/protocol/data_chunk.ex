@@ -117,3 +117,20 @@ defmodule QuackDB.Protocol.DataChunk do
     {:error, Error.new(code, message, source: :protocol)}
   end
 end
+
+defimpl Inspect, for: QuackDB.Protocol.DataChunk do
+  import Inspect.Algebra
+
+  def inspect(chunk, opts) do
+    fields = [
+      rows: chunk.row_count,
+      columns: length(chunk.columns),
+      types: Enum.map(chunk.types, &type_name/1)
+    ]
+
+    concat(QuackDB.Inspect.container("QuackDB.DataChunk", fields, opts))
+  end
+
+  defp type_name(%{name: name}) when not is_nil(name), do: name
+  defp type_name(%{id: id}), do: id
+end
