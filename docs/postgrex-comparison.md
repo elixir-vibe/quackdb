@@ -148,20 +148,21 @@ Current QuackDB is still a discovery client. Missing Postgrex-inspired pieces:
 9. Integration with `Table.Reader`.
 10. A separate value/vector decoder module split.
 
-## Recommended next implementation step
+## Implemented from this comparison
 
-Do not jump to Ecto yet. First add a DBConnection-shaped core:
+The first DBConnection-shaped core is now in place:
 
 ```text
 lib/quack_db/query.ex
 lib/quack_db/db_connection.ex
 lib/quack_db/stream.ex
+lib/quack_db/cursor.ex
 ```
 
-Start small:
+Implemented pieces:
 
-- `%QuackDB.Query{statement, columns, result_types, result_uuid}`
-- `DBConnection.Query` impl where `encode/3` rejects params with a clear error for now
+- `%QuackDB.Query{statement, columns, result_types, result_uuid}`.
+- `DBConnection.Query` implementation with `decode_mapper` support.
 - `QuackDB.DBConnection` with:
   - `connect/1`
   - `disconnect/2`
@@ -169,6 +170,13 @@ Start small:
   - `handle_prepare/3`
   - `handle_execute/4`
   - transaction callbacks via SQL `BEGIN`, `COMMIT`, `ROLLBACK`
+  - initial cursor/stream callbacks backed by Quack `result_uuid`
+- `QuackDB.query/4`, `prepare/3`, `prepare_execute/4`, and `stream/4` now use DBConnection.
 
-Then update `QuackDB.query/4` to call `DBConnection.prepare_execute/4`.
+Still worth improving:
+
+- Avoid emitting a final empty stream result when the server signals completion with an empty fetch response.
+- Move shared query execution out of the legacy `QuackDB.Connection` GenServer and either delete or deprecate that module.
+- Add richer transaction tests against a real Quack server.
+- Split `DataChunk` further into `Vector` and `Value` modules.
 

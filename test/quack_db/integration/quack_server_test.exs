@@ -8,7 +8,7 @@ defmodule QuackDB.Integration.QuackServerTest do
     token = System.get_env("QUACKDB_TEST_TOKEN", "")
 
     start_options = [uri: uri, token: token]
-    connection = start_supervised!({QuackDB.Connection, start_options})
+    connection = start_supervised!({QuackDB, start_options})
 
     assert {:ok, %QuackDB.Result{columns: ["n"], rows: [[1]], num_rows: 1}} =
              QuackDB.query(connection, "SELECT 1 AS n")
@@ -19,7 +19,7 @@ defmodule QuackDB.Integration.QuackServerTest do
     token = System.get_env("QUACKDB_TEST_TOKEN", "")
 
     start_options = [uri: uri, token: token]
-    connection = start_supervised!({QuackDB.Connection, start_options})
+    connection = start_supervised!({QuackDB, start_options})
 
     assert {:ok, %QuackDB.Result{columns: ["ok", "name", "amount"]} = result} =
              QuackDB.query(

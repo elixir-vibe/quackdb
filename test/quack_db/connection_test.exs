@@ -45,7 +45,7 @@ defmodule QuackDB.ConnectionTest do
     :sys.replace_state(connection, &%{&1 | connection_id: "conn-1"})
 
     assert {:error, %QuackDB.Error{code: :server_error, message: "syntax error"}} =
-             QuackDB.query(connection, "SELECT")
+             QuackDB.Connection.query(connection, "SELECT")
 
     assert_received {:request, request}
 
@@ -67,7 +67,7 @@ defmodule QuackDB.ConnectionTest do
     :sys.replace_state(connection, &%{&1 | connection_id: "conn-1"})
 
     assert {:ok, %QuackDB.Result{columns: ["n"], rows: [[1]], num_rows: 1}} =
-             QuackDB.query(connection, "SELECT 1 AS n")
+             QuackDB.Connection.query(connection, "SELECT 1 AS n")
   end
 
   test "fetches remaining chunks when prepare response requires more data" do
@@ -103,7 +103,7 @@ defmodule QuackDB.ConnectionTest do
     :sys.replace_state(connection, &%{&1 | connection_id: "conn-1"})
 
     assert {:ok, %QuackDB.Result{rows: [[1], [2], [3]], num_rows: 3}} =
-             QuackDB.query(connection, "SELECT n FROM numbers")
+             QuackDB.Connection.query(connection, "SELECT n FROM numbers")
 
     assert_received {:request, prepare_request}
     assert_received {:request, fetch_request}
