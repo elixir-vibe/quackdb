@@ -223,13 +223,26 @@ Use `Repo.rollback/1` to abort transaction work:
   end)
 ```
 
-The first Ecto milestone is intentionally narrow. `Repo.query/3` works, while schema queries, migrations, and Ecto-managed writes raise explicit unsupported-feature errors.
+Simple read-only Ecto queries against table names are also supported:
+
+```elixir
+import Ecto.Query
+
+MyApp.AnalyticsRepo.all(
+  from event in "events",
+    where: event.id > 1,
+    order_by: [asc: event.id],
+    select: %{id: event.id, name: event.name}
+)
+```
+
+The first Ecto milestone is intentionally narrow. `Repo.query/3` and simple `Repo.all/2` table queries work, while joins, grouped queries, migrations, and Ecto-managed writes raise explicit unsupported-feature errors.
 
 ## Current limitations
 
 - Bind parameters are not exposed by this Quack client path yet. Passing non-empty params returns `:parameters_not_supported`.
 - Append messages are defined at the protocol layer but not exposed as public API.
-- Ecto support is limited to raw SQL through `Repo.query/3`.
+- Ecto support is limited to raw SQL through `Repo.query/3` and simple read-only table queries through `Repo.all/2`.
 - Quack is experimental and may change with DuckDB releases.
 
 ## Running QuackDB's integration tests

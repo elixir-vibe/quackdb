@@ -7,6 +7,8 @@ end
 defmodule QuackDB.Integration.QuackServerTest do
   use ExUnit.Case, async: false
 
+  import Ecto.Query
+
   @moduletag :integration
 
   test "queries a real Quack server" do
@@ -152,6 +154,22 @@ defmodule QuackDB.Integration.QuackServerTest do
              QuackDB.IntegrationRepo.query("INSERT INTO #{table} VALUES (1), (2)")
 
     assert insert.metadata[:duckdb_rows] == [[2]]
+  end
+
+  test "Ecto Repo.all/2 executes simple read-only queries against a real Quack server" do
+    start_repo!()
+    table = "quackdb_ecto_all_#{System.unique_integer([:positive])}"
+
+    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
+    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+
+    query =
+      from(event in table,
+        where: event.id > 1,
+        select: %{id: event.id, name: event.name}
+      )
+
+    assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
   end
 
   test "Ecto transactions commit through Repo.transaction/1" do
