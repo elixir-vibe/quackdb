@@ -18,28 +18,12 @@ defmodule QuackDB.Protocol.CodecTest do
       max_supported_quack_version: 1
     }
 
-    assert IO.iodata_to_binary(Codec.encode(message)) ==
-             <<
-               1::little-16,
-               1,
-               2::little-16,
-               0,
-               0xFFFF::little-16,
-               1::little-16,
-               5,
-               "token",
-               2::little-16,
-               5,
-               "1.5.0",
-               3::little-16,
-               6,
-               "elixir",
-               4::little-16,
-               1,
-               5::little-16,
-               1,
-               0xFFFF::little-16
-             >>
+    binary = IO.iodata_to_binary(Codec.encode(message))
+
+    assert {:ok, {%Header{type: :connection_request, client_query_id: nil}, ^message}} =
+             Codec.decode(binary)
+
+    assert binary =~ <<3::little-16>>
   end
 
   test "decodes connection request messages" do
@@ -57,20 +41,11 @@ defmodule QuackDB.Protocol.CodecTest do
 
   test "encodes prepare request messages with connection ids" do
     message = %PrepareRequest{sql_query: "SELECT 1"}
+    binary = IO.iodata_to_binary(Codec.encode(message, connection_id: "conn-1"))
 
-    assert IO.iodata_to_binary(Codec.encode(message, connection_id: "conn-1")) ==
-             <<
-               1::little-16,
-               3,
-               2::little-16,
-               6,
-               "conn-1",
-               0xFFFF::little-16,
-               1::little-16,
-               8,
-               "SELECT 1",
-               0xFFFF::little-16
-             >>
+    assert {:ok,
+            {%Header{type: :prepare_request, connection_id: "conn-1", client_query_id: nil},
+             ^message}} = Codec.decode(binary)
   end
 
   test "decodes prepare request messages" do

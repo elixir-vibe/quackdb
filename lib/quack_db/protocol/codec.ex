@@ -46,8 +46,8 @@ defmodule QuackDB.Protocol.Codec do
   def encode_header(%Header{} = header) do
     [
       Writer.field(1, Writer.uleb128(QuackDB.Protocol.message_type(header.type))),
-      Writer.field(2, Writer.string(header.connection_id)),
-      encode_optional_header_field(header.client_query_id),
+      encode_connection_id_header_field(header.connection_id),
+      Writer.field(3, Writer.optional_index(header.client_query_id)),
       Writer.end_object()
     ]
   end
@@ -358,8 +358,9 @@ defmodule QuackDB.Protocol.Codec do
     end
   end
 
-  defp encode_optional_header_field(nil), do: []
-  defp encode_optional_header_field(value), do: Writer.field(3, Writer.optional_index(value))
+  defp encode_connection_id_header_field(""), do: []
+  defp encode_connection_id_header_field(nil), do: []
+  defp encode_connection_id_header_field(value), do: Writer.field(2, Writer.string(value))
 
   defp message_type(%ConnectionRequest{}), do: :connection_request
   defp message_type(%PrepareRequest{}), do: :prepare_request

@@ -46,7 +46,12 @@ mix ci
 Integration tests are skipped by default. To run them against a Quack server:
 
 ```sh
-QUACKDB_TEST_URI=http://localhost:9494 \
+tail -f /dev/null | duckdb -init /dev/null \
+  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='secret');"
+
+QUACKDB_TEST_URI='http://[::1]:9494' \
 QUACKDB_TEST_TOKEN=secret \
 mix test --include integration
 ```
+
+`quack:localhost` may bind on IPv6 localhost, so the example URI uses `[::1]`.
