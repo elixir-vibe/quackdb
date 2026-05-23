@@ -40,6 +40,81 @@ defmodule QuackDB do
     end
   end
 
+  @doc """
+  Runs a query and returns its result as a column-oriented map.
+
+  Duplicate column names are disambiguated with suffixes such as `_2` and `_3`.
+  Prefer `columnar/4` when you also need column order and result metadata.
+  """
+  @spec columns(DBConnection.conn(), iodata(), [term()], Keyword.t()) ::
+          {:ok, %{String.t() => [term()]}} | {:error, Exception.t()}
+  def columns(connection, statement, params \\ [], options \\ []) do
+    case query(connection, statement, params, options) do
+      {:ok, result} -> {:ok, QuackDB.Result.to_columns(result)}
+      {:error, _error} = error -> error
+    end
+  end
+
+  @spec columns!(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: %{
+          String.t() => [term()]
+        }
+  def columns!(connection, statement, params \\ [], options \\ []) do
+    case columns(connection, statement, params, options) do
+      {:ok, columns} -> columns
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc """
+  Runs a query and returns a `QuackDB.Columns` struct.
+
+  This preserves column order, original names, row count, and result metadata in
+  addition to the column vectors.
+  """
+  @spec columnar(DBConnection.conn(), iodata(), [term()], Keyword.t()) ::
+          {:ok, QuackDB.Columns.t()} | {:error, Exception.t()}
+  def columnar(connection, statement, params \\ [], options \\ []) do
+    case query(connection, statement, params, options) do
+      {:ok, result} -> {:ok, QuackDB.Result.to_columnar(result)}
+      {:error, _error} = error -> error
+    end
+  end
+
+  @spec columnar!(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: QuackDB.Columns.t()
+  def columnar!(connection, statement, params \\ [], options \\ []) do
+    case columnar(connection, statement, params, options) do
+      {:ok, columns} -> columns
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc """
+  Streams query results as column-oriented batches.
+
+  Each item is a map from disambiguated column names to the values in that fetch
+  batch. This keeps large analytical results vector-shaped without materializing
+  the whole result set. Prefer `columnar_batches/4` when you also need batch
+  metadata.
+  """
+  @spec column_batches(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: Enumerable.t()
+  def column_batches(connection, statement, params \\ [], options \\ []) do
+    connection
+    |> columnar_batches(statement, params, options)
+    |> Elixir.Stream.map(& &1.columns)
+    |> Elixir.Stream.reject(&(&1 == %{}))
+  end
+
+  @doc """
+  Streams query results as `QuackDB.Columns` batches.
+  """
+  @spec columnar_batches(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: Enumerable.t()
+  def columnar_batches(connection, statement, params \\ [], options \\ []) do
+    connection
+    |> stream(statement, params, options)
+    |> Elixir.Stream.map(&QuackDB.Result.to_columnar/1)
+    |> Elixir.Stream.reject(&(&1.names == []))
+  end
+
   @spec ping(DBConnection.conn(), Keyword.t()) :: :ok | {:error, Exception.t()}
   def ping(connection, options \\ []) do
     case query(connection, "SELECT 1", [], options) do
@@ -86,23 +161,9 @@ defmodule QuackDB do
 
   defp result_maps(%QuackDB.Result{columns: columns, rows: rows})
        when is_list(columns) and is_list(rows) do
-    map_keys = disambiguate_columns(columns)
+    map_keys = QuackDB.Result.disambiguate_columns(columns)
     Enum.map(rows, fn row -> map_keys |> Enum.zip(row) |> Map.new() end)
   end
 
   defp result_maps(_result), do: []
-
-  defp disambiguate_columns(columns) do
-    {columns, _counts} =
-      Enum.map_reduce(columns, %{}, fn column, counts ->
-        counts = Map.update(counts, column, 1, &(&1 + 1))
-
-        case counts[column] do
-          1 -> {column, counts}
-          count -> {"#{column}_#{count}", counts}
-        end
-      end)
-
-    columns
-  end
 end

@@ -34,6 +34,7 @@ defmodule QuackDB.MixProject do
       {:req, "~> 0.5"},
       {:decimal, "~> 2.0"},
       {:ecto_sql, "~> 3.13", optional: true},
+      {:explorer, "~> 0.11", optional: true},
       {:stream_data, "~> 1.2", only: :test},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
@@ -63,7 +64,8 @@ defmodule QuackDB.MixProject do
         "guides/getting-started.md",
         "guides/type-support.md",
         "docs/research.md",
-        "docs/postgrex-comparison.md"
+        "docs/postgrex-comparison.md",
+        "docs/duckdb-capabilities.md"
       ],
       groups_for_extras: [
         Guides: ~r/guides\//,

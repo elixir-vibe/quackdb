@@ -4,7 +4,10 @@
 
 ### Added
 
-- Expanded read-only Ecto query generation with common aggregates, `like/2`, nil checks, and simple fragments.
+- Added `QuackDB.Source` helpers for DuckDB Parquet, CSV, JSON, XLSX, Delta, and Iceberg table-function fragments, including use as Ecto query sources.
+- Added optional `QuackDB.Explorer` helpers for converting QuackDB results and Ecto queries into `Explorer.DataFrame` values when Explorer is available.
+- Added `QuackDB.Columns`, `QuackDB.columnar/4`, `QuackDB.columnar!/4`, `QuackDB.columnar_batches/4`, `QuackDB.columns/4`, `QuackDB.columns!/4`, `QuackDB.column_batches/4`, and result conversion helpers for column-oriented analytical results.
+- Expanded read-only Ecto query generation with CTEs, window functions, joins, grouping, having, distinct, aggregate `FILTER`, arithmetic expressions, `in/2`, common aggregates, `like/2`, nil checks, and simple fragments.
 - Added a DuckDB type support guide and real-server integration coverage for scalar and nested type families.
 - Added UUID and ENUM result decoding.
 - Added conservative client-side SQL parameter formatting for raw queries and Ecto pinned parameters.
@@ -33,4 +36,4 @@
 
 - QuackDB itself is experimental: package APIs, result shapes, Ecto behavior, and supported type coverage may change before the project stabilizes.
 - QuackDB follows DuckDB's experimental Quack protocol behavior.
-- Ecto support is intentionally limited; joins, grouped queries, migrations, and Ecto-managed writes are not supported yet.
+- Ecto support is intentionally limited; set combinations, locks, migrations, and Ecto-managed writes are not supported yet.

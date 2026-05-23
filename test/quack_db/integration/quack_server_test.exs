@@ -196,6 +196,127 @@ defmodule QuackDB.Integration.QuackServerTest do
              QuackDB.query(connection, "SELECT ? AS safe", ["Robert'); DROP TABLE users;--"])
   end
 
+  test "source helpers query CSV and Parquet files against a real Quack server" do
+    connection = start_connection!()
+
+    csv_path =
+      Path.join(System.tmp_dir!(), "quackdb_source_#{System.unique_integer([:positive])}.csv")
+
+    parquet_path =
+      Path.join(System.tmp_dir!(), "quackdb_source_#{System.unique_integer([:positive])}.parquet")
+
+    File.write!(csv_path, "id,name\n1,duck\n2,goose\n")
+
+    on_exit(fn ->
+      File.rm(csv_path)
+      File.rm(parquet_path)
+    end)
+
+    csv_source = QuackDB.Source.csv(csv_path, header: true)
+
+    assert {:ok, %QuackDB.Result{columns: ["id", "name"], rows: [[1, "duck"], [2, "goose"]]}} =
+             QuackDB.query(connection, ["SELECT id, name FROM ", csv_source, " ORDER BY id"])
+
+    QuackDB.query!(
+      connection,
+      "COPY (SELECT 1 AS id, 'duck' AS name UNION ALL SELECT 2 AS id, 'goose' AS name) TO ? (FORMAT parquet)",
+      [parquet_path]
+    )
+
+    parquet_source = QuackDB.Source.parquet(parquet_path)
+
+    assert {:ok, %QuackDB.Result{columns: ["id", "name"], rows: [[1, "duck"], [2, "goose"]]}} =
+             QuackDB.query(connection, ["SELECT id, name FROM ", parquet_source, " ORDER BY id"])
+  end
+
+  test "Ecto Repo.all/2 queries source helpers against a real Quack server" do
+    start_repo!()
+
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "quackdb_ecto_source_#{System.unique_integer([:positive])}.csv"
+      )
+
+    File.write!(path, "id,name\n1,duck\n2,goose\n")
+
+    on_exit(fn -> File.rm(path) end)
+
+    source = QuackDB.Source.csv(path, header: true)
+
+    query =
+      from(event in source,
+        where: event.id > 1,
+        select: %{id: event.id, name: event.name}
+      )
+
+    assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
+  end
+
+  test "column-oriented query results against a real Quack server" do
+    connection = start_connection!()
+
+    assert {:ok, %{"id" => [1, 2], "name" => ["duck", "goose"]}} =
+             QuackDB.columns(
+               connection,
+               "SELECT * FROM (VALUES (1, 'duck'), (2, 'goose')) AS t(id, name) ORDER BY id"
+             )
+
+    assert {:ok, %QuackDB.Columns{names: ["id", "name"], num_rows: 2} = columns} =
+             QuackDB.columnar(
+               connection,
+               "SELECT * FROM (VALUES (1, 'duck'), (2, 'goose')) AS t(id, name) ORDER BY id"
+             )
+
+    assert columns["id"] == [1, 2]
+
+    assert {:ok, [%{"n" => [0, 1, 2]}, %{"n" => [3, 4, 5]}]} =
+             DBConnection.transaction(connection, fn tx ->
+               tx
+               |> QuackDB.column_batches("SELECT i::INTEGER AS n FROM range(0, 6) t(i)", [],
+                 max_rows: 3
+               )
+               |> Enum.to_list()
+             end)
+
+    assert {:ok,
+            [
+              %QuackDB.Columns{names: ["n"], num_rows: 3} = first_batch,
+              %QuackDB.Columns{names: ["n"], num_rows: 3}
+            ]} =
+             DBConnection.transaction(connection, fn tx ->
+               tx
+               |> QuackDB.columnar_batches("SELECT i::INTEGER AS n FROM range(0, 6) t(i)", [],
+                 max_rows: 3
+               )
+               |> Enum.to_list()
+             end)
+
+    assert first_batch["n"] == [0, 1, 2]
+  end
+
+  test "Ecto Repo.all/2 queries fragment sources against a real Quack server" do
+    start_repo!()
+
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "quackdb_ecto_fragment_#{System.unique_integer([:positive])}.csv"
+      )
+
+    File.write!(path, "id,name\n1,duck\n2,goose\n")
+
+    on_exit(fn -> File.rm(path) end)
+
+    query =
+      from(event in fragment("read_csv(?, header = TRUE)", ^path),
+        where: event.id > 1,
+        select: %{id: event.id, name: event.name}
+      )
+
+    assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
+  end
+
   test "Ecto Repo.all/2 executes simple read-only queries against a real Quack server" do
     start_repo!()
     table = "quackdb_ecto_all_#{System.unique_integer([:positive])}"
@@ -254,6 +375,43 @@ defmodule QuackDB.Integration.QuackServerTest do
       )
 
     assert [%{upper_name: "DUCK"}] = QuackDB.IntegrationRepo.all(fragment_query)
+  end
+
+  test "Ecto Repo.all/2 supports analytical CTEs and windows against a real Quack server" do
+    start_repo!()
+    table = "quackdb_ecto_window_#{System.unique_integer([:positive])}"
+
+    QuackDB.IntegrationRepo.query!(
+      "CREATE TEMP TABLE #{table}(id INTEGER, category VARCHAR, score INTEGER)"
+    )
+
+    QuackDB.IntegrationRepo.query!(
+      "INSERT INTO #{table} VALUES (1, 'a', 10), (2, 'a', 20), (3, 'b', 15), (4, 'b', 5)"
+    )
+
+    high_scores =
+      from(event in table,
+        where: event.score >= 10,
+        select: %{id: event.id, category: event.category, score: event.score}
+      )
+
+    query =
+      from(event in "high_scores",
+        windows: [by_category: [partition_by: event.category, order_by: [desc: event.score]]],
+        order_by: [asc: event.category, asc: event.id],
+        select: %{
+          category: event.category,
+          row_number: over(row_number(), :by_category),
+          running_score: over(sum(event.score), :by_category)
+        }
+      )
+      |> with_cte("high_scores", as: ^high_scores)
+
+    assert [
+             %{category: "a", row_number: 2, running_score: 30},
+             %{category: "a", row_number: 1, running_score: 20},
+             %{category: "b", row_number: 1, running_score: 15}
+           ] = QuackDB.IntegrationRepo.all(query)
   end
 
   test "Ecto transactions commit through Repo.transaction/1" do

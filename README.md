@@ -5,7 +5,7 @@
 
 Remote DuckDB Quack protocol client for Elixir.
 
-`quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and includes an initial Ecto adapter for raw SQL queries.
+`quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and includes an early analytical Ecto adapter for raw SQL and read-oriented queries.
 
 > [!WARNING]
 > QuackDB itself is experimental and not production-ready. The package API, result shapes, Ecto adapter behavior, and supported type coverage may change as the project evolves. It also targets DuckDB's experimental Quack protocol, which may change across DuckDB releases. Use it at your own risk, validate behavior against your DuckDB version, and avoid relying on it for critical production workloads yet.
@@ -19,10 +19,12 @@ QuackDB currently focuses on the remote protocol and DBConnection client core. I
 - streaming and fetch continuation for large results
 - common scalar DuckDB types
 - nested result values such as `LIST`, `STRUCT`, `ARRAY`, and `MAP`
+- source helpers for DuckDB file and lakehouse table functions
+- column-oriented result maps for vector-style analytical workflows
 - normalized affected-row counts for `INSERT`, `UPDATE`, and `DELETE`
-- a minimal Ecto SQL adapter for `Repo.query/3`
+- an early Ecto SQL adapter for `Repo.query/3` and analytical read queries
 
-Higher-level Ecto schema queries, migrations, and write planning are planned after the raw SQL adapter path is stable.
+Raw SQL can use the full DuckDB surface. Ecto query generation is growing toward analytical DuckDB usage while keeping unsupported features explicit.
 
 ## Installation
 
@@ -37,6 +39,17 @@ end
 ```
 
 DuckDB's Quack protocol is currently experimental. For local testing, use DuckDB 1.5.3 or newer with the `quack` extension.
+
+Optional integrations are compiled only when their packages are available. Add Explorer when you want dataframe handoff helpers:
+
+```elixir
+def deps do
+  [
+    {:quackdb, "~> 0.1.0"},
+    {:explorer, "~> 0.11"}
+  ]
+end
+```
 
 ## Start a DuckDB Quack server
 
@@ -108,6 +121,34 @@ result.rows
 #=> [[[1, 2, 3], %{"name" => "duck", "count" => 2}, [1, 2, 3], %{"a" => 1, "b" => 2}]]
 ```
 
+### Source helpers
+
+DuckDB can scan files, object stores, and lakehouse table formats directly. `QuackDB.Source` builds safe table-function fragments for raw SQL:
+
+```elixir
+source =
+  QuackDB.Source.parquet("s3://bucket/events/*.parquet",
+    hive_partitioning: true,
+    union_by_name: true
+  )
+
+QuackDB.query!(conn, ["SELECT category, count(*) FROM ", source, " GROUP BY category"])
+```
+
+Available helpers include `parquet/2`, `csv/2`, `json/2`, `xlsx/2`, `delta/2`, and `iceberg/2`. Options are emitted as DuckDB named parameters, and paths/options are formatted as SQL literals instead of interpolated directly.
+
+The same fragments can be used as Ecto sources for read-oriented analytical queries:
+
+```elixir
+source = QuackDB.Source.csv("events.csv", header: true)
+
+MyApp.AnalyticsRepo.all(
+  from event in source,
+    where: event.id > 1,
+    select: %{id: event.id, name: event.name}
+)
+```
+
 ### Streaming
 
 `QuackDB.query/4` materializes the full result. Use streaming helpers for large analytical result sets.
@@ -140,6 +181,72 @@ conn
 |> QuackDB.maps("SELECT i AS n FROM range(0, ?) t(i)", [50_000])
 |> Enum.take(2)
 #=> [%{"n" => 0}, %{"n" => 1}]
+```
+
+Use `QuackDB.columnar/4` when an analytical workflow wants vectors plus column order and metadata:
+
+```elixir
+{:ok, columns} = QuackDB.columnar(conn, "SELECT id, name FROM events ORDER BY id")
+
+columns.names
+#=> ["id", "name"]
+
+columns["id"]
+#=> [1, 2]
+```
+
+`QuackDB.columns/4` returns just the column map:
+
+```elixir
+{:ok, columns} = QuackDB.columns(conn, "SELECT id, name FROM events ORDER BY id")
+
+columns
+#=> %{"id" => [1, 2], "name" => ["duck", "goose"]}
+```
+
+For large results, `QuackDB.columnar_batches/4` streams `QuackDB.Columns` fetch batches without materializing the whole result set. `QuackDB.column_batches/4` returns just the map from each batch:
+
+```elixir
+conn
+|> QuackDB.column_batches("SELECT i AS n FROM range(0, 50_000) t(i)", [], max_rows: 1_000)
+|> Enum.take(1)
+#=> [%{"n" => [0, 1, 2, ...]}]
+```
+
+This is not Arrow IPC yet, but it exposes a column-oriented shape that can back future Arrow integration without changing the query API.
+
+### Explorer DataFrames
+
+When `:explorer` is available, QuackDB exposes optional helpers for building `Explorer.DataFrame` values from query results:
+
+```elixir
+{:ok, df} =
+  QuackDB.Explorer.dataframe(conn, "SELECT id, name FROM events ORDER BY id")
+```
+
+You can also pass Ecto queries directly, including source helpers:
+
+```elixir
+source = QuackDB.Source.csv("events.csv", header: true)
+
+query =
+  from event in source,
+    where: event.id > ^1,
+    select: %{id: event.id, name: event.name}
+
+{:ok, df} = QuackDB.Explorer.dataframe(conn, query)
+```
+
+The Explorer integration materializes query results in Elixir before constructing a dataframe. It is useful for interactive analysis and downstream Explorer pipelines, but it is not a zero-copy Arrow IPC path yet.
+
+You can also convert existing results:
+
+```elixir
+{:ok, result} = QuackDB.query(conn, "SELECT 1 AS id, 'duck' AS name")
+{:ok, df} = QuackDB.Explorer.from_result(result)
+
+{:ok, columns} = QuackDB.columnar(conn, "SELECT 1 AS id, 'duck' AS name")
+{:ok, df} = QuackDB.Explorer.from_columns(columns)
 ```
 
 ### Command results
@@ -243,7 +350,7 @@ Use `Repo.rollback/1` to abort transaction work:
   end)
 ```
 
-Simple read-only Ecto queries against table names are also supported, including basic predicates, ordering, limits, aggregates, and fragments:
+Read-only Ecto queries against table names are also supported, including CTEs, window functions, joins, grouping, having, distinct, aggregate `FILTER`, arithmetic expressions, `in/2`, predicates, ordering, limits, aggregates, and fragments:
 
 ```elixir
 import Ecto.Query
@@ -256,13 +363,13 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-This first Ecto milestone is intentionally limited. Joins, grouped queries, migrations, and Ecto-managed inserts/updates/deletes raise explicit unsupported-feature errors for now.
+Ecto support is analytical rather than CRUD-shaped, but still early. Migrations, set combinations, locks, and Ecto-managed inserts/updates/deletes raise explicit unsupported-feature errors for now.
 
 ## Current limitations
 
 - Bind parameters are not exposed through this Quack client path yet.
 - Appends are represented at the protocol struct level but are not exposed as public API.
-- Ecto support is limited to raw SQL through `Repo.query/3` and read-only table queries through `Repo.all/2`.
+- Ecto support is limited to raw SQL through `Repo.query/3` and read-only analytical table queries through `Repo.all/2`.
 - The low-level protocol is experimental and tracks DuckDB's Quack extension behavior.
 
 ## Supervision and connection options

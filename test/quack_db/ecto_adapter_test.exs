@@ -152,10 +152,109 @@ defmodule QuackDB.EctoAdapterTest do
                      ~s(SELECT q0."id" AS "id", q0."name" AS "name" FROM "events" AS q0)}
   end
 
-  test "unsupported Ecto query features raise explicit errors" do
-    query = from(event in "events", join: other in "other", on: true, select: event.id)
+  test "generates Ecto SQL from DuckDB source helpers" do
+    source = QuackDB.Source.csv("events.csv", header: true)
 
-    assert_raise QuackDB.Error, ~r/Ecto joins are not supported yet/, fn ->
+    query =
+      from(event in source,
+        where: event.id > 1,
+        select: %{id: event.id, name: event.name}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT q0."id" AS "id", q0."name" AS "name" FROM read_csv('events.csv', header = TRUE) AS q0 WHERE (q0."id" > 1)]
+  end
+
+  test "generates Ecto SQL from source fragments" do
+    query =
+      from(event in fragment("read_csv(?)", ^"events.csv"),
+        where: event.id > 1,
+        select: %{id: event.id}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT q0."id" AS "id" FROM read_csv(?) AS q0 WHERE (q0."id" > 1)]
+  end
+
+  test "generates Ecto SQL from subquery sources" do
+    inner_query = from(event in "events", where: event.id > 1, select: %{id: event.id})
+    query = from(event in subquery(inner_query), select: %{id: event.id})
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT q0."id" AS "id" FROM (SELECT q0."id" AS "id" FROM "events" AS q0 WHERE (q0."id" > 1)) AS q0]
+  end
+
+  test "generates Ecto SQL with CTEs" do
+    cte_query =
+      from(event in "events",
+        where: event.id > 1,
+        select: %{id: event.id, name: event.name}
+      )
+
+    query =
+      "recent"
+      |> with_cte("recent", as: ^cte_query)
+      |> select([event], %{id: event.id})
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[WITH "recent" AS (SELECT q0."id" AS "id", q0."name" AS "name" FROM "events" AS q0 WHERE (q0."id" > 1)) SELECT q0."id" AS "id" FROM "recent" AS q0]
+  end
+
+  test "generates Ecto SQL with window functions" do
+    query =
+      from(event in "events",
+        windows: [by_kind: [partition_by: event.kind, order_by: [desc: event.id]]],
+        select: %{
+          row_number: over(row_number(), :by_kind),
+          running_score: over(sum(event.score), :by_kind)
+        }
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT ROW_NUMBER() OVER "by_kind" AS "row_number", SUM(q0."score") OVER "by_kind" AS "running_score" FROM "events" AS q0 WINDOW "by_kind" AS (PARTITION BY q0."kind" ORDER BY q0."id" DESC)]
+  end
+
+  test "generates aggregate FILTER expressions" do
+    query =
+      from(event in "events",
+        select: %{duck_count: filter(count(event.id), event.kind == "duck")}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT COUNT(q0."id") FILTER (WHERE (q0."kind" = 'duck')) AS "duck_count" FROM "events" AS q0]
+  end
+
+  test "generates analytical Ecto SQL with joins groupings and having" do
+    query =
+      from(event in "events",
+        join: category in "categories",
+        on: event.category_id == category.id,
+        group_by: [event.category_id, category.name],
+        having: count(event.id) > 1,
+        select: %{category: category.name, count: count(event.id)}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT q1."name" AS "category", COUNT(q0."id") AS "count" FROM "events" AS q0 INNER JOIN "categories" AS q1 ON (q0."category_id" = q1."id") GROUP BY q0."category_id", q1."name" HAVING (COUNT(q0."id") > 1)]
+  end
+
+  test "generates distinct and richer predicate Ecto SQL" do
+    query =
+      from(event in "events",
+        distinct: [asc: event.category_id],
+        where: event.category_id in [1, 2, 3] and not (event.score < 10),
+        select: %{category_id: event.category_id, adjusted_score: event.score + 5}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT DISTINCT ON (q0."category_id") q0."category_id" AS "category_id", (q0."score" + 5) AS "adjusted_score" FROM "events" AS q0 WHERE ((q0."category_id" IN (1, 2, 3)) AND (NOT (q0."score" < 10)))]
+  end
+
+  test "unsupported Ecto query features raise explicit errors" do
+    other_query = from(other in "other", select: other.id)
+    query = from(event in "events", union: ^other_query, select: event.id)
+
+    assert_raise QuackDB.Error, ~r/Ecto combinations are not supported yet/, fn ->
       Ecto.Adapters.QuackDB.Connection.all(query)
     end
   end

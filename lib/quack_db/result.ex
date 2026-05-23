@@ -55,6 +55,70 @@ defmodule QuackDB.Result do
 
   def normalize(%__MODULE__{} = result), do: result
 
+  @doc """
+  Converts a row-oriented result into a column-oriented map.
+
+  Duplicate column names are disambiguated with suffixes such as `_2` and `_3`,
+  matching `QuackDB.maps/4`.
+  """
+  @spec to_columns(t()) :: %{String.t() => [term()]}
+  def to_columns(%__MODULE__{} = result), do: result |> to_columnar() |> Map.fetch!(:columns)
+
+  @doc """
+  Converts a row-oriented result into a `QuackDB.Columns` struct.
+  """
+  @spec to_columnar(t()) :: QuackDB.Columns.t()
+  def to_columnar(%__MODULE__{columns: columns, rows: rows} = result)
+      when is_list(columns) and is_list(rows) do
+    keys = disambiguate_columns(columns)
+    initial = Map.new(keys, &{&1, []})
+
+    columns =
+      rows
+      |> Enum.reduce(initial, fn row, acc ->
+        keys
+        |> Enum.zip(row)
+        |> Enum.reduce(acc, fn {key, value}, acc -> Map.update!(acc, key, &[value | &1]) end)
+      end)
+      |> Map.new(fn {key, values} -> {key, Enum.reverse(values)} end)
+
+    %QuackDB.Columns{
+      names: keys,
+      original_names: result.columns,
+      columns: columns,
+      num_rows: result.num_rows,
+      command: result.command,
+      connection_id: result.connection_id,
+      messages: result.messages,
+      metadata: result.metadata
+    }
+  end
+
+  def to_columnar(%__MODULE__{} = result) do
+    %QuackDB.Columns{
+      command: result.command,
+      connection_id: result.connection_id,
+      messages: result.messages,
+      metadata: result.metadata
+    }
+  end
+
+  @doc false
+  @spec disambiguate_columns([String.t()]) :: [String.t()]
+  def disambiguate_columns(columns) do
+    {columns, _counts} =
+      Enum.map_reduce(columns, %{}, fn column, counts ->
+        counts = Map.update(counts, column, 1, &(&1 + 1))
+
+        case counts[column] do
+          1 -> {column, counts}
+          count -> {"#{column}_#{count}", counts}
+        end
+      end)
+
+    columns
+  end
+
   defp raw_count_metadata(result) do
     result.metadata
     |> Map.put(:duckdb_columns, result.columns)
