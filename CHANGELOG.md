@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.1.1 - 2026-05-23
+
 ### Added
 
 - Added `QuackDB.Source` helpers for DuckDB Parquet, CSV, JSON, XLSX, Delta, and Iceberg table-function fragments, including use as Ecto query sources.

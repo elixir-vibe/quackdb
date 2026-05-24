@@ -134,7 +134,7 @@ Supported/interesting features:
 
 QuackDB opportunity:
 
-- Add `QuackDB.exec_secret/3` or documentation patterns for creating secrets without logging credentials in application logs.
+- Add a dedicated secret-execution helper or documentation patterns for creating secrets without logging credentials in application logs.
 - Avoid client-side interpolation helpers that encourage embedding cloud secrets directly in SQL strings unless they are explicit and well documented.
 - Consider a high-level source builder that accepts `s3://`, `r2://`, `gcs://`, `gs://`, `az://`, and normal HTTPS paths.
 
