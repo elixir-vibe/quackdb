@@ -1,4 +1,4 @@
-defmodule QuackDB.Integration.EctoAnalyticsTest do
+defmodule QuackDB.Integration.Ecto.AnalyticsTest do
   use ExUnit.Case, async: false
 
   import Ecto.Query

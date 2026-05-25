@@ -1,4 +1,4 @@
-defmodule QuackDB.Integration.EctoTransactionTest do
+defmodule QuackDB.Integration.Ecto.TransactionTest do
   use ExUnit.Case, async: false
 
   import QuackDB.QuackServerCase
