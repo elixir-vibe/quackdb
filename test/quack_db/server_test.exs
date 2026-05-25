@@ -9,6 +9,98 @@ defmodule QuackDB.ServerTest do
     assert options[:token] == "secret"
   end
 
+  test "child_specs builds matching server and client child specs" do
+    [server_spec, client_spec] =
+      QuackDB.Server.child_specs(
+        server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9500", token: "secret"],
+        client: [name: MyApp.QuackDB, pool_size: 2]
+      )
+
+    assert %{id: MyApp.DuckDB, start: {QuackDB.Server, :start_link, [server_options]}} =
+             server_spec
+
+    assert server_options[:endpoint] == "quack:localhost:9500"
+    assert server_options[:uri] == "http://[::1]:9500"
+    assert server_options[:token] == "secret"
+
+    assert %{
+             start:
+               {DBConnection.ConnectionPool, :start_link,
+                [{QuackDB.DBConnection, client_options}]}
+           } = client_spec
+
+    assert client_options[:name] == MyApp.QuackDB
+    assert client_options[:pool_size] == 2
+    assert client_options[:uri] == "http://[::1]:9500"
+    assert client_options[:token] == "secret"
+  end
+
+  test "child_specs generates a shared token when none is provided" do
+    [server_spec, client_spec] =
+      QuackDB.Server.child_specs(server: [name: MyApp.DuckDB], client: [])
+
+    %{start: {QuackDB.Server, :start_link, [server_options]}} = server_spec
+
+    %{start: {DBConnection.ConnectionPool, :start_link, [{QuackDB.DBConnection, client_options}]}} =
+      client_spec
+
+    assert is_binary(server_options[:token])
+    assert byte_size(server_options[:token]) > 20
+    assert client_options[:token] == server_options[:token]
+  end
+
+  test "info exposes generated boot SQL and endpoint-derived URI" do
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         endpoint: "quack:127.0.0.1:9501",
+         token: "secret",
+         wait: false,
+         daemon_command: {"tail", ["-f", "/dev/null"]}}
+      )
+
+    assert QuackDB.Server.uri(server) == "http://127.0.0.1:9501"
+
+    assert %{
+             boot_sql: "LOAD quack; CALL quack_serve('quack:127.0.0.1:9501', token = 'secret');"
+           } = QuackDB.Server.info(server)
+  end
+
+  test "custom URI overrides endpoint-derived URI" do
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         endpoint: "quack:localhost:9502",
+         uri: "http://example.invalid:9502",
+         token: "secret",
+         wait: false,
+         daemon_command: {"tail", ["-f", "/dev/null"]}}
+      )
+
+    assert QuackDB.Server.uri(server) == "http://example.invalid:9502"
+  end
+
+  test "load_quack? false omits LOAD statement" do
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         token: "secret",
+         load_quack?: false,
+         wait: false,
+         daemon_command: {"tail", ["-f", "/dev/null"]}}
+      )
+
+    assert %{boot_sql: "CALL quack_serve('quack:localhost', token = 'secret');"} =
+             QuackDB.Server.info(server)
+  end
+
+  test "missing DuckDB executable returns a clean start error" do
+    Process.flag(:trap_exit, true)
+
+    assert {:error, {:enoent, _stack}} =
+             QuackDB.Server.start_link(duckdb: "definitely_missing_duckdb_exe", wait: false)
+  end
+
   test "starts a supervised MuonTrap daemon without waiting" do
     server =
       start_supervised!(

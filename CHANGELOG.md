@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.1.2 - Unreleased
+
+### Added
+
+- Added `QuackDB.Server`, an optional MuonTrap-backed supervisor for local DuckDB Quack server processes.
+- Added `QuackDB.DDL` and `QuackDB.Type` helpers for quoted DuckDB DDL and SQL type rendering.
+- Added `QuackDB.Ecto.Analytics` helpers for DuckDB analytical expressions in Ecto queries, including median, quantiles, list aggregation, JSON extraction, date truncation, and time buckets.
+- Added generic `QuackDB.SQL.load/1` and `QuackDB.SQL.call/3` statement builders.
+- Expanded analytical integration coverage for JSON sources, time-series functions, source analytics, `QUALIFY`, `PIVOT`, `UNPIVOT`, grouping sets, sampling, and supervised local servers.
+
+### Changed
+
+- Split Ecto query SQL generation into `Ecto.Adapters.QuackDB.Query`.
+- Reworked integration test setup around reusable QuackDB test helpers that dogfood public DDL/type/source utilities.
+- Replaced production regex-based source/command parsing with explicit binary/string scanners.
+
 
 ## 0.1.1 - 2026-05-23
 

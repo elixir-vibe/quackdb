@@ -55,6 +55,30 @@ defmodule QuackDB.Server do
           | {:daemon_options, Keyword.t()}
           | {:daemon_command, {String.t(), [String.t()]}}
 
+  @spec child_specs(keyword()) :: [Supervisor.child_spec()]
+  def child_specs(options \\ []) do
+    server_options = Keyword.get(options, :server, [])
+    client_options = Keyword.get(options, :client, [])
+    endpoint = Keyword.get(server_options, :endpoint, "quack:localhost")
+
+    uri =
+      Keyword.get(server_options, :uri) || Keyword.get(client_options, :uri) ||
+        default_uri(endpoint)
+
+    token =
+      Keyword.get(server_options, :token) || Keyword.get(client_options, :token) || random_token()
+
+    server_options =
+      server_options
+      |> Keyword.put_new(:endpoint, endpoint)
+      |> Keyword.put(:uri, uri)
+      |> Keyword.put(:token, token)
+
+    client_options = client_options |> Keyword.put(:uri, uri) |> Keyword.put(:token, token)
+
+    [child_spec(server_options), QuackDB.child_spec(client_options)]
+  end
+
   @spec child_spec([option()]) :: Supervisor.child_spec()
   def child_spec(options) do
     %{
