@@ -24,6 +24,40 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert insert.metadata[:duckdb_rows] == [[2]]
   end
 
+  test "Ecto Repo.insert_all/3 inserts rows with generated SQL" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_insert_all")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+
+    assert {2, nil} =
+             QuackDB.IntegrationRepo.insert_all(table, [
+               [id: 1, name: "duck"],
+               [id: 2, name: "goose"]
+             ])
+
+    assert %{rows: [[1, "duck"], [2, "goose"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
+  end
+
+  test "Ecto Repo.insert_all/3 can use Quack append explicitly" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_append_all")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+
+    assert {3, nil} =
+             QuackDB.IntegrationRepo.insert_all(
+               table,
+               [[id: 1, name: "duck"], [id: 2, name: "goose"], [id: 3, name: "swan"]],
+               insert_method: :append,
+               chunk_every: 2
+             )
+
+    assert %{rows: [[1, "duck"], [2, "goose"], [3, "swan"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
+  end
+
   test "Ecto Repo.all/2 executes simple read-only queries against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_all")

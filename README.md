@@ -413,6 +413,26 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+Ecto `insert_all/3` is supported for straightforward row inserts:
+
+```elixir
+MyApp.AnalyticsRepo.insert_all("events", [
+  [id: 1, name: "duck"],
+  [id: 2, name: "goose"]
+])
+```
+
+Use `insert_method: :append` to opt into Quack's native append protocol for plain `insert_all` workloads. This fast path does not support query inserts, `:returning`, placeholders, or upserts.
+
+```elixir
+MyApp.AnalyticsRepo.insert_all(
+  "events",
+  [[id: 1, name: "duck"], [id: 2, name: "goose"]],
+  insert_method: :append,
+  chunk_every: 10_000
+)
+```
+
 For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` statements:
 
 ```elixir
@@ -424,13 +444,13 @@ MyApp.AnalyticsRepo.query!(
 )
 ```
 
-Ecto support is analytical rather than CRUD-shaped, but still early. Migrations, set combinations, locks, and Ecto-managed inserts/updates/deletes raise explicit unsupported-feature errors for now.
+Ecto support is analytical rather than CRUD-shaped, but still early. Migrations, set combinations, locks, updates, deletes, and upserts raise explicit unsupported-feature errors for now.
 
 ## Current limitations
 
 - Bind parameters are not exposed through this Quack client path yet.
-- Appends are represented at the protocol struct level but are not exposed as public API.
-- Ecto support is limited to raw SQL through `Repo.query/3` and read-only analytical table queries through `Repo.all/2`.
+- Native appends support row batches but not Arrow IPC or automatic local-file/data staging yet.
+- Ecto support is limited to raw SQL, read-only analytical table queries, and straightforward `insert_all/3` row inserts.
 - The low-level protocol is experimental and tracks DuckDB's Quack extension behavior.
 
 ## Supervision and connection options

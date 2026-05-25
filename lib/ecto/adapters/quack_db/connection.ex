@@ -96,8 +96,16 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         )
 
     @impl true
-    def insert(_prefix, _table, _header, _rows, _on_conflict, _returning, _placeholders) do
-      unsupported_iodata!(:schema_inserts, "Ecto inserts are not supported yet; use Repo.query/3")
+    def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
+      [
+        "INSERT INTO ",
+        quote_table(prefix, table),
+        insert_columns(header),
+        " ",
+        insert_rows(rows),
+        on_conflict(on_conflict),
+        returning(returning, placeholders)
+      ]
     end
 
     @impl true
@@ -135,6 +143,73 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       unless is_list(params) do
         raise ArgumentError, "expected params to be a list, got: #{inspect(params)}"
       end
+    end
+
+    defp insert_columns([]), do: []
+
+    defp insert_columns(header) do
+      [" (", header |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "), ")"]
+    end
+
+    defp insert_rows(%Ecto.Query{} = query),
+      do: ["(", Ecto.Adapters.QuackDB.Query.all(query), ")"]
+
+    defp insert_rows(rows) when is_list(rows) do
+      [
+        "VALUES ",
+        rows
+        |> Enum.map(fn row ->
+          ["(", row |> Enum.map(&insert_value/1) |> Enum.intersperse(", "), ")"]
+        end)
+        |> Enum.intersperse(", ")
+      ]
+    end
+
+    defp insert_value(nil), do: "DEFAULT"
+
+    defp insert_value({%Ecto.Query{} = query, _params_counter}),
+      do: ["(", Ecto.Adapters.QuackDB.Query.all(query), ")"]
+
+    defp insert_value({:placeholder, _placeholder_index}), do: "?"
+    defp insert_value(_value), do: "?"
+
+    defp on_conflict({:raise, _params, []}), do: []
+    defp on_conflict({:nothing, _params, []}), do: " ON CONFLICT DO NOTHING"
+
+    defp on_conflict({:nothing, _params, targets}) do
+      [" ON CONFLICT ", conflict_target(targets), "DO NOTHING"]
+    end
+
+    defp on_conflict({_fields, _params, _targets}) do
+      unsupported_iodata!(
+        :schema_upserts,
+        "Ecto upserts are not supported yet; use Repo.query/3 or QuackDB.insert_rows/4"
+      )
+    end
+
+    defp conflict_target([]), do: []
+
+    defp conflict_target(targets) when is_list(targets) do
+      ["(", targets |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "), ") "]
+    end
+
+    defp conflict_target({:unsafe_fragment, fragment}), do: [fragment, " "]
+
+    defp returning([], _placeholders), do: []
+
+    defp returning(returning, []),
+      do: [" RETURNING ", returning |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", ")]
+
+    defp returning(_returning, _placeholders) do
+      unsupported_iodata!(:placeholders, ":placeholders with RETURNING are not supported yet")
+    end
+
+    defp quote_table(nil, table), do: quote_identifier(table)
+    defp quote_table(prefix, table), do: [quote_identifier(prefix), ".", quote_identifier(table)]
+
+    defp quote_identifier(value) do
+      value = value |> to_string() |> String.replace("\"", "\"\"")
+      ["\"", value, "\""]
     end
 
     defp normalize_result(%QuackDB.Result{} = result) do

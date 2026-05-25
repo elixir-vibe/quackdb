@@ -4,6 +4,12 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
   import Ecto.Query
   import QuackDB.TestTransports
 
+  alias QuackDB.Protocol.Codec
+  alias QuackDB.Protocol.Message.AppendRequest
+  alias QuackDB.Protocol.Message.ConnectionRequest
+  alias QuackDB.Protocol.Message.Header
+  alias QuackDB.Protocol.Message.SuccessResponse
+
   setup do
     previous = Application.get_env(:quackdb, QuackDB.EctoRepo)
 
@@ -43,6 +49,54 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     assert result.num_rows == 2
     assert result.command == :insert
     assert result.metadata[:duckdb_rows] == [[2]]
+  end
+
+  test "Repo.insert_all/3 executes generated SQL" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])
+
+    put_repo_env(transport(parent: parent, prepare: [chunk], names: ["Count"]))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {2, nil} =
+             QuackDB.EctoRepo.insert_all("events", [
+               [id: 1, name: "duck"],
+               [id: 2, name: "goose"]
+             ])
+
+    assert_received {:statement,
+                     ~s|INSERT INTO "events" ("id", "name") VALUES (1, 'duck'), (2, 'goose')|}
+  end
+
+  test "Repo.insert_all/3 can use Quack append protocol explicitly" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {2, nil} =
+             QuackDB.EctoRepo.insert_all(
+               "events",
+               [[id: 1, name: "duck"], [id: 2, name: "goose"]],
+               insert_method: :append,
+               chunk_every: 1
+             )
+
+    assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 1}}}
+    assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 1}}}
   end
 
   test "raises ArgumentError for non-list params like other Ecto SQL adapters" do
