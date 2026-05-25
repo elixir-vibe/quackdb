@@ -3,28 +3,41 @@
 [![Hex.pm](https://img.shields.io/hexpm/v/quackdb.svg)](https://hex.pm/packages/quackdb)
 [![HexDocs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/quackdb)
 
-Remote DuckDB Quack protocol client for Elixir.
+Remote DuckDB analytics from Elixir, backed by DuckDB's experimental Quack protocol.
 
-`quackdb` is a protocol-native client for DuckDB's experimental Quack remote protocol. The client is backed by `DBConnection`, decodes DuckDB result chunks directly, supports streaming/fetching large result sets, and includes an early analytical Ecto adapter for raw SQL and read-oriented queries.
+`quackdb` lets Elixir applications query and append to a remote DuckDB process without embedding DuckDB in the BEAM. It provides a `DBConnection`-first client, direct Quack protocol decoding, streaming result fetches, native append writes, source helpers for analytical files and lakehouse tables, and optional Ecto/Explorer integrations.
 
 > [!WARNING]
 > QuackDB itself is experimental and not production-ready. The package API, result shapes, Ecto adapter behavior, and supported type coverage may change as the project evolves. It also targets DuckDB's experimental Quack protocol, which may change across DuckDB releases. Use it at your own risk, validate behavior against your DuckDB version, and avoid relying on it for critical production workloads yet.
 
 ## Status
 
-QuackDB currently focuses on the remote protocol and DBConnection client core. It supports:
+QuackDB currently focuses on the remote protocol and `DBConnection` client core. It supports:
 
-- connection handshake over HTTP Quack endpoints
-- query execution through `DBConnection`
-- streaming and fetch continuation for large results
-- common scalar DuckDB types
-- nested result values such as `LIST`, `STRUCT`, `ARRAY`, and `MAP`
-- source helpers for DuckDB file and lakehouse table functions
-- column-oriented result maps for vector-style analytical workflows
-- normalized affected-row counts for `INSERT`, `UPDATE`, and `DELETE`
-- an early Ecto SQL adapter for `Repo.query/3` and analytical read queries
+- `DBConnection`-backed remote DuckDB queries over Quack HTTP endpoints
+- streaming and fetch continuation for large analytical result sets
+- native append writes through DuckDB `DataChunk`s via `QuackDB.insert_rows/4`
+- rich DuckDB scalar fidelity including decimals, UUIDs, enums, `BIGNUM`, nanosecond temporal values, intervals, and `TIME WITH TIME ZONE`
+- nested DuckDB values such as `LIST`, `STRUCT`, `ARRAY`, and `MAP`
+- source helpers for Parquet, CSV, JSON, XLSX, Delta, and Iceberg table functions
+- column-oriented result helpers for analytical/vector-style workflows
+- optional Ecto SQL adapter support for raw SQL, analytical reads, `insert/2`, and `insert_all/3`
+- optional Explorer dataframe handoff helpers
+- supervised local DuckDB Quack server processes for development
 
 Raw SQL can use the full DuckDB surface. Ecto query generation is growing toward analytical DuckDB usage while keeping unsupported features explicit.
+
+## Why QuackDB?
+
+Use QuackDB when you want DuckDB's analytical SQL from Elixir while keeping DuckDB in a separate process.
+
+That gives you:
+
+- a normal OTP/`DBConnection` client surface
+- remote DuckDB execution instead of embedding native database state in your BEAM
+- efficient protocol-level result decoding
+- explicit unsupported-feature errors instead of silent lossy behavior
+- optional Ecto and Explorer layers without making them required
 
 ## Installation
 
