@@ -9,6 +9,7 @@ defmodule QuackDB.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
+      elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
       description: "Remote DuckDB Quack protocol client for Elixir",
       source_url: "https://github.com/elixir-vibe/quackdb",
@@ -27,6 +28,9 @@ defmodule QuackDB.MixProject do
   def cli do
     [preferred_envs: [ci: :test]]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_env), do: ["lib"]
 
   defp deps do
     [
@@ -65,7 +69,9 @@ defmodule QuackDB.MixProject do
         "guides/type-support.md",
         "docs/research.md",
         "docs/postgrex-comparison.md",
-        "docs/duckdb-capabilities.md"
+        "docs/duckdb-capabilities.md",
+        "docs/test-coverage-audit.md",
+        "docs/test-structure.md"
       ],
       groups_for_extras: [
         Guides: ~r/guides\//,
