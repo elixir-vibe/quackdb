@@ -37,6 +37,7 @@ defmodule QuackDB.MixProject do
       {:db_connection, "~> 2.7"},
       {:req, "~> 0.5"},
       {:decimal, "~> 2.0"},
+      {:muontrap, "~> 1.5"},
       {:ecto_sql, "~> 3.13", optional: true},
       {:explorer, "~> 0.11", optional: true},
       {:stream_data, "~> 1.2", only: :test},

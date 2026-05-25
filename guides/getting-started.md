@@ -432,6 +432,25 @@ The client accepts QuackDB options such as `:uri`, `:token`, and `:transport`, p
 QuackDB.query(MyApp.QuackDB, "SELECT 1", [], timeout: 10_000)
 ```
 
+For local development, tests, or notebooks, QuackDB can also supervise a local DuckDB Quack server process with MuonTrap:
+
+```elixir
+children = [
+  {QuackDB.Server,
+   name: MyApp.DuckDB,
+   endpoint: "quack:localhost:9494",
+   uri: "http://[::1]:9494",
+   token: System.fetch_env!("QUACKDB_TOKEN")},
+
+  {QuackDB,
+   name: MyApp.QuackDB,
+   uri: "http://[::1]:9494",
+   token: System.fetch_env!("QUACKDB_TOKEN")}
+]
+```
+
+`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers.
+
 ## Running QuackDB's integration tests
 
 With a server running locally:

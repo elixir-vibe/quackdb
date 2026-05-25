@@ -50,6 +50,25 @@ defmodule QuackDB.SQL do
     raise ArgumentError, "expected params to be a list, got: #{inspect(params)}"
   end
 
+  @doc "Builds a `LOAD extension;` statement."
+  @spec load(atom() | String.t()) :: iodata()
+  def load(extension) do
+    ["LOAD ", identifier!(extension, :extension), ";"]
+  end
+
+  @doc "Builds a `CALL function(args..., option = value...);` statement."
+  @spec call(atom() | String.t(), [parameter()], keyword(parameter())) :: iodata()
+  def call(function, positional_args \\ [], named_args \\ [])
+      when is_list(positional_args) and is_list(named_args) do
+    [
+      "CALL ",
+      identifier!(function, :function),
+      "(",
+      call_arguments(positional_args, named_args),
+      ");"
+    ]
+  end
+
   @spec literal(parameter()) :: {:ok, iodata()} | {:error, Error.t()}
   def literal(nil), do: {:ok, "NULL"}
   def literal(true), do: {:ok, "TRUE"}
@@ -113,6 +132,52 @@ defmodule QuackDB.SQL do
 
   def literal(value) do
     error(:unsupported_parameter, "unsupported SQL parameter #{inspect(value)}")
+  end
+
+  defp call_arguments(positional_args, named_args) do
+    positional = Enum.map(positional_args, &literal!/1)
+
+    named =
+      Enum.map(named_args, fn {name, value} ->
+        [identifier!(name, :argument), " = ", literal!(value)]
+      end)
+
+    (positional ++ named)
+    |> Enum.intersperse(", ")
+  end
+
+  defp literal!(value) do
+    case literal(value) do
+      {:ok, literal} -> literal
+      {:error, %Error{} = error} -> raise error
+    end
+  end
+
+  defp identifier!(value, kind) when is_atom(value),
+    do: value |> Atom.to_string() |> identifier!(kind)
+
+  defp identifier!(<<first, rest::binary>> = value, kind)
+       when first in ?A..?Z or first in ?a..?z or first == ?_ do
+    if valid_identifier_rest?(rest) do
+      value
+    else
+      invalid_identifier!(value, kind)
+    end
+  end
+
+  defp identifier!(value, kind), do: invalid_identifier!(value, kind)
+
+  defp valid_identifier_rest?(<<>>), do: true
+
+  defp valid_identifier_rest?(<<char, rest::binary>>)
+       when char in ?A..?Z or char in ?a..?z or char in ?0..?9 or char == ?_ do
+    valid_identifier_rest?(rest)
+  end
+
+  defp valid_identifier_rest?(_value), do: false
+
+  defp invalid_identifier!(value, kind) do
+    raise ArgumentError, "invalid SQL #{kind} identifier: #{inspect(value)}"
   end
 
   defp scan(statement, params), do: scan(statement, params, 0, [])

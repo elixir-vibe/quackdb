@@ -1,6 +1,22 @@
 defmodule QuackDB.SQLTest do
   use ExUnit.Case, async: true
 
+  test "builds LOAD statements" do
+    assert QuackDB.SQL.load(:quack) |> IO.iodata_to_binary() == "LOAD quack;"
+  end
+
+  test "builds CALL statements with positional and named arguments" do
+    assert QuackDB.SQL.call(:quack_serve, ["quack:localhost"], token: "super_secret")
+           |> IO.iodata_to_binary() ==
+             "CALL quack_serve('quack:localhost', token = 'super_secret');"
+  end
+
+  test "rejects invalid statement identifiers" do
+    assert_raise ArgumentError, ~r/invalid SQL function identifier/, fn ->
+      QuackDB.SQL.call("bad-name", [])
+    end
+  end
+
   test "formats positional parameters as DuckDB SQL literals" do
     assert {:ok, sql} =
              QuackDB.SQL.format(
