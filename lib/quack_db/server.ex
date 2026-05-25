@@ -12,10 +12,10 @@ defmodule QuackDB.Server do
         {QuackDB, name: MyApp.QuackDB, uri: "http://[::1]:9494", token: "super_secret"}
       ]
 
-  By default the server uses the same command shape that DuckDB 1.5.x currently
-  needs to stay alive after `quack_serve/2` starts:
+  By default the server runs DuckDB directly under MuonTrap with `-interactive`
+  so the process stays alive after `quack_serve/2` starts:
 
-      tail -f /dev/null | duckdb :memory: -init /dev/null -cmd "LOAD quack; ..."
+      duckdb :memory: -interactive -init /dev/null -cmd "LOAD quack; ..."
 
   """
 

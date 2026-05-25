@@ -53,8 +53,27 @@ end
 
 ## Start a DuckDB Quack server
 
+For local development, QuackDB can supervise DuckDB's external CLI process for you:
+
+```elixir
+children = [
+  {QuackDB.Server,
+   name: MyApp.DuckDB,
+   endpoint: "quack:localhost:9494",
+   uri: "http://[::1]:9494",
+   token: "super_secret"},
+
+  {QuackDB,
+   name: MyApp.QuackDB,
+   uri: "http://[::1]:9494",
+   token: "super_secret"}
+]
+```
+
+Or start DuckDB manually:
+
 ```sh
-tail -f /dev/null | duckdb -init /dev/null \
+duckdb -interactive -init /dev/null \
   -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
 ```
 
@@ -329,12 +348,15 @@ result.rows
 #=> [[1]]
 ```
 
-Raw SQL also works inside Ecto transactions:
+Raw SQL and generated DDL also work inside Ecto transactions:
 
 ```elixir
 {:ok, :committed} =
   MyApp.AnalyticsRepo.transaction(fn ->
-    MyApp.AnalyticsRepo.query!("CREATE TEMP TABLE events(id INTEGER)")
+    MyApp.AnalyticsRepo.query!(
+      QuackDB.DDL.create_table("events", [id: :integer], temporary: true)
+    )
+
     MyApp.AnalyticsRepo.query!("INSERT INTO events VALUES (1), (2)")
     :committed
   end)
