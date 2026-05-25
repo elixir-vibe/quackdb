@@ -51,6 +51,10 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `ARRAY` | list | Supported | Fixed-size arrays are returned as Elixir lists. |
 | `MAP` | map | Supported | Map entries are converted to Elixir maps; duplicate-key policy follows `Map.put/3`. |
 
+## Append encoding
+
+`QuackDB.insert_rows/4` supports scalar append values plus nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` columns when explicit column specs are provided. Temporal append values use Elixir's Calendar conversion APIs and are encoded in DuckDB's ISO calendar representation.
+
 ## Vector encodings
 
 | DuckDB vector encoding | Status |
