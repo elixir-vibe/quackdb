@@ -8,9 +8,11 @@
 - Added `QuackDB.DDL` and `QuackDB.Type` helpers for quoted DuckDB DDL and SQL type rendering.
 - Added `QuackDB.Ecto.Analytics` helpers for DuckDB analytical expressions in Ecto queries, including median, quantiles, list aggregation, JSON extraction, date truncation, and time buckets.
 - Added generic `QuackDB.SQL.load/1` and `QuackDB.SQL.call/3` statement builders.
-- Added Quack append-protocol encoding and `QuackDB.insert_rows/4` / `insert_rows!/4` for appending keyword rows or row maps as DuckDB `DataChunk`s, including `:batch_size`, nested `LIST` / `STRUCT` / `ARRAY` / `MAP` values, and Calendar-aware temporal encoding.
+- Added Quack append-protocol encoding and `QuackDB.insert_rows/4` / `insert_rows!/4` for appending keyword rows or row maps as DuckDB `DataChunk`s, including `:batch_size`, nested `LIST` / `STRUCT` / `ARRAY` / `MAP` values, Calendar-aware temporal encoding, `BIGNUM`, nanosecond temporal values, `TIME WITH TIME ZONE`, and interval structs.
 - Added Ecto `insert/2` and `insert_all/3` support for straightforward row inserts, `insert_all` `RETURNING` coverage, and an explicit `insert_method: :append` native append fast path.
 - Expanded analytical integration coverage for JSON sources, time-series functions, source analytics, `QUALIFY`, `PIVOT`, `UNPIVOT`, grouping sets, sampling, and supervised local servers.
+
+- Added `QuackDB.Interval`, `QuackDB.NanosecondTime`, `QuackDB.NanosecondTimestamp`, and `QuackDB.TimeWithTimeZone` value structs for DuckDB-specific scalar fidelity.
 
 ### Changed
 

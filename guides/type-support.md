@@ -25,7 +25,7 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `UUID` | UUID string | Supported | Returned in canonical lowercase UUID format. |
 | `ENUM` | `String.t()` | Supported | Returned as the enum label. |
 | `BIT` | `String.t()` | Supported | Returned as a string of `0` and `1` characters. |
-| `BIGNUM` | — | Unsupported | Raises an explicit unsupported-type error. |
+| `BIGNUM` | `integer()` | Supported | Decodes DuckDB's variable-length integer payload into an Elixir integer. |
 | `GEOMETRY` | `binary()` | Partial | Treated as raw bytes; semantic geometry decoding is not implemented. |
 
 ## Temporal types
@@ -34,13 +34,14 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | --- | --- | --- | --- |
 | `DATE` | `Date.t()` | Supported |  |
 | `TIME` | `Time.t()` | Supported | Microsecond precision. |
-| `TIME_NS` | `{:time_ns, integer()}` | Partial | Preserves nanoseconds as an integer until an Elixir representation is chosen. |
+| `TIME_NS` | `QuackDB.NanosecondTime.t()` | Supported | Preserves nanoseconds since midnight. |
 | `TIMESTAMP_S` | `NaiveDateTime.t()` | Supported | Second precision. |
 | `TIMESTAMP_MS` | `NaiveDateTime.t()` | Supported | Millisecond precision. |
 | `TIMESTAMP` | `NaiveDateTime.t()` | Supported | Microsecond precision. |
-| `TIMESTAMP_NS` | `{:timestamp_ns, integer()}` | Partial | Preserves nanoseconds since Unix epoch as an integer. |
+| `TIMESTAMP_NS` | `QuackDB.NanosecondTimestamp.t()` | Supported | Preserves nanoseconds since Unix epoch. |
+| `TIME WITH TIME ZONE` | `QuackDB.TimeWithTimeZone.t()` | Supported | Preserves time-of-day and UTC offset seconds. |
 | `TIMESTAMPTZ` | `DateTime.t()` | Supported | Decoded as UTC. |
-| `INTERVAL` | `{:interval, months, days, micros}` | Supported | Tagged tuple preserving DuckDB interval components. |
+| `INTERVAL` | `QuackDB.Interval.t()` | Supported | Preserves DuckDB month, day, and microsecond components. |
 
 ## Nested types
 
@@ -82,6 +83,7 @@ Supported parameter values:
 - `Time.t()`
 - `NaiveDateTime.t()`
 - `DateTime.t()`
+- `QuackDB.Interval.t()`
 - `{:interval, months, days, micros}`
 - lists containing supported parameter values
 

@@ -1,8 +1,6 @@
 defmodule QuackDB.Integration.TypeMatrixTest do
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureLog
-
   @moduletag :integration
 
   test "decodes integer family values" do
@@ -72,6 +70,8 @@ defmodule QuackDB.Integration.TypeMatrixTest do
              query_rows!("""
              SELECT
                TIME '12:34:56' AS t,
+               CAST('00:00:01.234567890' AS TIME_NS) AS time_ns,
+               CAST('00:00:01+01' AS TIME WITH TIME ZONE) AS time_tz,
                TIMESTAMP_S '2024-01-02 03:04:05' AS ts_s,
                TIMESTAMP_MS '2024-01-02 03:04:05.123' AS ts_ms,
                TIMESTAMP '2024-01-02 03:04:05.123456' AS ts_us,
@@ -81,10 +81,12 @@ defmodule QuackDB.Integration.TypeMatrixTest do
 
     assert row == [
              ~T[12:34:56.000000],
+             QuackDB.NanosecondTime.new(1_234_567_890),
+             QuackDB.TimeWithTimeZone.new(~T[00:00:01.000000], 3600),
              ~N[2024-01-02 03:04:05],
              ~N[2024-01-02 03:04:05.123],
              ~N[2024-01-02 03:04:05.123456],
-             {:timestamp_ns, 1_704_164_645_123_456_789},
+             QuackDB.NanosecondTimestamp.new(1_704_164_645_123_456_789),
              ~U[2024-01-02 03:04:05.000000Z]
            ]
   end
@@ -96,25 +98,19 @@ defmodule QuackDB.Integration.TypeMatrixTest do
                UUID '550e8400-e29b-41d4-a716-446655440000' AS uuid,
                BLOB 'hello' AS blob,
                'duck'::ENUM('duck', 'goose') AS enum_value,
-               '10101'::BIT AS bits
+               '10101'::BIT AS bits,
+               123456789012345678901234567890::BIGNUM AS bignum,
+               INTERVAL '1 month 2 days 3 microseconds' AS span
              """)
 
     assert row == [
              "550e8400-e29b-41d4-a716-446655440000",
              "hello",
              "duck",
-             "10101"
+             "10101",
+             123_456_789_012_345_678_901_234_567_890,
+             QuackDB.Interval.new(1, 2, 3)
            ]
-  end
-
-  test "returns explicit unsupported errors for known unsupported scalar values" do
-    connection = start_connection!()
-
-    capture_log(fn ->
-      assert_raise QuackDB.Error, ~r/BIGNUM values are not implemented yet/, fn ->
-        QuackDB.query!(connection, "SELECT 123456789012345678901234567890::BIGNUM AS bignum")
-      end
-    end)
   end
 
   test "decodes nested edge cases" do

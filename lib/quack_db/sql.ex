@@ -24,6 +24,7 @@ defmodule QuackDB.SQL do
           | Time.t()
           | NaiveDateTime.t()
           | DateTime.t()
+          | QuackDB.Interval.t()
           | {:blob, binary()}
           | {:interval, integer(), integer(), integer()}
           | [parameter()]
@@ -93,6 +94,10 @@ defmodule QuackDB.SQL do
 
   def literal(%DateTime{} = value) do
     {:ok, ["TIMESTAMPTZ '", DateTime.to_iso8601(value), "'"]}
+  end
+
+  def literal(%QuackDB.Interval{} = interval) do
+    literal({:interval, interval.months, interval.days, interval.microseconds})
   end
 
   def literal({:interval, months, days, micros})

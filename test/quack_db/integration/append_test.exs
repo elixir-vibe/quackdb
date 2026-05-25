@@ -113,8 +113,13 @@ defmodule QuackDB.Integration.AppendTest do
       amount: {:decimal, 8, 2},
       event_date: :date,
       event_time: :time,
+      precise_time: :time_ns,
+      zoned_time: :time_tz,
       happened_at: :timestamp,
+      happened_ns: :timestamp_ns,
       happened_tz: :timestamp_tz,
+      span: :interval,
+      big_value: :bignum,
       payload: :blob
     )
 
@@ -123,8 +128,13 @@ defmodule QuackDB.Integration.AppendTest do
       amount: Decimal.new("123.45"),
       event_date: ~D[2026-05-25],
       event_time: ~T[12:34:56.123456],
+      precise_time: QuackDB.NanosecondTime.new(45_296_123_456_789),
+      zoned_time: QuackDB.TimeWithTimeZone.new(~T[12:34:56.123456], 3600),
       happened_at: ~N[2026-05-25 12:34:56.123456],
+      happened_ns: QuackDB.NanosecondTimestamp.new(1_779_712_496_123_456_789),
       happened_tz: ~U[2026-05-25 12:34:56.123456Z],
+      span: QuackDB.Interval.new(1, 2, 3),
+      big_value: 123_456_789_012_345_678_901_234_567_890,
       payload: <<1, 2, 3>>
     ]
 
@@ -135,23 +145,50 @@ defmodule QuackDB.Integration.AppendTest do
                  amount: {:decimal, 8, 2},
                  event_date: :date,
                  event_time: :time,
+                 precise_time: :time_ns,
+                 zoned_time: :time_tz,
                  happened_at: :timestamp,
+                 happened_ns: :timestamp_ns,
                  happened_tz: :timestamp_tz,
+                 span: :interval,
+                 big_value: :bignum,
                  payload: :blob
                ]
              )
 
-    assert %QuackDB.Result{rows: [[1, amount, date, time, naive, datetime, payload]]} =
+    assert %QuackDB.Result{
+             rows: [
+               [
+                 1,
+                 amount,
+                 date,
+                 time,
+                 time_ns,
+                 time_tz,
+                 naive,
+                 timestamp_ns,
+                 datetime,
+                 span,
+                 big_value,
+                 payload
+               ]
+             ]
+           } =
              QuackDB.query!(
                conn,
-               "SELECT id, amount, event_date, event_time, happened_at, happened_tz, payload FROM #{table}"
+               "SELECT id, amount, event_date, event_time, precise_time, zoned_time, happened_at, happened_ns, happened_tz, span, big_value, payload FROM #{table}"
              )
 
     assert amount == Decimal.new("123.45")
     assert date == ~D[2026-05-25]
     assert time == ~T[12:34:56.123456]
+    assert time_ns == QuackDB.NanosecondTime.new(45_296_123_456_789)
+    assert time_tz == QuackDB.TimeWithTimeZone.new(~T[12:34:56.123456], 3600)
     assert naive == ~N[2026-05-25 12:34:56.123456]
+    assert timestamp_ns == QuackDB.NanosecondTimestamp.new(1_779_712_496_123_456_789)
     assert datetime == ~U[2026-05-25 12:34:56.123456Z]
+    assert span == QuackDB.Interval.new(1, 2, 3)
+    assert big_value == 123_456_789_012_345_678_901_234_567_890
     assert payload == <<1, 2, 3>>
 
     TestHelper.drop_table!(conn, table)

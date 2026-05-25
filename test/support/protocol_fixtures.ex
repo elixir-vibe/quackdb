@@ -109,6 +109,16 @@ defmodule QuackDB.ProtocolFixtures do
   def vector(_type, :double, values),
     do: fixed_vector(values, 8, fn value -> <<value::little-float-64>> end)
 
+  def vector(_type, :interval, values) do
+    fixed_vector(values, 16, fn
+      0 ->
+        <<0::little-signed-32, 0::little-signed-32, 0::little-signed-64>>
+
+      {months, days, micros} ->
+        <<months::little-signed-32, days::little-signed-32, micros::little-signed-64>>
+    end)
+  end
+
   def vector(_type, :varchar, values), do: varchar_vector(values)
 
   def dictionary_integer_vector(selection, dictionary_values) do

@@ -3,7 +3,8 @@ defmodule QuackDB.Protocol.Value do
   Scalar value conversion for decoded DuckDB vectors.
 
   Converts fixed-width physical values into Elixir terms such as booleans,
-  integers, floats, `Date`, `DateTime`, `Decimal`, and tagged DuckDB intervals.
+  integers, floats, `Date`, `DateTime`, `Decimal`, and DuckDB-specific temporal
+  and interval structs.
   """
 
   import Bitwise
@@ -58,6 +59,7 @@ defmodule QuackDB.Protocol.Value do
              :timestamp_ms,
              :timestamp,
              :timestamp_ns,
+             :time_tz,
              :timestamp_tz
            ] do
     with {:ok, value, rest} <- Reader.read_int64(binary), do: {:ok, temporal(name, value), rest}
@@ -91,7 +93,7 @@ defmodule QuackDB.Protocol.Value do
     with {:ok, months, rest} <- Reader.read_int32(binary),
          {:ok, days, rest} <- Reader.read_int32(rest),
          {:ok, micros, rest} <- Reader.read_int64(rest) do
-      {:ok, {:interval, months, days, micros}, rest}
+      {:ok, QuackDB.Interval.new(months, days, micros), rest}
     end
   end
 
@@ -107,6 +109,7 @@ defmodule QuackDB.Protocol.Value do
              :timestamp_ms,
              :timestamp,
              :timestamp_ns,
+             :time_tz,
              :timestamp_tz
            ],
       do: temporal(type, value)
@@ -175,6 +178,7 @@ defmodule QuackDB.Protocol.Value do
   defp temporal(:timestamp_tz, value),
     do: DateTime.add(~U[1970-01-01 00:00:00Z], value, :microsecond)
 
-  defp temporal(:time_ns, value), do: {:time_ns, value}
-  defp temporal(:timestamp_ns, value), do: {:timestamp_ns, value}
+  defp temporal(:time_ns, value), do: QuackDB.NanosecondTime.new(value)
+  defp temporal(:time_tz, value), do: QuackDB.TimeWithTimeZone.from_bits(value)
+  defp temporal(:timestamp_ns, value), do: QuackDB.NanosecondTimestamp.new(value)
 end

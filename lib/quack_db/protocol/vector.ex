@@ -346,7 +346,16 @@ defmodule QuackDB.Protocol.Vector do
     do: <<decimal_unscaled(type, value)::little-signed-64>>
 
   defp encode_fixed_value(%LogicalType{name: name}, :int64, value)
-       when name in [:time, :timestamp, :timestamp_ms, :timestamp_sec, :timestamp_tz],
+       when name in [
+              :time,
+              :time_ns,
+              :time_tz,
+              :timestamp,
+              :timestamp_ms,
+              :timestamp_ns,
+              :timestamp_sec,
+              :timestamp_tz
+            ],
        do: <<temporal_unscaled(name, value)::little-signed-64>>
 
   defp encode_fixed_value(_type, :int64, value), do: <<value::little-signed-64>>
@@ -360,8 +369,11 @@ defmodule QuackDB.Protocol.Vector do
   defp encode_fixed_value(_type, :int128, value), do: encode_int128(value)
   defp encode_fixed_value(_type, :uint128, value), do: encode_uint128(value)
 
+  defp encode_fixed_value(_type, :interval, %QuackDB.Interval{} = interval),
+    do: encode_interval(interval.months, interval.days, interval.microseconds)
+
   defp encode_fixed_value(_type, :interval, {:interval, months, days, micros}),
-    do: <<months::little-signed-32, days::little-signed-32, micros::little-signed-64>>
+    do: encode_interval(months, days, micros)
 
   defp decimal_unscaled(%LogicalType{type_info: %{scale: scale}}, %Decimal{} = decimal) do
     decimal
@@ -371,6 +383,10 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp decimal_unscaled(_type, value), do: value
+
+  defp encode_interval(months, days, micros) do
+    <<months::little-signed-32, days::little-signed-32, micros::little-signed-64>>
+  end
 
   defp date_unscaled(value) do
     value
@@ -397,6 +413,15 @@ defmodule QuackDB.Protocol.Vector do
 
   defp temporal_unscaled(:timestamp_ms, value), do: timestamp_unscaled(value, :millisecond)
   defp temporal_unscaled(:timestamp_sec, value), do: timestamp_unscaled(value, :second)
+
+  defp temporal_unscaled(:time_ns, %QuackDB.NanosecondTime{nanoseconds: nanoseconds}),
+    do: nanoseconds
+
+  defp temporal_unscaled(:time_tz, %QuackDB.TimeWithTimeZone{} = value),
+    do: QuackDB.TimeWithTimeZone.to_bits(value)
+
+  defp temporal_unscaled(:timestamp_ns, %QuackDB.NanosecondTimestamp{nanoseconds: nanoseconds}),
+    do: nanoseconds
 
   defp temporal_unscaled(_type, value) when is_integer(value), do: value
 
@@ -444,7 +469,11 @@ defmodule QuackDB.Protocol.Vector do
   defp encode_string_like(_type, nil), do: ""
 
   defp encode_string_like(%LogicalType{name: name}, value)
-       when name in [:blob, :bit, :geometry] and is_binary(value), do: value
+       when name in [:blob, :bit, :geometry] and is_binary(value),
+       do: value
+
+  defp encode_string_like(%LogicalType{name: :bignum}, value) when is_integer(value),
+    do: encode_bignum(value)
 
   defp encode_string_like(_type, value), do: to_string(value)
 
@@ -653,9 +682,7 @@ defmodule QuackDB.Protocol.Vector do
   defp decode_string_like(%{name: :blob}, value), do: value
   defp decode_string_like(%{name: :bit}, value), do: decode_bitstring(value)
 
-  defp decode_string_like(%{name: :bignum}, _value) do
-    raise Error.new(:unsupported_type, "BIGNUM values are not implemented yet", source: :protocol)
-  end
+  defp decode_string_like(%{name: :bignum}, value), do: decode_bignum(value)
 
   defp decode_string_like(_type, value) do
     if String.valid?(value) do
@@ -665,6 +692,69 @@ defmodule QuackDB.Protocol.Vector do
               source: :protocol
             )
     end
+  end
+
+  defp encode_bignum(value) when value < 0 do
+    value
+    |> abs()
+    |> encode_bignum()
+    |> :binary.bin_to_list()
+    |> Enum.map(&(bnot(&1) &&& 0xFF))
+    |> :binary.list_to_bin()
+  end
+
+  defp encode_bignum(value) do
+    magnitude = encode_unsigned_big_endian(value)
+    header = 0x80_0000 + byte_size(magnitude)
+    <<header::unsigned-24, magnitude::binary>>
+  end
+
+  defp encode_unsigned_big_endian(0), do: <<0>>
+
+  defp encode_unsigned_big_endian(value) do
+    value
+    |> Stream.unfold(fn
+      0 -> nil
+      integer -> {rem(integer, 256), div(integer, 256)}
+    end)
+    |> Enum.reverse()
+    |> :binary.list_to_bin()
+  end
+
+  defp decode_bignum(<<1::1, _rest::bitstring>> = value) do
+    decode_positive_bignum(value)
+  end
+
+  defp decode_bignum(value) when is_binary(value) do
+    value
+    |> :binary.bin_to_list()
+    |> Enum.map(&(bnot(&1) &&& 0xFF))
+    |> :binary.list_to_bin()
+    |> decode_positive_bignum()
+    |> Kernel.*(-1)
+  end
+
+  defp decode_positive_bignum(<<header::unsigned-24, magnitude::binary>>)
+       when header >= 0x80_0000 do
+    size = header - 0x80_0000
+
+    if byte_size(magnitude) == size do
+      decode_unsigned_big_endian(magnitude)
+    else
+      raise Error.new(:invalid_bignum, "BIGNUM payload size does not match header",
+              source: :protocol
+            )
+    end
+  end
+
+  defp decode_positive_bignum(_value) do
+    raise Error.new(:invalid_bignum, "expected DuckDB BIGNUM payload", source: :protocol)
+  end
+
+  defp decode_unsigned_big_endian(value) do
+    value
+    |> :binary.bin_to_list()
+    |> Enum.reduce(0, fn byte, acc -> acc * 256 + byte end)
   end
 
   defp decode_bitstring(<<padding, bytes::binary>>) when padding in 0..7 do
