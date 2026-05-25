@@ -62,7 +62,7 @@ defmodule QuackDB.Source do
   def iceberg(path_or_paths, options \\ []),
     do: table_function("iceberg_scan", path_or_paths, options)
 
-  @doc false
+  @doc "Builds a DuckDB table-function fragment for a validated function name."
   @spec table_function(String.t(), path_or_paths(), keyword(option_value())) :: String.t()
   def table_function(function_name, path_or_paths, options \\ [])
       when is_binary(function_name) and is_list(options) do
@@ -72,7 +72,7 @@ defmodule QuackDB.Source do
     |> IO.iodata_to_binary()
   end
 
-  @doc false
+  @doc "Returns true when a value looks like a QuackDB source table-function fragment."
   @spec source?(term()) :: boolean()
   def source?(value) when is_binary(value) do
     case table_function_name(value) do

@@ -2,6 +2,7 @@ defmodule QuackDB.TestTransports do
   @moduledoc false
 
   alias QuackDB.Protocol.Codec
+  alias QuackDB.ProtocolFixtures
   alias QuackDB.Protocol.Message.ConnectionRequest
   alias QuackDB.Protocol.Message.Header
   alias QuackDB.Protocol.Message.PrepareRequest
@@ -20,7 +21,7 @@ defmodule QuackDB.TestTransports do
           {:ok, connection_response()}
 
         {:prepare, _statement} ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: prepare_chunks, names: names)}
+          {:ok, ProtocolFixtures.prepare_response(chunks: prepare_chunks, names: names)}
       end
     end
   end
@@ -34,7 +35,7 @@ defmodule QuackDB.TestTransports do
           {:ok, connection_response()}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response(message)}
+          {:ok, ProtocolFixtures.error_response(message)}
       end
     end
   end
@@ -52,11 +53,11 @@ defmodule QuackDB.TestTransports do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
+           ProtocolFixtures.prepare_response(
              chunks: [initial_chunk],
              needs_more_fetch?: true,
              result_uuid: 42
@@ -66,7 +67,7 @@ defmodule QuackDB.TestTransports do
           fetch_count = Agent.get_and_update(fetch_agent, &{&1, &1 + 1})
           if parent, do: send(parent, {:fetch, fetch_count})
           chunks = if fetch_count == 0, do: [fetched_chunk], else: []
-          {:ok, QuackDB.ProtocolFixtures.fetch_response(chunks, batch_index: fetch_count)}
+          {:ok, ProtocolFixtures.fetch_response(chunks, batch_index: fetch_count)}
       end
     end
   end
@@ -81,18 +82,18 @@ defmodule QuackDB.TestTransports do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
+           ProtocolFixtures.prepare_response(
              chunks: [initial_chunk],
              needs_more_fetch?: true,
              result_uuid: 42
            )}
 
         {:ok, {%Header{type: :fetch_request}, _body}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response(message)}
+          {:ok, ProtocolFixtures.error_response(message)}
       end
     end
   end

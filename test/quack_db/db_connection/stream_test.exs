@@ -2,6 +2,7 @@ defmodule QuackDB.DBConnection.StreamTest do
   use ExUnit.Case, async: true
 
   alias QuackDB.Protocol.Codec
+  alias QuackDB.ProtocolFixtures
   alias QuackDB.Protocol.Message.ConnectionRequest
   alias QuackDB.Protocol.Message.Header
   alias QuackDB.Protocol.Message.PrepareRequest
@@ -9,8 +10,8 @@ defmodule QuackDB.DBConnection.StreamTest do
   import QuackDB.TestTransports
 
   test "rows and maps stream row-level results" do
-    initial_chunk = QuackDB.ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [1]}])
-    fetched_chunk = QuackDB.ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [2]}])
+    initial_chunk = ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [1]}])
+    fetched_chunk = ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [2]}])
 
     rows_connection =
       start_supervised!(
@@ -45,7 +46,7 @@ defmodule QuackDB.DBConnection.StreamTest do
 
   test "maps disambiguates duplicate column names" do
     chunk =
-      QuackDB.ProtocolFixtures.scalar_chunk_wrapper([
+      ProtocolFixtures.scalar_chunk_wrapper([
         {:integer, :int32, [1]},
         {:integer, :int32, [2]},
         {:integer, :int32, [3]}
@@ -66,8 +67,8 @@ defmodule QuackDB.DBConnection.StreamTest do
 
   test "stream halts early without fetching remaining chunks" do
     parent = self()
-    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1, 2])
-    fetched_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([3, 4])
+    initial_chunk = ProtocolFixtures.integer_chunk_wrapper([1, 2])
+    fetched_chunk = ProtocolFixtures.integer_chunk_wrapper([3, 4])
 
     connection =
       start_supervised!(
@@ -86,7 +87,7 @@ defmodule QuackDB.DBConnection.StreamTest do
   end
 
   test "stream raises later fetch errors" do
-    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+    initial_chunk = ProtocolFixtures.integer_chunk_wrapper([1])
 
     connection =
       start_supervised!(
@@ -103,8 +104,8 @@ defmodule QuackDB.DBConnection.StreamTest do
   end
 
   test "stream returns result batches" do
-    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
-    fetched_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])
+    initial_chunk = ProtocolFixtures.integer_chunk_wrapper([1])
+    fetched_chunk = ProtocolFixtures.integer_chunk_wrapper([2])
 
     connection =
       start_supervised!({QuackDB, transport: stream_transport(initial_chunk, fetched_chunk)})
@@ -172,7 +173,7 @@ defmodule QuackDB.DBConnection.StreamTest do
   end
 
   test "stream fetch errors keep the connection usable after transaction cleanup" do
-    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+    initial_chunk = ProtocolFixtures.integer_chunk_wrapper([1])
 
     connection =
       start_supervised!({QuackDB, transport: fetch_error_then_recovery_transport(initial_chunk)})
@@ -201,15 +202,15 @@ defmodule QuackDB.DBConnection.StreamTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
           stream_id = Agent.get_and_update(stream_id_agent, fn id -> {id + 1, id + 1} end)
           send(parent, {:prepare, stream_id})
 
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
-             chunks: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])],
+           ProtocolFixtures.prepare_response(
+             chunks: [ProtocolFixtures.integer_chunk_wrapper([1])],
              needs_more_fetch?: true,
              result_uuid: stream_id
            )}
@@ -227,10 +228,10 @@ defmodule QuackDB.DBConnection.StreamTest do
 
           chunks =
             if fetch_count == 0,
-              do: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])],
+              do: [ProtocolFixtures.integer_chunk_wrapper([2])],
               else: []
 
-          {:ok, QuackDB.ProtocolFixtures.fetch_response(chunks, batch_index: fetch_count)}
+          {:ok, ProtocolFixtures.fetch_response(chunks, batch_index: fetch_count)}
       end
     end
   end
@@ -247,26 +248,26 @@ defmodule QuackDB.DBConnection.StreamTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 10 AS n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
-             chunks: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([10])]
+           ProtocolFixtures.prepare_response(
+             chunks: [ProtocolFixtures.integer_chunk_wrapper([10])]
            )}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT stream_n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
-             chunks: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])],
+           ProtocolFixtures.prepare_response(
+             chunks: [ProtocolFixtures.integer_chunk_wrapper([1])],
              needs_more_fetch?: true,
              result_uuid: 42
            )}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 20 AS n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
-             chunks: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([20])]
+           ProtocolFixtures.prepare_response(
+             chunks: [ProtocolFixtures.integer_chunk_wrapper([20])]
            )}
 
         {:ok, {%Header{type: :fetch_request}, _fetch}} ->
@@ -275,9 +276,9 @@ defmodule QuackDB.DBConnection.StreamTest do
           chunks =
             if already_fetched?,
               do: [],
-              else: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])]
+              else: [ProtocolFixtures.integer_chunk_wrapper([2])]
 
-          {:ok, QuackDB.ProtocolFixtures.fetch_response(chunks)}
+          {:ok, ProtocolFixtures.fetch_response(chunks)}
       end
     end
   end
@@ -292,16 +293,16 @@ defmodule QuackDB.DBConnection.StreamTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok,
          {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT broken_stream"}}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response("open failed")}
+          {:ok, ProtocolFixtures.error_response("open failed")}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 1 AS n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
-             chunks: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])]
+           ProtocolFixtures.prepare_response(
+             chunks: [ProtocolFixtures.integer_chunk_wrapper([1])]
            )}
       end
     end
@@ -317,11 +318,11 @@ defmodule QuackDB.DBConnection.StreamTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
+           ProtocolFixtures.prepare_response(
              chunks: [initial_chunk],
              needs_more_fetch?: true,
              result_uuid: 42
@@ -329,12 +330,12 @@ defmodule QuackDB.DBConnection.StreamTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 1 AS n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
-             chunks: [QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])]
+           ProtocolFixtures.prepare_response(
+             chunks: [ProtocolFixtures.integer_chunk_wrapper([1])]
            )}
 
         {:ok, {%Header{type: :fetch_request}, _fetch}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response("fetch failed")}
+          {:ok, ProtocolFixtures.error_response("fetch failed")}
       end
     end
   end

@@ -12,14 +12,16 @@ end
 defimpl Inspect, for: QuackDB.Cursor do
   import Inspect.Algebra
 
+  alias QuackDB.Inspect, as: QuackInspect
+
   def inspect(cursor, opts) do
     fields = [
       result_uuid: cursor.result_uuid,
       columns: cursor.columns,
-      connection_id: QuackDB.Inspect.short_id(cursor.connection_id),
-      statement: QuackDB.Inspect.truncate(cursor.statement)
+      connection_id: QuackInspect.short_id(cursor.connection_id),
+      statement: QuackInspect.truncate(cursor.statement)
     ]
 
-    concat(QuackDB.Inspect.container("QuackDB.Cursor", fields, opts))
+    concat(QuackInspect.container("QuackDB.Cursor", fields, opts))
   end
 end

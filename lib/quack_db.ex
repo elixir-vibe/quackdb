@@ -10,6 +10,7 @@ defmodule QuackDB do
   alias QuackDB.Stream
 
   @type start_option :: {:uri, String.t()} | {:token, String.t()} | {:name, GenServer.name()}
+  @type insert_row :: map() | Keyword.t()
 
   @spec start_link([start_option]) :: GenServer.on_start()
   def start_link(options) do
@@ -19,6 +20,26 @@ defmodule QuackDB do
   @spec child_spec([start_option]) :: Supervisor.child_spec()
   def child_spec(options) do
     QuackDB.DBConnection.child_spec(options)
+  end
+
+  @spec insert_rows(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
+          {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
+  def insert_rows(connection, table, rows, options \\ []) when is_list(rows) do
+    query = %Query{statement: "APPEND #{table}", operation: {:insert_rows, table, rows, options}}
+
+    case DBConnection.prepare_execute(connection, query, [], options) do
+      {:ok, _query, result} -> {:ok, result}
+      {:error, _error} = error -> error
+    end
+  end
+
+  @spec insert_rows!(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
+          QuackDB.Result.t()
+  def insert_rows!(connection, table, rows, options \\ []) do
+    case insert_rows(connection, table, rows, options) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
+    end
   end
 
   @spec query(DBConnection.conn(), iodata(), [term()], Keyword.t()) ::

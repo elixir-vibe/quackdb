@@ -33,12 +33,11 @@ defmodule QuackDB.Inspect do
   def rows_preview([]), do: []
 
   def rows_preview(rows) do
-    preview = Enum.take(rows, @preview_limit)
+    {preview, rest} = Enum.split(rows, @preview_limit)
 
-    if length(rows) > @preview_limit do
-      preview ++ [:...]
-    else
-      preview
+    case rest do
+      [] -> preview
+      [_ | _] -> preview |> Enum.reverse() |> then(&[:... | &1]) |> Enum.reverse()
     end
   end
 

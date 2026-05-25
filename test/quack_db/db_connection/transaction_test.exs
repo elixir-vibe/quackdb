@@ -2,6 +2,7 @@ defmodule QuackDB.DBConnection.TransactionTest do
   use ExUnit.Case, async: true
 
   alias QuackDB.Protocol.Codec
+  alias QuackDB.ProtocolFixtures
   alias QuackDB.Protocol.Message.ConnectionRequest
   alias QuackDB.Protocol.Message.Header
   alias QuackDB.Protocol.Message.PrepareRequest
@@ -38,7 +39,7 @@ defmodule QuackDB.DBConnection.TransactionTest do
 
   test "rollback after query errors returns connection to usable idle state" do
     parent = self()
-    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+    chunk = ProtocolFixtures.integer_chunk_wrapper([1])
 
     connection =
       start_supervised!({QuackDB, transport: transaction_error_transport(parent, chunk)})
@@ -103,15 +104,15 @@ defmodule QuackDB.DBConnection.TransactionTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT broken"}}} ->
           send(parent, {:statement, "SELECT broken"})
-          {:ok, QuackDB.ProtocolFixtures.error_response("syntax error")}
+          {:ok, ProtocolFixtures.error_response("syntax error")}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 1 AS n"}}} ->
           send(parent, {:statement, "SELECT 1 AS n"})
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [recovery_chunk])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [recovery_chunk])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}} ->
           send(parent, {:statement, statement})
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
       end
     end
   end
@@ -125,10 +126,10 @@ defmodule QuackDB.DBConnection.TransactionTest do
           {:ok, connection_response()}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: ^failed_statement}}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response("#{failed_statement} failed")}
+          {:ok, ProtocolFixtures.error_response("#{failed_statement} failed")}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
       end
     end
   end

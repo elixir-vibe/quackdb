@@ -296,6 +296,28 @@ result.metadata[:duckdb_rows]
 #=> [[2]]
 ```
 
+### Append rows
+
+`QuackDB.insert_rows/4` uses Quack's append protocol to send a DuckDB `DataChunk` directly to a table:
+
+```elixir
+QuackDB.query!(conn, "CREATE TEMP TABLE events(id INTEGER, name VARCHAR, active BOOLEAN)")
+
+{:ok, result} =
+  QuackDB.insert_rows(conn, "events", [
+    [id: 1, name: "duck", active: true],
+    [id: 2, name: "goose", active: false]
+  ])
+
+result.command
+#=> :insert
+
+result.num_rows
+#=> 2
+```
+
+Keyword rows preserve append order and allow QuackDB to infer the column list from the first row. Map rows are also accepted, but pass `:columns` for stable append order and types. Explicit columns are still required for empty batches or all-null columns. Use `batch_size: n` to split large inputs across multiple append requests while returning the total inserted row count.
+
 ### Prepare and execute
 
 ```elixir

@@ -47,7 +47,7 @@ defmodule QuackDB.Integration.QueryTest do
     assert result.metadata.needs_more_fetch == true
     assert result.num_rows == 50_000
     assert hd(result.rows) == [0]
-    assert List.last(result.rows) == [49_999]
+    assert Enum.at(result.rows, -1) == [49_999]
   end
 
   test "decodes nested DuckDB types from a real Quack server" do

@@ -8,6 +8,7 @@ defmodule QuackDB.Protocol.Codec do
   """
 
   alias QuackDB.Error
+  alias QuackDB.Protocol
   alias QuackDB.Protocol.DataChunk
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Message
@@ -25,6 +26,8 @@ defmodule QuackDB.Protocol.Codec do
   alias Message.PrepareResponse
   alias Message.FetchResponse
   alias Message.SuccessResponse
+
+  @field_end Protocol.field_end()
 
   @type decoded_message :: {Header.t(), struct()}
 
@@ -51,7 +54,7 @@ defmodule QuackDB.Protocol.Codec do
   @spec encode_header(Header.t()) :: iodata()
   def encode_header(%Header{} = header) do
     [
-      Writer.field(1, Writer.uleb128(QuackDB.Protocol.message_type(header.type))),
+      Writer.field(1, Writer.uleb128(Protocol.message_type(header.type))),
       encode_connection_id_header_field(header.connection_id),
       Writer.field(3, Writer.optional_index(header.client_query_id)),
       Writer.end_object()
@@ -92,8 +95,13 @@ defmodule QuackDB.Protocol.Codec do
     [Writer.field(1, Writer.string(message.message)), Writer.end_object()]
   end
 
-  defp encode_body(%AppendRequest{}) do
-    raise ArgumentError, "append request encoding needs DataChunk support first"
+  defp encode_body(%AppendRequest{} = message) do
+    [
+      encode_optional_string(1, message.schema_name),
+      encode_optional_string(2, message.table_name),
+      Writer.field(3, Writer.nullable(message.append_chunk, &DataChunk.encode_wrapper/1)),
+      Writer.end_object()
+    ]
   end
 
   defp decode_body(:connection_request, binary) do
@@ -120,6 +128,10 @@ defmodule QuackDB.Protocol.Codec do
     decode_fetch_response(binary, %FetchResponse{})
   end
 
+  defp decode_body(:append_request, binary) do
+    decode_append_request(binary, %AppendRequest{})
+  end
+
   defp decode_body(:success_response, binary) do
     decode_empty_body(binary, %SuccessResponse{})
   end
@@ -139,7 +151,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_header(binary, header) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, header, rest}
 
         field_id == 1 ->
@@ -167,7 +179,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_connection_request(binary, request) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, request, rest}
 
         field_id == 1 ->
@@ -204,7 +216,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_connection_response(binary, response) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, response, rest}
 
         field_id == 1 ->
@@ -234,7 +246,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_prepare_request(binary, request) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, request, rest}
 
         field_id == 1 ->
@@ -251,7 +263,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_fetch_request(binary, request) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, request, rest}
 
         field_id == 1 ->
@@ -267,37 +279,75 @@ defmodule QuackDB.Protocol.Codec do
 
   defp decode_prepare_response(binary, response) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
+      decode_prepare_response_field(field_id, rest, response)
+    end
+  end
+
+  defp decode_prepare_response_field(@field_end, rest, response) do
+    {:ok, response, rest}
+  end
+
+  defp decode_prepare_response_field(1, binary, response) do
+    with {:ok, result_types, rest} <- Reader.read_list(binary, &LogicalType.decode/1) do
+      decode_prepare_response(rest, %{response | result_types: result_types})
+    end
+  end
+
+  defp decode_prepare_response_field(2, binary, response) do
+    with {:ok, result_names, rest} <- Reader.read_list(binary, &Reader.read_string/1) do
+      decode_prepare_response(rest, %{response | result_names: result_names})
+    end
+  end
+
+  defp decode_prepare_response_field(3, binary, response) do
+    with {:ok, needs_more_fetch, rest} <- Reader.read_bool(binary) do
+      decode_prepare_response(rest, %{response | needs_more_fetch: needs_more_fetch})
+    end
+  end
+
+  defp decode_prepare_response_field(4, binary, response) do
+    with {:ok, results, rest} <- read_chunk_pointer_list(binary) do
+      decode_prepare_response(rest, %{response | results: results})
+    end
+  end
+
+  defp decode_prepare_response_field(5, binary, response) do
+    with {:ok, result_uuid, rest} <- Reader.read_hugeint(binary) do
+      decode_prepare_response(rest, %{response | result_uuid: result_uuid})
+    end
+  end
+
+  defp decode_prepare_response_field(field_id, _binary, _response) do
+    error(:unknown_prepare_response_field, "unknown prepare response field #{field_id}")
+  end
+
+  defp decode_append_request(binary, request) do
+    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
-          {:ok, response, rest}
+        field_id == Protocol.field_end() ->
+          if request.append_chunk do
+            {:ok, request, rest}
+          else
+            error(:missing_append_chunk, "APPEND_REQUEST is missing append chunk")
+          end
 
         field_id == 1 ->
-          with {:ok, result_types, rest} <- Reader.read_list(rest, &LogicalType.decode/1) do
-            decode_prepare_response(rest, %{response | result_types: result_types})
+          with {:ok, schema_name, rest} <- Reader.read_string(rest) do
+            decode_append_request(rest, %{request | schema_name: schema_name})
           end
 
         field_id == 2 ->
-          with {:ok, result_names, rest} <- Reader.read_list(rest, &Reader.read_string/1) do
-            decode_prepare_response(rest, %{response | result_names: result_names})
+          with {:ok, table_name, rest} <- Reader.read_string(rest) do
+            decode_append_request(rest, %{request | table_name: table_name})
           end
 
         field_id == 3 ->
-          with {:ok, needs_more_fetch, rest} <- Reader.read_bool(rest) do
-            decode_prepare_response(rest, %{response | needs_more_fetch: needs_more_fetch})
-          end
-
-        field_id == 4 ->
-          with {:ok, results, rest} <- read_chunk_pointer_list(rest) do
-            decode_prepare_response(rest, %{response | results: results})
-          end
-
-        field_id == 5 ->
-          with {:ok, result_uuid, rest} <- Reader.read_hugeint(rest) do
-            decode_prepare_response(rest, %{response | result_uuid: result_uuid})
+          with {:ok, chunk, rest} <- Reader.read_nullable(rest, &DataChunk.decode_wrapper/1) do
+            decode_append_request(rest, %{request | append_chunk: chunk})
           end
 
         true ->
-          error(:unknown_prepare_response_field, "unknown prepare response field #{field_id}")
+          error(:unknown_append_request_field, "unknown append request field #{field_id}")
       end
     end
   end
@@ -305,7 +355,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_fetch_response(binary, response) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, response, rest}
 
         field_id == 1 ->
@@ -327,7 +377,7 @@ defmodule QuackDB.Protocol.Codec do
   defp decode_error_response(binary, response) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == Protocol.field_end() ->
           {:ok, response, rest}
 
         field_id == 1 ->
@@ -343,7 +393,7 @@ defmodule QuackDB.Protocol.Codec do
 
   defp decode_empty_body(binary, message) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      if field_id == QuackDB.Protocol.field_end() do
+      if field_id == Protocol.field_end() do
         {:ok, message, rest}
       else
         error(:unexpected_body_field, "expected an empty message body")
@@ -368,6 +418,10 @@ defmodule QuackDB.Protocol.Codec do
   defp encode_connection_id_header_field(nil), do: []
   defp encode_connection_id_header_field(value), do: Writer.field(2, Writer.string(value))
 
+  defp encode_optional_string(_field_id, ""), do: []
+  defp encode_optional_string(_field_id, nil), do: []
+  defp encode_optional_string(field_id, value), do: Writer.field(field_id, Writer.string(value))
+
   defp message_type(%ConnectionRequest{}), do: :connection_request
   defp message_type(%PrepareRequest{}), do: :prepare_request
   defp message_type(%FetchRequest{}), do: :fetch_request
@@ -377,7 +431,7 @@ defmodule QuackDB.Protocol.Codec do
   defp message_type(%ErrorResponse{}), do: :error_response
 
   defp type_name(type_id) do
-    QuackDB.Protocol.message_types()
+    Protocol.message_types()
     |> Enum.find_value(fn {name, id} -> if id == type_id, do: name end)
     |> case do
       nil -> error(:unknown_message_type, "unknown Quack message type #{type_id}")

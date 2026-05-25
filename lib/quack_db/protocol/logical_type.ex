@@ -8,6 +8,7 @@ defmodule QuackDB.Protocol.LogicalType do
 
   alias QuackDB.Error
   alias QuackDB.Protocol.Reader
+  alias QuackDB.Protocol.Writer
 
   defstruct [:id, :name, :type_info]
 
@@ -62,6 +63,20 @@ defmodule QuackDB.Protocol.LogicalType do
   @spec name(id()) :: atom() | nil
   def name(id), do: Map.get(@names, id)
 
+  @spec new(atom(), map() | nil) :: t()
+  def new(name, type_info \\ nil) when is_atom(name) do
+    %__MODULE__{id: id(name), name: name, type_info: type_info}
+  end
+
+  @spec encode(t()) :: iodata()
+  def encode(%__MODULE__{} = type) do
+    [
+      Writer.field(100, Writer.uleb128(type.id)),
+      encode_type_info(type.type_info),
+      Writer.end_object()
+    ]
+  end
+
   @spec decode(binary()) :: Reader.read_result(t())
   def decode(binary), do: decode_type(binary, %__MODULE__{})
 
@@ -115,11 +130,13 @@ defmodule QuackDB.Protocol.LogicalType do
   def physical_type(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 38,
     do: :int128
 
-  def physical_type(%__MODULE__{name: :enum, type_info: %{values: values}})
-      when length(values) <= 0xFF, do: :uint8
-
-  def physical_type(%__MODULE__{name: :enum, type_info: %{values: values}})
-      when length(values) <= 0xFFFF, do: :uint16
+  def physical_type(%__MODULE__{name: :enum, type_info: %{values: values}}) do
+    cond do
+      Enum.count_until(values, 0xFF + 1) <= 0xFF -> :uint8
+      Enum.count_until(values, 0xFFFF + 1) <= 0xFFFF -> :uint16
+      true -> :uint32
+    end
+  end
 
   def physical_type(%__MODULE__{name: :enum}), do: :uint32
 
@@ -190,6 +207,92 @@ defmodule QuackDB.Protocol.LogicalType do
             "logical type #{inspect(type.name)} does not have array size metadata",
             source: :protocol
           )
+  end
+
+  defp encode_type_info(nil), do: []
+
+  defp encode_type_info(info) when is_map(info) do
+    Writer.field(
+      101,
+      Writer.nullable(info, &encode_type_info_body/1)
+    )
+  end
+
+  defp encode_type_info_body(%{type: type} = info) do
+    [
+      Writer.field(100, Writer.uleb128(type)),
+      encode_type_info_alias(info),
+      encode_type_info_fields(info),
+      Writer.end_object()
+    ]
+  end
+
+  defp encode_type_info_alias(%{alias: alias_name}) when is_binary(alias_name),
+    do: Writer.field(101, Writer.string(alias_name))
+
+  defp encode_type_info_alias(_info), do: []
+
+  defp encode_type_info_fields(%{type: 2, width: width, scale: scale}) do
+    [
+      Writer.field(200, Writer.uleb128(width)),
+      Writer.field(201, Writer.uleb128(scale))
+    ]
+  end
+
+  defp encode_type_info_fields(%{type: 3} = info) do
+    Writer.field(
+      200,
+      Writer.string(Map.get(info, :collation, ""))
+    )
+  end
+
+  defp encode_type_info_fields(%{type: type, child_type: child_type}) when type in [4, 9] do
+    Writer.field(200, encode(child_type))
+  end
+
+  defp encode_type_info_fields(%{type: 5, children: children}) do
+    Writer.field(
+      200,
+      Writer.list(children, &encode_child_type/1)
+    )
+  end
+
+  defp encode_type_info_fields(%{type: 6, values: values}) do
+    [
+      Writer.field(200, Writer.uleb128(length(values))),
+      Writer.field(
+        201,
+        Writer.list(values, &Writer.string/1)
+      )
+    ]
+  end
+
+  defp encode_type_info_fields(%{type: 12, definition: definition}) do
+    Writer.field(
+      200,
+      [
+        Writer.field(100, Writer.string(definition)),
+        Writer.end_object()
+      ]
+    )
+  end
+
+  defp encode_type_info_fields(%{type: type}) when type in [0, 1], do: []
+
+  defp encode_type_info_fields(info) do
+    raise Error.new(
+            :unsupported_type_info,
+            "encoding logical type metadata #{inspect(info)} is not supported",
+            source: :protocol
+          )
+  end
+
+  defp encode_child_type(%{name: name, type: type}) do
+    [
+      Writer.field(0, Writer.string(to_string(name))),
+      Writer.field(1, encode(type)),
+      Writer.end_object()
+    ]
   end
 
   defp decode_type(binary, type) do

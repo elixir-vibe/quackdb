@@ -17,6 +17,7 @@ defmodule QuackDB.DBConnection do
   alias QuackDB.Protocol.Message.ConnectionResponse
   alias QuackDB.Protocol.Message.Disconnect
   alias QuackDB.Protocol.Message.ErrorResponse
+  alias QuackDB.Protocol.Message.AppendRequest
   alias QuackDB.Protocol.Message.FetchRequest
   alias QuackDB.Protocol.Message.FetchResponse
   alias QuackDB.Protocol.Message.PrepareRequest
@@ -76,11 +77,28 @@ defmodule QuackDB.DBConnection do
   end
 
   @impl true
-  def handle_prepare(%Query{} = query, _options, state) do
+  def handle_prepare(%Query{operation: nil} = query, _options, state) do
     {:ok, %{query | statement: IO.iodata_to_binary(query.statement)}, state}
   end
 
+  def handle_prepare(%Query{} = query, _options, state), do: {:ok, query, state}
+
   @impl true
+  def handle_execute(
+        %Query{operation: {:insert_rows, table, rows, insert_options}} = query,
+        params,
+        options,
+        state
+      ) do
+    if params == [] do
+      append_rows(query, table, rows, Keyword.merge(insert_options, options), state)
+    else
+      {:error,
+       Error.new(:unsupported_params, "append queries do not accept params", source: :client),
+       state}
+    end
+  end
+
   def handle_execute(%Query{} = query, params, options, state) do
     execute_statement(query, params, options, state)
   end
@@ -117,10 +135,7 @@ defmodule QuackDB.DBConnection do
 
   @impl true
   def handle_declare(%Query{} = query, params, options, state) do
-    case declare_query(query, params, options, state) do
-      {:ok, query, cursor, state} -> {:ok, query, cursor, state}
-      {:error, error, state} -> {:error, error, state}
-    end
+    declare_query(query, params, options, state)
   end
 
   @impl true
@@ -224,6 +239,92 @@ defmodule QuackDB.DBConnection do
      Error.new(:unexpected_message, "expected prepare response, got #{header.type}",
        source: :protocol
      )}
+  end
+
+  defp append_rows(%Query{} = query, table, rows, options, state) do
+    with {:ok, columns} <- DataChunk.columns_from_rows(rows, options),
+         {:ok, batches} <- append_batches(rows, options),
+         options = Keyword.put(options, :columns, columns),
+         :ok <- append_batches(table, batches, options, state) do
+      result = append_result(rows, state)
+      {:ok, query, result, %{state | status: successful_status(state.status)}}
+    else
+      {:error, error} ->
+        {:error, annotate_error(error, query, state),
+         %{state | status: failed_status(state.status)}}
+    end
+  end
+
+  defp append_batches([], options) do
+    case Keyword.get(options, :batch_size, 1) do
+      batch_size when is_integer(batch_size) and batch_size >= 1 -> {:ok, [[]]}
+      _batch_size -> invalid_batch_size()
+    end
+  end
+
+  defp append_batches(rows, options) do
+    batch_size = Keyword.get(options, :batch_size, length(rows))
+
+    if is_integer(batch_size) and batch_size >= 1 do
+      {:ok, Enum.chunk_every(rows, batch_size)}
+    else
+      invalid_batch_size()
+    end
+  end
+
+  defp invalid_batch_size do
+    {:error,
+     Error.new(:invalid_batch_size, "append batch_size must be a positive integer",
+       source: :client
+     )}
+  end
+
+  defp append_batches(table, batches, options, state) do
+    Enum.reduce_while(batches, :ok, fn rows, :ok ->
+      case append_batch(table, rows, options, state) do
+        :ok -> {:cont, :ok}
+        {:error, _error} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp append_batch(table, rows, options, state) do
+    with {:ok, chunk} <- DataChunk.from_rows(rows, options),
+         request = %AppendRequest{
+           schema_name: Keyword.get(options, :schema, ""),
+           table_name: to_string(table),
+           append_chunk: chunk
+         },
+         encoded <- Codec.encode(request, connection_id: state.connection_id),
+         {:ok, response} <- state.transport.(state.uri, encoded, options),
+         {:ok, decoded} <- Codec.decode(response) do
+      normalize_append_response(decoded)
+    end
+  end
+
+  defp normalize_append_response({_header, %ErrorResponse{message: message}}) do
+    {:error, Error.new(:server_error, message, source: :server)}
+  end
+
+  defp normalize_append_response({_header, %QuackDB.Protocol.Message.SuccessResponse{}}), do: :ok
+
+  defp normalize_append_response({header, _body}) do
+    {:error,
+     Error.new(:unexpected_message, "expected success response, got #{header.type}",
+       source: :protocol
+     )}
+  end
+
+  defp append_result(rows, state) do
+    %Result{
+      command: :insert,
+      columns: [],
+      rows: nil,
+      num_rows: length(rows),
+      connection_id: state.connection_id,
+      messages: [],
+      metadata: %{}
+    }
   end
 
   defp execute_statement(%Query{} = query, params, options, state) do

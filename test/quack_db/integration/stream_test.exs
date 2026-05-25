@@ -17,9 +17,9 @@ defmodule QuackDB.Integration.StreamTest do
                |> Enum.flat_map(& &1.rows)
              end)
 
-    assert length(rows) == 50_000
+    assert Enum.count(rows) == 50_000
     assert hd(rows) == [0]
-    assert List.last(rows) == [49_999]
+    assert Enum.at(rows, -1) == [49_999]
   end
 
   test "streams rows and maps from a real Quack server" do

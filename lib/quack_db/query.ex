@@ -7,16 +7,19 @@ defmodule QuackDB.Query do
           statement: iodata(),
           columns: [String.t()] | nil,
           result_types: [term()] | nil,
-          result_uuid: integer() | nil
+          result_uuid: integer() | nil,
+          operation: term() | nil
         }
 
-  defstruct [:statement, :columns, :result_types, :result_uuid]
+  defstruct [:statement, :columns, :result_types, :result_uuid, :operation]
 end
 
 defimpl DBConnection.Query, for: QuackDB.Query do
-  def parse(%QuackDB.Query{} = query, _options) do
+  def parse(%QuackDB.Query{operation: nil} = query, _options) do
     %{query | statement: IO.iodata_to_binary(query.statement)}
   end
+
+  def parse(%QuackDB.Query{} = query, _options), do: query
 
   def describe(%QuackDB.Query{} = query, _options), do: query
 

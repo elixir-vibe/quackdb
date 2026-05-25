@@ -12,12 +12,141 @@ defmodule QuackDB.Protocol.Vector do
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Reader
   alias QuackDB.Protocol.Value
+  alias QuackDB.Protocol.Writer
 
   @type t :: %{type: LogicalType.t(), vector_type: atom(), values: [term()]}
+
+  @spec encode(LogicalType.t(), [term()], non_neg_integer()) :: iodata()
+  def encode(type, values, row_count) when is_list(values) do
+    if Enum.count(values) == row_count do
+      [encode_flat(type, values, row_count), Writer.end_object()]
+    else
+      raise Error.new(
+              :invalid_vector_size,
+              "vector has #{Enum.count(values)} values, expected #{row_count}",
+              source: :protocol
+            )
+    end
+  end
 
   @spec decode(binary(), LogicalType.t(), non_neg_integer()) :: Reader.read_result(t())
   def decode(binary, type, row_count) do
     decode_object(binary, type, row_count, %{type: type, vector_type: :flat, values: []})
+  end
+
+  defp encode_flat(type, values, row_count) do
+    validity = Enum.map(values, &(!is_nil(&1)))
+    has_validity? = Enum.any?(validity, &(!&1))
+
+    [
+      maybe_geometry_version(type),
+      Writer.field(100, Writer.bool(has_validity?)),
+      maybe_validity_mask(validity, has_validity?),
+      encode_values(type, values, row_count)
+    ]
+  end
+
+  defp maybe_geometry_version(%LogicalType{name: :geometry}),
+    do: Writer.field(99, Writer.uleb128(1))
+
+  defp maybe_geometry_version(_type), do: []
+
+  defp maybe_validity_mask(validity, true),
+    do: Writer.field(101, Writer.blob(validity_mask(validity)))
+
+  defp maybe_validity_mask(_validity, false), do: []
+
+  defp encode_values(type, values, row_count) do
+    physical_type = LogicalType.physical_type(type)
+
+    if LogicalType.fixed_size?(physical_type) do
+      blob =
+        values |> Enum.map(&encode_fixed_value(type, physical_type, &1)) |> IO.iodata_to_binary()
+
+      expected_size = LogicalType.fixed_size(physical_type) * row_count
+
+      if byte_size(blob) == expected_size do
+        Writer.field(102, Writer.blob(blob))
+      else
+        raise Error.new(
+                :invalid_vector_size,
+                "encoded vector has #{byte_size(blob)} bytes, expected #{expected_size}",
+                source: :protocol
+              )
+      end
+    else
+      encode_variable_values(type, values, physical_type)
+    end
+  end
+
+  defp encode_variable_values(type, values, :varchar) do
+    Writer.field(
+      102,
+      Writer.list(values, fn value -> Writer.blob(encode_string_like(type, value)) end)
+    )
+  end
+
+  defp encode_variable_values(type, values, :struct) do
+    children = LogicalType.struct_children(type)
+
+    Writer.field(
+      103,
+      Writer.list(children, fn child ->
+        child_values = Enum.map(values, &struct_child_value(&1, child.name))
+        encode(child.type, child_values, length(child_values))
+      end)
+    )
+  end
+
+  defp encode_variable_values(type, values, :list) do
+    child_type = LogicalType.child_type(type)
+    {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+
+    [
+      Writer.field(104, Writer.uleb128(length(child_values))),
+      Writer.field(105, Writer.list(Enum.reverse(entries), &encode_list_entry/1)),
+      Writer.field(106, encode(child_type, child_values, length(child_values)))
+    ]
+  end
+
+  defp encode_variable_values(type, values, :array) do
+    child_type = LogicalType.child_type(type)
+    array_size = LogicalType.array_size(type)
+
+    child_values =
+      Enum.flat_map(values, fn
+        nil ->
+          List.duplicate(nil, array_size)
+
+        value when is_list(value) ->
+          if Enum.count(value) == array_size do
+            value
+          else
+            invalid_array_value!(value, array_size)
+          end
+
+        value ->
+          invalid_array_value!(value, array_size)
+      end)
+
+    [
+      Writer.field(103, Writer.uleb128(array_size)),
+      Writer.field(104, encode(child_type, child_values, length(child_values)))
+    ]
+  end
+
+  defp encode_variable_values(_type, _values, physical_type) do
+    raise Error.new(:unsupported_physical_type, "#{physical_type} vectors are not encodable yet",
+            source: :protocol
+          )
+  end
+
+  defp invalid_array_value!(value, array_size) do
+    raise Error.new(
+            :invalid_array_value,
+            "ARRAY values must be lists of #{array_size} elements, got #{inspect(value)}",
+            source: :protocol
+          )
   end
 
   defp decode_object(binary, type, row_count, vector) do
@@ -189,6 +318,159 @@ defmodule QuackDB.Protocol.Vector do
   defp decode_variable_values(_binary, _type, physical_type, _row_count, _validity) do
     error(:unsupported_physical_type, "#{physical_type} vectors are not implemented yet")
   end
+
+  defp encode_fixed_value(_type, physical_type, nil) do
+    :binary.copy(<<0>>, LogicalType.fixed_size(physical_type))
+  end
+
+  defp encode_fixed_value(_type, :bool, value), do: <<if(value, do: 1, else: 0)>>
+  defp encode_fixed_value(_type, :int8, value), do: <<value::little-signed-8>>
+  defp encode_fixed_value(_type, :uint8, value), do: <<value::little-unsigned-8>>
+  defp encode_fixed_value(_type, :int16, value), do: <<value::little-signed-16>>
+  defp encode_fixed_value(_type, :uint16, value), do: <<value::little-unsigned-16>>
+
+  defp encode_fixed_value(%LogicalType{name: :date}, :int32, %Date{} = value),
+    do: <<Date.diff(value, ~D[1970-01-01])::little-signed-32>>
+
+  defp encode_fixed_value(%LogicalType{name: :decimal} = type, :int32, value),
+    do: <<decimal_unscaled(type, value)::little-signed-32>>
+
+  defp encode_fixed_value(_type, :int32, value), do: <<value::little-signed-32>>
+  defp encode_fixed_value(_type, :uint32, value), do: <<value::little-unsigned-32>>
+
+  defp encode_fixed_value(%LogicalType{name: :decimal} = type, :int64, value),
+    do: <<decimal_unscaled(type, value)::little-signed-64>>
+
+  defp encode_fixed_value(%LogicalType{name: name}, :int64, value)
+       when name in [:time, :timestamp, :timestamp_ms, :timestamp_sec, :timestamp_tz],
+       do: <<temporal_unscaled(name, value)::little-signed-64>>
+
+  defp encode_fixed_value(_type, :int64, value), do: <<value::little-signed-64>>
+  defp encode_fixed_value(_type, :uint64, value), do: <<value::little-unsigned-64>>
+  defp encode_fixed_value(_type, :float, value), do: <<value::little-float-32>>
+  defp encode_fixed_value(_type, :double, value), do: <<value::little-float-64>>
+
+  defp encode_fixed_value(%LogicalType{name: :decimal} = type, :int128, value),
+    do: encode_int128(decimal_unscaled(type, value))
+
+  defp encode_fixed_value(_type, :int128, value), do: encode_int128(value)
+  defp encode_fixed_value(_type, :uint128, value), do: encode_uint128(value)
+
+  defp encode_fixed_value(_type, :interval, {:interval, months, days, micros}),
+    do: <<months::little-signed-32, days::little-signed-32, micros::little-signed-64>>
+
+  defp decimal_unscaled(%LogicalType{type_info: %{scale: scale}}, %Decimal{} = decimal) do
+    decimal
+    |> Decimal.mult(Decimal.new(1, 1, scale))
+    |> Decimal.round(0)
+    |> Decimal.to_integer()
+  end
+
+  defp decimal_unscaled(_type, value), do: value
+
+  defp temporal_unscaled(:time, %Time{} = time), do: Time.diff(time, ~T[00:00:00], :microsecond)
+
+  defp temporal_unscaled(:timestamp, %NaiveDateTime{} = value),
+    do: NaiveDateTime.diff(value, ~N[1970-01-01 00:00:00], :microsecond)
+
+  defp temporal_unscaled(:timestamp_tz, %DateTime{} = value),
+    do: DateTime.diff(value, ~U[1970-01-01 00:00:00Z], :microsecond)
+
+  defp temporal_unscaled(:timestamp_ms, %NaiveDateTime{} = value),
+    do: NaiveDateTime.diff(value, ~N[1970-01-01 00:00:00], :millisecond)
+
+  defp temporal_unscaled(:timestamp_sec, %NaiveDateTime{} = value),
+    do: NaiveDateTime.diff(value, ~N[1970-01-01 00:00:00], :second)
+
+  defp temporal_unscaled(_type, value) when is_integer(value), do: value
+
+  defp encode_int128(value) do
+    lower = value &&& 0xFFFF_FFFF_FFFF_FFFF
+    upper = value >>> 64
+    <<lower::little-unsigned-64, upper::little-signed-64>>
+  end
+
+  defp encode_uint128(value) do
+    lower = value &&& 0xFFFF_FFFF_FFFF_FFFF
+    upper = value >>> 64
+    <<lower::little-unsigned-64, upper::little-unsigned-64>>
+  end
+
+  defp encode_string_like(_type, nil), do: ""
+
+  defp encode_string_like(%LogicalType{name: name}, value)
+       when name in [:blob, :bit, :geometry] and is_binary(value), do: value
+
+  defp encode_string_like(_type, value), do: to_string(value)
+
+  defp validity_mask(validity) do
+    bytes = div(length(validity) + 63, 64) * 8
+
+    validity
+    |> Enum.with_index()
+    |> Enum.reduce(:binary.copy(<<0>>, bytes), fn
+      {true, index}, mask -> set_mask_bit(mask, index)
+      {false, _index}, mask -> mask
+    end)
+  end
+
+  defp set_mask_bit(mask, index) do
+    byte_index = div(index, 8)
+    bit = 1 <<< rem(index, 8)
+    <<prefix::binary-size(byte_index), byte, suffix::binary>> = mask
+    <<prefix::binary, byte ||| bit, suffix::binary>>
+  end
+
+  defp append_list_entry(nil, {entries, child_values, offset}) do
+    {[%{offset: 0, length: 0} | entries], child_values, offset}
+  end
+
+  defp append_list_entry(value, {entries, child_values, offset}) when is_list(value) do
+    {[%{offset: offset, length: length(value)} | entries], child_values ++ value,
+     offset + length(value)}
+  end
+
+  defp append_list_entry(value, _acc) do
+    raise Error.new(:invalid_list_value, "LIST/MAP values must be lists, got #{inspect(value)}",
+            source: :protocol
+          )
+  end
+
+  defp encode_list_entry(%{offset: offset, length: length}) do
+    [
+      Writer.field(100, Writer.uleb128(offset)),
+      Writer.field(101, Writer.uleb128(length)),
+      Writer.end_object()
+    ]
+  end
+
+  defp struct_child_value(nil, _name), do: nil
+
+  defp struct_child_value(value, name) when is_map(value) do
+    cond do
+      Map.has_key?(value, name) ->
+        Map.fetch!(value, name)
+
+      is_binary(name) ->
+        value
+        |> Enum.find_value(fn
+          {key, child_value} when is_atom(key) ->
+            if Atom.to_string(key) == name, do: {:value, child_value}
+
+          _entry ->
+            nil
+        end)
+        |> case do
+          {:value, child_value} -> child_value
+          nil -> nil
+        end
+
+      true ->
+        nil
+    end
+  end
+
+  defp struct_child_value(_value, _name), do: nil
 
   defp read_child_vectors(binary, children, row_count) do
     with {:ok, count, rest} <- Reader.read_uleb128(binary) do

@@ -52,11 +52,11 @@ defmodule QuackDB.Columns do
     end
   end
 
-  @doc false
+  @doc "Raises because column result structs are read-only."
   def get_and_update(_columns, _key, _function),
     do: raise(ArgumentError, "QuackDB.Columns is read-only")
 
-  @doc false
+  @doc "Raises because column result structs are read-only."
   def pop(_columns, _key), do: raise(ArgumentError, "QuackDB.Columns is read-only")
 end
 

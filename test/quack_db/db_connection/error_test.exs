@@ -2,6 +2,7 @@ defmodule QuackDB.DBConnection.ErrorTest do
   use ExUnit.Case, async: true
 
   alias QuackDB.Protocol.Codec
+  alias QuackDB.ProtocolFixtures
   alias QuackDB.Protocol.Message.ConnectionRequest
   alias QuackDB.Protocol.Message.Header
   alias QuackDB.Protocol.Message.PrepareRequest
@@ -69,7 +70,7 @@ defmodule QuackDB.DBConnection.ErrorTest do
   end
 
   test "stream fetch server errors are annotated with query and connection context" do
-    initial_chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+    initial_chunk = ProtocolFixtures.integer_chunk_wrapper([1])
 
     connection =
       start_supervised!({QuackDB, transport: stream_fetch_error_transport(initial_chunk)})
@@ -152,7 +153,7 @@ defmodule QuackDB.DBConnection.ErrorTest do
           {:ok, connection_response()}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{}}} ->
-          {:ok, QuackDB.ProtocolFixtures.fetch_response([])}
+          {:ok, ProtocolFixtures.fetch_response([])}
       end
     end
   end
@@ -167,11 +168,11 @@ defmodule QuackDB.DBConnection.ErrorTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok,
          {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT broken_stream"}}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response("open failed")}
+          {:ok, ProtocolFixtures.error_response("open failed")}
       end
     end
   end
@@ -186,18 +187,18 @@ defmodule QuackDB.DBConnection.ErrorTest do
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: statement}}}
         when statement in ["BEGIN", "COMMIT", "ROLLBACK"] ->
-          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [])}
+          {:ok, ProtocolFixtures.prepare_response(chunks: [])}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT n"}}} ->
           {:ok,
-           QuackDB.ProtocolFixtures.prepare_response(
+           ProtocolFixtures.prepare_response(
              chunks: [initial_chunk],
              needs_more_fetch?: true,
              result_uuid: 42
            )}
 
         {:ok, {%Header{type: :fetch_request}, _fetch}} ->
-          {:ok, QuackDB.ProtocolFixtures.error_response("fetch failed")}
+          {:ok, ProtocolFixtures.error_response("fetch failed")}
       end
     end
   end

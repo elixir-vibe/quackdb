@@ -129,9 +129,11 @@ end
 defimpl Inspect, for: QuackDB.Result do
   import Inspect.Algebra
 
+  alias QuackDB.Inspect, as: QuackInspect
+
   def inspect(result, opts) do
-    rows_count = QuackDB.Inspect.rows_summary(result.rows)
-    preview = QuackDB.Inspect.rows_preview(result.rows)
+    rows_count = QuackInspect.rows_summary(result.rows)
+    preview = QuackInspect.rows_preview(result.rows)
     needs_more_fetch? = result.metadata[:needs_more_fetch]
 
     fields = [
@@ -139,11 +141,11 @@ defimpl Inspect, for: QuackDB.Result do
       columns: result.columns,
       rows: rows_count,
       preview: preview,
-      connection_id: QuackDB.Inspect.short_id(result.connection_id),
+      connection_id: QuackInspect.short_id(result.connection_id),
       needs_more_fetch?: needs_more_fetch?
     ]
 
-    concat(QuackDB.Inspect.container("QuackDB.Result", fields, opts))
+    concat(QuackInspect.container("QuackDB.Result", fields, opts))
   end
 end
 
