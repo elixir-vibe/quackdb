@@ -111,9 +111,6 @@ defmodule QuackDB.Server do
   @spec statistics(GenServer.server()) :: map()
   def statistics(server), do: GenServer.call(server, :statistics)
 
-  @spec restart(GenServer.server()) :: :ok
-  def restart(server), do: GenServer.call(server, :restart, :infinity)
-
   @impl true
   def init(options) do
     state = build_state(options)
@@ -154,18 +151,6 @@ defmodule QuackDB.Server do
 
   def handle_call(:os_pid, _from, state), do: {:reply, daemon_os_pid(state.daemon), state}
   def handle_call(:statistics, _from, state), do: {:reply, daemon_statistics(state.daemon), state}
-
-  def handle_call(:restart, _from, state) do
-    Process.exit(state.daemon, :kill)
-
-    with {:ok, daemon} <- start_daemon(state) do
-      state = %{state | daemon: daemon}
-      wait_ready!(state, 5_000, 100)
-      {:reply, :ok, state}
-    else
-      {:error, reason} -> {:stop, reason, {:error, reason}, %{state | daemon: nil}}
-    end
-  end
 
   @impl true
   def terminate(_reason, %{daemon: daemon}) when is_pid(daemon) do
