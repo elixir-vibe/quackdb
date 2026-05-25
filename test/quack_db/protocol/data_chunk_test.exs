@@ -39,4 +39,37 @@ defmodule QuackDB.Protocol.DataChunkTest do
     assert Enum.map(decoded.types, & &1.name) == [:integer, :varchar, :boolean]
     assert DataChunk.rows(decoded) == [[1, "one", true], [2, "two", false]]
   end
+
+  test "encodes calendar date and time values through ISO calendar conversions" do
+    assert {:ok, chunk} =
+             DataChunk.from_rows(
+               [
+                 [
+                   event_date: ~N[2026-05-25 12:34:56],
+                   event_time: ~N[2026-05-25 12:34:56.123456],
+                   happened_at: ~U[2026-05-25 12:34:56.123456Z],
+                   happened_tz: ~U[2026-05-25 12:34:56.123456Z]
+                 ]
+               ],
+               columns: [
+                 event_date: :date,
+                 event_time: :time,
+                 happened_at: :timestamp,
+                 happened_tz: :timestamp_tz
+               ]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+
+    assert DataChunk.rows(decoded) == [
+             [
+               ~D[2026-05-25],
+               ~T[12:34:56.123456],
+               ~N[2026-05-25 12:34:56.123456],
+               ~U[2026-05-25 12:34:56.123456Z]
+             ]
+           ]
+  end
 end

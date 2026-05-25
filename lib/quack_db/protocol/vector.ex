@@ -329,8 +329,12 @@ defmodule QuackDB.Protocol.Vector do
   defp encode_fixed_value(_type, :int16, value), do: <<value::little-signed-16>>
   defp encode_fixed_value(_type, :uint16, value), do: <<value::little-unsigned-16>>
 
-  defp encode_fixed_value(%LogicalType{name: :date}, :int32, %Date{} = value),
-    do: <<Date.diff(value, ~D[1970-01-01])::little-signed-32>>
+  defp encode_fixed_value(
+         %LogicalType{name: :date},
+         :int32,
+         %{calendar: _, year: _, month: _, day: _} = value
+       ),
+       do: <<date_unscaled(value)::little-signed-32>>
 
   defp encode_fixed_value(%LogicalType{name: :decimal} = type, :int32, value),
     do: <<decimal_unscaled(type, value)::little-signed-32>>
@@ -368,21 +372,62 @@ defmodule QuackDB.Protocol.Vector do
 
   defp decimal_unscaled(_type, value), do: value
 
-  defp temporal_unscaled(:time, %Time{} = time), do: Time.diff(time, ~T[00:00:00], :microsecond)
+  defp date_unscaled(value) do
+    value
+    |> convert_date!()
+    |> Date.diff(~D[1970-01-01])
+  end
 
-  defp temporal_unscaled(:timestamp, %NaiveDateTime{} = value),
-    do: NaiveDateTime.diff(value, ~N[1970-01-01 00:00:00], :microsecond)
+  defp temporal_unscaled(
+         :time,
+         %{calendar: _, hour: _, minute: _, second: _, microsecond: _} = value
+       ) do
+    value
+    |> convert_time!()
+    |> Time.diff(~T[00:00:00], :microsecond)
+  end
 
-  defp temporal_unscaled(:timestamp_tz, %DateTime{} = value),
-    do: DateTime.diff(value, ~U[1970-01-01 00:00:00Z], :microsecond)
+  defp temporal_unscaled(:timestamp, value), do: timestamp_unscaled(value, :microsecond)
 
-  defp temporal_unscaled(:timestamp_ms, %NaiveDateTime{} = value),
-    do: NaiveDateTime.diff(value, ~N[1970-01-01 00:00:00], :millisecond)
+  defp temporal_unscaled(:timestamp_tz, %DateTime{} = value) do
+    value
+    |> convert_datetime!()
+    |> DateTime.diff(~U[1970-01-01 00:00:00Z], :microsecond)
+  end
 
-  defp temporal_unscaled(:timestamp_sec, %NaiveDateTime{} = value),
-    do: NaiveDateTime.diff(value, ~N[1970-01-01 00:00:00], :second)
+  defp temporal_unscaled(:timestamp_ms, value), do: timestamp_unscaled(value, :millisecond)
+  defp temporal_unscaled(:timestamp_sec, value), do: timestamp_unscaled(value, :second)
 
   defp temporal_unscaled(_type, value) when is_integer(value), do: value
+
+  defp timestamp_unscaled(
+         %{calendar: _, year: _, month: _, day: _, hour: _, minute: _, second: _, microsecond: _} =
+           value,
+         unit
+       ) do
+    value
+    |> convert_naive_datetime!()
+    |> NaiveDateTime.diff(~N[1970-01-01 00:00:00], unit)
+  end
+
+  defp convert_date!(value), do: convert_calendar!(Date, value, :date)
+  defp convert_time!(value), do: convert_calendar!(Time, value, :time)
+  defp convert_naive_datetime!(value), do: convert_calendar!(NaiveDateTime, value, :timestamp)
+  defp convert_datetime!(value), do: convert_calendar!(DateTime, value, :timestamp_tz)
+
+  defp convert_calendar!(module, value, target) do
+    case module.convert(value, Calendar.ISO) do
+      {:ok, converted} ->
+        converted
+
+      {:error, reason} ->
+        raise Error.new(
+                :unsupported_calendar,
+                "cannot encode #{inspect(value)} as DuckDB #{target}: #{inspect(reason)}",
+                source: :protocol
+              )
+    end
+  end
 
   defp encode_int128(value) do
     lower = value &&& 0xFFFF_FFFF_FFFF_FFFF
