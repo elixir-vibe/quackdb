@@ -164,6 +164,28 @@ defmodule QuackDB.Protocol.DataChunk do
         do: {:ok, LogicalType.new(:array, %{type: 9, child_type: child, size: size})}
       )
 
+  defp normalize_type({:struct, fields}) when is_list(fields) or is_map(fields) do
+    fields
+    |> Enum.map(fn {name, type} ->
+      with {:ok, type} <- normalize_type(type) do
+        {:ok, %{name: to_string(name), type: type}}
+      end
+    end)
+    |> collect_ok()
+    |> case do
+      {:ok, children} -> {:ok, LogicalType.new(:struct, %{type: 5, children: children})}
+      {:error, _error} = error -> error
+    end
+  end
+
+  defp normalize_type({:map, key_type, value_type}) do
+    normalize_type({:list, {:struct, [key: key_type, value: value_type]}})
+    |> case do
+      {:ok, %LogicalType{type_info: type_info}} -> {:ok, LogicalType.new(:map, type_info)}
+      {:error, _error} = error -> error
+    end
+  end
+
   defp normalize_type(type) do
     error(:invalid_append_type, "invalid append type #{inspect(type)}")
   end

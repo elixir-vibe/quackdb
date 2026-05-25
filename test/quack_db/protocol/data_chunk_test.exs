@@ -40,6 +40,46 @@ defmodule QuackDB.Protocol.DataChunkTest do
     assert DataChunk.rows(decoded) == [[1, "one", true], [2, "two", false]]
   end
 
+  test "encodes nested list struct array and map values" do
+    assert {:ok, chunk} =
+             DataChunk.from_rows(
+               [
+                 [
+                   tags: ["duck", "analytics"],
+                   metadata: %{source: "sensor", count: 2},
+                   scores: [10, 20, 30],
+                   labels: [%{key: "env", value: "test"}]
+                 ],
+                 [
+                   tags: [],
+                   metadata: %{source: "batch", count: nil},
+                   scores: [40, 50, 60],
+                   labels: nil
+                 ]
+               ],
+               columns: [
+                 tags: {:list, :varchar},
+                 metadata: {:struct, [source: :varchar, count: :integer]},
+                 scores: {:array, :integer, 3},
+                 labels: {:map, :varchar, :varchar}
+               ]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+
+    assert DataChunk.rows(decoded) == [
+             [
+               ["duck", "analytics"],
+               %{"source" => "sensor", "count" => 2},
+               [10, 20, 30],
+               %{"env" => "test"}
+             ],
+             [[], %{"source" => "batch", "count" => nil}, [40, 50, 60], nil]
+           ]
+  end
+
   test "encodes calendar date and time values through ISO calendar conversions" do
     assert {:ok, chunk} =
              DataChunk.from_rows(

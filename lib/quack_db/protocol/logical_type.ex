@@ -248,8 +248,15 @@ defmodule QuackDB.Protocol.LogicalType do
     )
   end
 
-  defp encode_type_info_fields(%{type: type, child_type: child_type}) when type in [4, 9] do
+  defp encode_type_info_fields(%{type: 4, child_type: child_type}) do
     field(200, encode(child_type))
+  end
+
+  defp encode_type_info_fields(%{type: 9, child_type: child_type, size: size}) do
+    [
+      field(200, encode(child_type)),
+      field(201, uleb128(size))
+    ]
   end
 
   defp encode_type_info_fields(%{type: 5, children: children}) do
