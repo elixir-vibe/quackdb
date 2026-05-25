@@ -4,24 +4,26 @@ defmodule QuackDB.Integration.EctoAnalyticsTest do
   import Ecto.Query
   import QuackDB.Ecto.Analytics
   import QuackDB.QuackServerCase
+  import QuackDB.TestHelper
 
   @moduletag :integration
 
   test "analytical aggregate helpers execute against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_analytics_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_analytics")
 
-    QuackDB.IntegrationRepo.query!(
-      QuackDB.DDL.create_table(
-        table,
-        [category: :varchar, name: :varchar, score: :integer],
-        temporary: true
-      )
+    create_table!(QuackDB.IntegrationRepo, table,
+      category: :varchar,
+      name: :varchar,
+      score: :integer
     )
 
-    QuackDB.IntegrationRepo.query!(
-      "INSERT INTO #{table} VALUES ('a', 'duck', 10), ('a', 'goose', 20), ('a', 'swan', 30), ('b', 'salmon', 5)"
-    )
+    insert_rows!(QuackDB.IntegrationRepo, table, [
+      ["a", "duck", 10],
+      ["a", "goose", 20],
+      ["a", "swan", 30],
+      ["b", "salmon", 5]
+    ])
 
     query =
       from(event in table,
@@ -62,17 +64,14 @@ defmodule QuackDB.Integration.EctoAnalyticsTest do
 
   test "JSON and time-series helpers execute against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_json_time_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_json_time")
 
-    QuackDB.IntegrationRepo.query!(
-      QuackDB.DDL.create_table(table, [payload: :json, occurred_at: :timestamp], temporary: true)
-    )
+    create_table!(QuackDB.IntegrationRepo, table, payload: :json, occurred_at: :timestamp)
 
-    QuackDB.IntegrationRepo.query!("""
-    INSERT INTO #{table} VALUES
-      ('{"name":"duck","kind":"bird","score":10}', TIMESTAMP '2024-01-02 03:04:05'),
-      ('{"name":"salmon","kind":"fish","score":5}', TIMESTAMP '2024-01-03 04:05:06')
-    """)
+    insert_rows!(QuackDB.IntegrationRepo, table, [
+      [~s({"name":"duck","kind":"bird","score":10}), ~N[2024-01-02 03:04:05]],
+      [~s({"name":"salmon","kind":"fish","score":5}), ~N[2024-01-03 04:05:06]]
+    ])
 
     query =
       from(event in table,
