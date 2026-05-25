@@ -70,6 +70,7 @@ defmodule QuackDB.MixProject do
         "docs/research.md",
         "docs/postgrex-comparison.md",
         "docs/duckdb-capabilities.md",
+        "docs/ecto-analytical-coverage.md",
         "docs/test-coverage-audit.md",
         "docs/test-structure.md"
       ],

@@ -478,14 +478,36 @@ defmodule QuackDB.DBConnection do
   defp command(statement) do
     statement
     |> IO.iodata_to_binary()
-    |> String.trim_leading()
-    |> String.split(~r/\s+/, parts: 2)
-    |> List.first()
+    |> first_sql_word()
     |> case do
-      nil -> :unknown
       "" -> :unknown
       word -> word |> String.downcase() |> String.to_atom()
     end
+  end
+
+  defp first_sql_word(statement) do
+    statement
+    |> skip_leading_whitespace()
+    |> take_until_whitespace()
+  end
+
+  defp skip_leading_whitespace(<<char, rest::binary>>) when char in [?\s, ?\t, ?\n, ?\r, ?\f] do
+    skip_leading_whitespace(rest)
+  end
+
+  defp skip_leading_whitespace(rest), do: rest
+
+  defp take_until_whitespace(statement), do: take_until_whitespace(statement, [])
+
+  defp take_until_whitespace(<<>>, acc), do: acc |> Enum.reverse() |> IO.iodata_to_binary()
+
+  defp take_until_whitespace(<<char, _rest::binary>>, acc)
+       when char in [?\s, ?\t, ?\n, ?\r, ?\f] do
+    acc |> Enum.reverse() |> IO.iodata_to_binary()
+  end
+
+  defp take_until_whitespace(<<char, rest::binary>>, acc) do
+    take_until_whitespace(rest, [char | acc])
   end
 
   defp successful_status(:error), do: :error

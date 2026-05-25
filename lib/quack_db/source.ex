@@ -75,10 +75,15 @@ defmodule QuackDB.Source do
   @doc false
   @spec source?(term()) :: boolean()
   def source?(value) when is_binary(value) do
-    Regex.match?(
-      ~r/\A(?:read_parquet|read_csv|read_json|read_xlsx|delta_scan|iceberg_scan)\(/,
-      value
-    )
+    case table_function_name(value) do
+      "read_parquet" -> true
+      "read_csv" -> true
+      "read_json" -> true
+      "read_xlsx" -> true
+      "delta_scan" -> true
+      "iceberg_scan" -> true
+      _other -> false
+    end
   end
 
   def source?(_value), do: false
@@ -141,9 +146,32 @@ defmodule QuackDB.Source do
     raise ArgumentError, "unsupported DuckDB literal key: #{inspect(key)}"
   end
 
-  defp validate_identifier!(value, kind) do
-    unless Regex.match?(~r/\A[A-Za-z_][A-Za-z0-9_]*\z/, value) do
+  defp table_function_name(value) do
+    case :binary.match(value, "(") do
+      {index, 1} when index > 0 -> binary_part(value, 0, index)
+      _not_found -> nil
+    end
+  end
+
+  defp validate_identifier!(<<first, rest::binary>> = value, kind)
+       when first in ?A..?Z or first in ?a..?z or first == ?_ do
+    if valid_identifier_rest?(rest) do
+      :ok
+    else
       raise ArgumentError, "invalid DuckDB #{kind} identifier: #{inspect(value)}"
     end
   end
+
+  defp validate_identifier!(value, kind) do
+    raise ArgumentError, "invalid DuckDB #{kind} identifier: #{inspect(value)}"
+  end
+
+  defp valid_identifier_rest?(<<>>), do: true
+
+  defp valid_identifier_rest?(<<char, rest::binary>>)
+       when char in ?A..?Z or char in ?a..?z or char in ?0..?9 or char == ?_ do
+    valid_identifier_rest?(rest)
+  end
+
+  defp valid_identifier_rest?(_value), do: false
 end
