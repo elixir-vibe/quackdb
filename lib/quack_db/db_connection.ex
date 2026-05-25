@@ -144,7 +144,7 @@ defmodule QuackDB.DBConnection do
           state = put_cursor_state(state, cursor.ref, cursor_state)
           handle_fetch(nil, cursor, options, state)
         else
-          {:error, error} -> {:error, error, state}
+          {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
         end
     end
   end
@@ -207,7 +207,8 @@ defmodule QuackDB.DBConnection do
       result_uuid: response.result_uuid,
       columns: response.result_names,
       result_types: response.result_types,
-      connection_id: state.connection_id
+      connection_id: state.connection_id,
+      statement: query.statement
     }
 
     cursor_state = %{
@@ -388,6 +389,10 @@ defmodule QuackDB.DBConnection do
 
   defp annotate_error(%Error{} = error, %Query{} = query, state) do
     %Error{error | query: query.statement, connection_id: state.connection_id}
+  end
+
+  defp annotate_cursor_error(%Error{} = error, %QuackDB.Cursor{} = cursor) do
+    %Error{error | query: cursor.statement, connection_id: cursor.connection_id}
   end
 
   defp materialize_rows(chunks, columns) do

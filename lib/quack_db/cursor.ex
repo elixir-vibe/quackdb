@@ -6,7 +6,7 @@ defmodule QuackDB.Cursor do
   to fetch and materialize subsequent result chunks.
   """
 
-  defstruct [:ref, :result_uuid, :columns, :result_types, :connection_id]
+  defstruct [:ref, :result_uuid, :columns, :result_types, :connection_id, :statement]
 end
 
 defimpl Inspect, for: QuackDB.Cursor do
@@ -16,7 +16,8 @@ defimpl Inspect, for: QuackDB.Cursor do
     fields = [
       result_uuid: cursor.result_uuid,
       columns: cursor.columns,
-      connection_id: QuackDB.Inspect.short_id(cursor.connection_id)
+      connection_id: QuackDB.Inspect.short_id(cursor.connection_id),
+      statement: QuackDB.Inspect.truncate(cursor.statement)
     ]
 
     concat(QuackDB.Inspect.container("QuackDB.Cursor", fields, opts))
