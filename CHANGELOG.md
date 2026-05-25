@@ -9,7 +9,7 @@
 - Added `QuackDB.Ecto.Analytics` helpers for DuckDB analytical expressions in Ecto queries, including median, quantiles, list aggregation, JSON extraction, date truncation, and time buckets.
 - Added generic `QuackDB.SQL.load/1` and `QuackDB.SQL.call/3` statement builders.
 - Added Quack append-protocol encoding and `QuackDB.insert_rows/4` / `insert_rows!/4` for appending keyword rows or row maps as DuckDB `DataChunk`s, including `:batch_size` support.
-- Added Ecto `insert_all/3` SQL generation for straightforward row inserts and an explicit `insert_method: :append` native append fast path.
+- Added Ecto `insert/2` and `insert_all/3` support for straightforward row inserts, `insert_all` `RETURNING` coverage, and an explicit `insert_method: :append` native append fast path.
 - Expanded analytical integration coverage for JSON sources, time-series functions, source analytics, `QUALIFY`, `PIVOT`, `UNPIVOT`, grouping sets, sampling, and supervised local servers.
 
 ### Changed

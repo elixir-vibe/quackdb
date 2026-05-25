@@ -8,7 +8,9 @@ defmodule QuackDB.Protocol.LogicalType do
 
   alias QuackDB.Error
   alias QuackDB.Protocol.Reader
-  alias QuackDB.Protocol.Writer
+
+  import QuackDB.Protocol.Writer,
+    only: [end_object: 0, field: 2, list: 2, nullable: 2, string: 1, uleb128: 1]
 
   defstruct [:id, :name, :type_info]
 
@@ -71,9 +73,9 @@ defmodule QuackDB.Protocol.LogicalType do
   @spec encode(t()) :: iodata()
   def encode(%__MODULE__{} = type) do
     [
-      Writer.field(100, Writer.uleb128(type.id)),
+      field(100, uleb128(type.id)),
       encode_type_info(type.type_info),
-      Writer.end_object()
+      end_object()
     ]
   end
 
@@ -212,67 +214,67 @@ defmodule QuackDB.Protocol.LogicalType do
   defp encode_type_info(nil), do: []
 
   defp encode_type_info(info) when is_map(info) do
-    Writer.field(
+    field(
       101,
-      Writer.nullable(info, &encode_type_info_body/1)
+      nullable(info, &encode_type_info_body/1)
     )
   end
 
   defp encode_type_info_body(%{type: type} = info) do
     [
-      Writer.field(100, Writer.uleb128(type)),
+      field(100, uleb128(type)),
       encode_type_info_alias(info),
       encode_type_info_fields(info),
-      Writer.end_object()
+      end_object()
     ]
   end
 
   defp encode_type_info_alias(%{alias: alias_name}) when is_binary(alias_name),
-    do: Writer.field(101, Writer.string(alias_name))
+    do: field(101, string(alias_name))
 
   defp encode_type_info_alias(_info), do: []
 
   defp encode_type_info_fields(%{type: 2, width: width, scale: scale}) do
     [
-      Writer.field(200, Writer.uleb128(width)),
-      Writer.field(201, Writer.uleb128(scale))
+      field(200, uleb128(width)),
+      field(201, uleb128(scale))
     ]
   end
 
   defp encode_type_info_fields(%{type: 3} = info) do
-    Writer.field(
+    field(
       200,
-      Writer.string(Map.get(info, :collation, ""))
+      string(Map.get(info, :collation, ""))
     )
   end
 
   defp encode_type_info_fields(%{type: type, child_type: child_type}) when type in [4, 9] do
-    Writer.field(200, encode(child_type))
+    field(200, encode(child_type))
   end
 
   defp encode_type_info_fields(%{type: 5, children: children}) do
-    Writer.field(
+    field(
       200,
-      Writer.list(children, &encode_child_type/1)
+      list(children, &encode_child_type/1)
     )
   end
 
   defp encode_type_info_fields(%{type: 6, values: values}) do
     [
-      Writer.field(200, Writer.uleb128(length(values))),
-      Writer.field(
+      field(200, uleb128(length(values))),
+      field(
         201,
-        Writer.list(values, &Writer.string/1)
+        list(values, &string/1)
       )
     ]
   end
 
   defp encode_type_info_fields(%{type: 12, definition: definition}) do
-    Writer.field(
+    field(
       200,
       [
-        Writer.field(100, Writer.string(definition)),
-        Writer.end_object()
+        field(100, string(definition)),
+        end_object()
       ]
     )
   end
@@ -289,9 +291,9 @@ defmodule QuackDB.Protocol.LogicalType do
 
   defp encode_child_type(%{name: name, type: type}) do
     [
-      Writer.field(0, Writer.string(to_string(name))),
-      Writer.field(1, encode(type)),
-      Writer.end_object()
+      field(0, string(to_string(name))),
+      field(1, encode(type)),
+      end_object()
     ]
   end
 

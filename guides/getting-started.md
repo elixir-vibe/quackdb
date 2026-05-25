@@ -434,13 +434,16 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-Ecto `insert_all/3` is supported for straightforward row inserts:
+Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir
-MyApp.AnalyticsRepo.insert_all("events", [
-  [id: 1, name: "duck"],
-  [id: 2, name: "goose"]
-])
+MyApp.AnalyticsRepo.insert!(%Event{id: 1, name: "duck"})
+
+MyApp.AnalyticsRepo.insert_all(
+  "events",
+  [[id: 2, name: "goose"]],
+  returning: [:id]
+)
 ```
 
 Use `insert_method: :append` to opt into Quack's native append protocol for plain `insert_all` workloads. This fast path does not support query inserts, `:returning`, placeholders, or upserts.

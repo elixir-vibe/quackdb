@@ -40,6 +40,35 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.insert_all/3 supports returning rows" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_insert_returning")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+
+    assert {2, [%{id: 1}, %{id: 2}]} =
+             QuackDB.IntegrationRepo.insert_all(
+               table,
+               [[id: 1, name: "duck"], [id: 2, name: "goose"]],
+               returning: [:id]
+             )
+  end
+
+  test "Ecto Repo.insert/2 inserts a schema struct" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "events")
+    create_table!(QuackDB.IntegrationRepo, "events", id: :integer, name: :varchar)
+
+    event = %QuackDB.TestSchemas.Event{id: 1, name: "duck"}
+
+    assert {:ok, %QuackDB.TestSchemas.Event{id: 1, name: "duck"}} =
+             QuackDB.IntegrationRepo.insert(event)
+
+    assert %{rows: [[1, "duck"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM events ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 can use Quack append explicitly" do
     start_repo!()
     table = unique_table("quackdb_ecto_append_all")

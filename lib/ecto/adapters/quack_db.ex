@@ -103,6 +103,18 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       end
     end
 
+    defp assert_append_insert_all!(
+           {%Ecto.Query{}, _params},
+           _on_conflict,
+           _returning,
+           _placeholders
+         ) do
+      unsupported!(
+        :schema_inserts,
+        "insert_method: :append does not support insert_all from queries"
+      )
+    end
+
     defp assert_append_insert_all!(%Ecto.Query{}, _on_conflict, _returning, _placeholders) do
       unsupported!(
         :schema_inserts,

@@ -99,6 +99,73 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 1}}}
   end
 
+  test "Repo.insert_all/3 uses schema field source names" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+
+    put_repo_env(transport(parent: parent, prepare: [chunk], names: ["Count"]))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(QuackDB.TestSchemas.RenamedEvent, [
+               [id: 1, name: "duck"]
+             ])
+
+    assert_received {:statement,
+                     ~s|INSERT INTO "renamed_events" ("id", "event_name") VALUES (1, 'duck')|}
+  end
+
+  test "Repo.insert_all/3 rejects unknown insert methods" do
+    put_repo_env(transport(prepare: []))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise QuackDB.Error, ~r/unsupported insert_method/, fn ->
+      QuackDB.EctoRepo.insert_all("events", [[id: 1]], insert_method: :warp)
+    end
+  end
+
+  test "Repo.insert_all/3 append method rejects returning" do
+    put_repo_env(transport(prepare: []))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise QuackDB.Error, ~r/without returning/, fn ->
+      QuackDB.EctoRepo.insert_all("events", [[id: 1]], insert_method: :append, returning: [:id])
+    end
+  end
+
+  test "Repo.insert_all/3 append method rejects conflict targets" do
+    put_repo_env(transport(prepare: []))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise QuackDB.Error, ~r/does not support conflict targets/, fn ->
+      QuackDB.EctoRepo.insert_all("events", [[id: 1]],
+        insert_method: :append,
+        on_conflict: :nothing,
+        conflict_target: [:id]
+      )
+    end
+  end
+
+  test "Repo.insert_all/3 append method rejects insert queries" do
+    put_repo_env(transport(prepare: []))
+    start_supervised!(QuackDB.EctoRepo)
+
+    query = from(event in "source_events", select: %{id: event.id})
+
+    assert_raise QuackDB.Error, ~r/does not support insert_all from queries/, fn ->
+      QuackDB.EctoRepo.insert_all("events", query, insert_method: :append)
+    end
+  end
+
+  test "Repo.insert_all/3 append method validates chunk_every" do
+    put_repo_env(transport(prepare: []))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise QuackDB.Error, ~r/batch_size must be a positive integer/, fn ->
+      QuackDB.EctoRepo.insert_all("events", [[id: 1]], insert_method: :append, chunk_every: 0)
+    end
+  end
+
   test "raises ArgumentError for non-list params like other Ecto SQL adapters" do
     assert_raise ArgumentError, ~r/expected params to be a list/, fn ->
       Ecto.Adapters.QuackDB.Connection.query(self(), "SELECT 1", %{bad: :params}, [])

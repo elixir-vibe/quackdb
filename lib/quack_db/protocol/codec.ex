@@ -13,7 +13,17 @@ defmodule QuackDB.Protocol.Codec do
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Message
   alias QuackDB.Protocol.Reader
-  alias QuackDB.Protocol.Writer
+
+  import QuackDB.Protocol.Writer,
+    only: [
+      end_object: 0,
+      field: 2,
+      hugeint: 1,
+      nullable: 2,
+      optional_index: 1,
+      string: 1,
+      uleb128: 1
+    ]
 
   alias Message.AppendRequest
   alias Message.ConnectionRequest
@@ -54,10 +64,10 @@ defmodule QuackDB.Protocol.Codec do
   @spec encode_header(Header.t()) :: iodata()
   def encode_header(%Header{} = header) do
     [
-      Writer.field(1, Writer.uleb128(Protocol.message_type(header.type))),
+      field(1, uleb128(Protocol.message_type(header.type))),
       encode_connection_id_header_field(header.connection_id),
-      Writer.field(3, Writer.optional_index(header.client_query_id)),
-      Writer.end_object()
+      field(3, optional_index(header.client_query_id)),
+      end_object()
     ]
   end
 
@@ -66,41 +76,41 @@ defmodule QuackDB.Protocol.Codec do
 
   defp encode_body(%ConnectionRequest{} = message) do
     [
-      Writer.field(1, Writer.string(message.auth_string)),
-      Writer.field(2, Writer.string(message.client_duckdb_version)),
-      Writer.field(3, Writer.string(message.client_platform)),
-      Writer.field(4, Writer.uleb128(message.min_supported_quack_version)),
-      Writer.field(5, Writer.uleb128(message.max_supported_quack_version)),
-      Writer.end_object()
+      field(1, string(message.auth_string)),
+      field(2, string(message.client_duckdb_version)),
+      field(3, string(message.client_platform)),
+      field(4, uleb128(message.min_supported_quack_version)),
+      field(5, uleb128(message.max_supported_quack_version)),
+      end_object()
     ]
   end
 
   defp encode_body(%PrepareRequest{} = message) do
-    [Writer.field(1, Writer.string(message.sql_query)), Writer.end_object()]
+    [field(1, string(message.sql_query)), end_object()]
   end
 
   defp encode_body(%FetchRequest{} = message) do
-    [Writer.field(1, Writer.hugeint(message.uuid)), Writer.end_object()]
+    [field(1, hugeint(message.uuid)), end_object()]
   end
 
   defp encode_body(%Disconnect{}) do
-    Writer.end_object()
+    end_object()
   end
 
   defp encode_body(%SuccessResponse{}) do
-    Writer.end_object()
+    end_object()
   end
 
   defp encode_body(%ErrorResponse{} = message) do
-    [Writer.field(1, Writer.string(message.message)), Writer.end_object()]
+    [field(1, string(message.message)), end_object()]
   end
 
   defp encode_body(%AppendRequest{} = message) do
     [
       encode_optional_string(1, message.schema_name),
       encode_optional_string(2, message.table_name),
-      Writer.field(3, Writer.nullable(message.append_chunk, &DataChunk.encode_wrapper/1)),
-      Writer.end_object()
+      field(3, nullable(message.append_chunk, &DataChunk.encode_wrapper/1)),
+      end_object()
     ]
   end
 
@@ -416,11 +426,11 @@ defmodule QuackDB.Protocol.Codec do
 
   defp encode_connection_id_header_field(""), do: []
   defp encode_connection_id_header_field(nil), do: []
-  defp encode_connection_id_header_field(value), do: Writer.field(2, Writer.string(value))
+  defp encode_connection_id_header_field(value), do: field(2, string(value))
 
   defp encode_optional_string(_field_id, ""), do: []
   defp encode_optional_string(_field_id, nil), do: []
-  defp encode_optional_string(field_id, value), do: Writer.field(field_id, Writer.string(value))
+  defp encode_optional_string(field_id, value), do: field(field_id, string(value))
 
   defp message_type(%ConnectionRequest{}), do: :connection_request
   defp message_type(%PrepareRequest{}), do: :prepare_request

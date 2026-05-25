@@ -11,7 +11,9 @@ defmodule QuackDB.Protocol.DataChunk do
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Reader
   alias QuackDB.Protocol.Vector
-  alias QuackDB.Protocol.Writer
+
+  import QuackDB.Protocol.Writer,
+    only: [end_object: 0, field: 2, list: 2, uleb128: 1]
 
   defstruct row_count: 0, types: [], columns: []
 
@@ -25,24 +27,24 @@ defmodule QuackDB.Protocol.DataChunk do
   @spec encode_wrapper(t()) :: iodata()
   def encode_wrapper(%__MODULE__{} = chunk) do
     [
-      Writer.field(300, encode(chunk)),
-      Writer.end_object()
+      field(300, encode(chunk)),
+      end_object()
     ]
   end
 
   @spec encode(t()) :: iodata()
   def encode(%__MODULE__{} = chunk) do
     [
-      Writer.field(100, Writer.uleb128(chunk.row_count)),
-      Writer.field(
+      field(100, uleb128(chunk.row_count)),
+      field(
         101,
-        Writer.list(chunk.types, &LogicalType.encode/1)
+        list(chunk.types, &LogicalType.encode/1)
       ),
-      Writer.field(
+      field(
         102,
-        Writer.list(chunk.columns, &encode_column/1)
+        list(chunk.columns, &encode_column/1)
       ),
-      Writer.end_object()
+      end_object()
     ]
   end
 
