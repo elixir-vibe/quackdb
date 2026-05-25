@@ -350,16 +350,33 @@ Use `Repo.rollback/1` to abort transaction work:
   end)
 ```
 
-Read-only Ecto queries against table names are also supported, including CTEs, window functions, joins, grouping, having, distinct, aggregate `FILTER`, arithmetic expressions, `in/2`, predicates, ordering, limits, aggregates, and fragments:
+Read-only Ecto queries against table names are also supported, including CTEs, window functions, joins, grouping, having, distinct, aggregate `FILTER`, arithmetic expressions, `in/2`, predicates, ordering, limits, aggregates, fragments, and DuckDB analytical helpers:
 
 ```elixir
 import Ecto.Query
+import QuackDB.Ecto.Analytics
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
     where: event.id > ^min_id and like(event.name, "d%"),
-    order_by: [asc: event.id],
-    select: %{id: event.id, name: event.name, upper_name: fragment("upper(?)", event.name)}
+    group_by: event.category,
+    select: %{
+      category: event.category,
+      median_score: median(event.score),
+      p95_score: quantile_cont(event.score, 0.95),
+      scores: duckdb_list(event.score)
+    }
+)
+```
+
+For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` statements:
+
+```elixir
+MyApp.AnalyticsRepo.query!(
+  QuackDB.DDL.create_table("events",
+    [payload: :json, occurred_at: :timestamp],
+    temporary: true
+  )
 )
 ```
 
