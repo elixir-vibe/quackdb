@@ -13,6 +13,11 @@ defmodule QuackDB.TestHelperTest do
     assert File.read!(path) == "id,name\n1,duck\n"
   end
 
+  test "source helpers write temporary files and return source SQL" do
+    assert csv_source!("id,name\n1,duck\n") =~ "read_csv("
+    assert json_source!(~s({"id":1}\n)) =~ "read_json("
+  end
+
   test "insert_rows! builds quoted insert statements" do
     parent = self()
     chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])

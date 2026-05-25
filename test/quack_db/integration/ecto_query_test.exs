@@ -3,6 +3,7 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   import Ecto.Query
   import QuackDB.QuackServerCase
+  import QuackDB.TestHelper
 
   @moduletag :integration
 
@@ -12,23 +13,23 @@ defmodule QuackDB.Integration.EctoQueryTest do
     assert {:ok, %{columns: ["n"], rows: [[1]], num_rows: 1, command: :select}} =
              QuackDB.IntegrationRepo.query("SELECT 1 AS n")
 
-    table = "quackdb_ecto_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto")
 
-    assert {:ok, %{command: :create, rows: nil, num_rows: 0}} =
-             QuackDB.IntegrationRepo.query("CREATE TEMP TABLE #{table}(id INTEGER)")
+    assert %{command: :create, rows: nil, num_rows: 0} =
+             create_table!(QuackDB.IntegrationRepo, table, id: :integer)
 
-    assert {:ok, %{command: :insert, rows: nil, num_rows: 2} = insert} =
-             QuackDB.IntegrationRepo.query("INSERT INTO #{table} VALUES (1), (2)")
+    assert %{command: :insert, rows: nil, num_rows: 2} =
+             insert = insert_rows!(QuackDB.IntegrationRepo, table, [[1], [2]])
 
     assert insert.metadata[:duckdb_rows] == [[2]]
   end
 
   test "Ecto Repo.all/2 executes simple read-only queries against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_all_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_all")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
-    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck"], [2, "goose"]])
 
     query =
       from(event in table,
@@ -41,10 +42,10 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   test "Ecto Repo.one/2 executes singleton read queries against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_one_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_one")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
-    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck"], [2, "goose"]])
 
     query =
       from(event in table,
@@ -57,10 +58,10 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   test "Ecto Repo.exists?/2 executes existence queries against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_exists_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_exists")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
-    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck"], [2, "goose"]])
 
     matching_query = from(event in table, where: event.name == "duck")
     missing_query = from(event in table, where: event.name == "swan")
@@ -71,10 +72,10 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   test "Ecto Repo.aggregate/4 executes aggregate queries against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_aggregate_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_aggregate")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, score INTEGER)")
-    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 10), (2, 20), (3, 30)")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, score: :integer)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, 10], [2, 20], [3, 30]])
 
     query = from(event in table, where: event.score >= 20)
 
@@ -85,13 +86,16 @@ defmodule QuackDB.Integration.EctoQueryTest do
   test "Ecto Repo.all/2 supports schema-backed sources against a real Quack server" do
     start_repo!()
 
-    QuackDB.IntegrationRepo.query!(
-      "CREATE TEMP TABLE events(id INTEGER, name VARCHAR, score INTEGER, category_id INTEGER)"
+    drop_table!(QuackDB.IntegrationRepo, "events")
+
+    create_table!(QuackDB.IntegrationRepo, "events",
+      id: :integer,
+      name: :varchar,
+      score: :integer,
+      category_id: :integer
     )
 
-    QuackDB.IntegrationRepo.query!(
-      "INSERT INTO events VALUES (1, 'duck', 10, 1), (2, 'goose', 20, 1)"
-    )
+    insert_rows!(QuackDB.IntegrationRepo, "events", [[1, "duck", 10, 1], [2, "goose", 20, 1]])
 
     query =
       from(event in QuackDB.TestSchemas.Event,
@@ -105,17 +109,20 @@ defmodule QuackDB.Integration.EctoQueryTest do
   test "Ecto Repo.all/2 supports schema-backed joins against a real Quack server" do
     start_repo!()
 
-    QuackDB.IntegrationRepo.query!(
-      "CREATE TEMP TABLE events(id INTEGER, name VARCHAR, score INTEGER, category_id INTEGER)"
+    drop_table!(QuackDB.IntegrationRepo, "events")
+    drop_table!(QuackDB.IntegrationRepo, "categories")
+
+    create_table!(QuackDB.IntegrationRepo, "events",
+      id: :integer,
+      name: :varchar,
+      score: :integer,
+      category_id: :integer
     )
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE categories(id INTEGER, name VARCHAR)")
+    create_table!(QuackDB.IntegrationRepo, "categories", id: :integer, name: :varchar)
 
-    QuackDB.IntegrationRepo.query!(
-      "INSERT INTO events VALUES (1, 'duck', 10, 1), (2, 'goose', 20, 2)"
-    )
-
-    QuackDB.IntegrationRepo.query!("INSERT INTO categories VALUES (1, 'bird'), (2, 'other')")
+    insert_rows!(QuackDB.IntegrationRepo, "events", [[1, "duck", 10, 1], [2, "goose", 20, 2]])
+    insert_rows!(QuackDB.IntegrationRepo, "categories", [[1, "bird"], [2, "other"]])
 
     query =
       from(event in QuackDB.TestSchemas.Event,
@@ -133,11 +140,11 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   test "Ecto Repo.all/2 supports pinned parameters against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_params_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_params")
     name = "duck"
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
-    QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck"], [2, "goose"]])
 
     query =
       from(event in table,
@@ -150,13 +157,10 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   test "Ecto Repo.all/2 supports aggregates and common predicates against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_agg_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_agg")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
-
-    QuackDB.IntegrationRepo.query!(
-      "INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose'), (3, NULL)"
-    )
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck"], [2, "goose"], [3, nil]])
 
     query =
       from(event in table,
@@ -177,15 +181,20 @@ defmodule QuackDB.Integration.EctoQueryTest do
 
   test "Ecto Repo.all/2 supports analytical CTEs and windows against a real Quack server" do
     start_repo!()
-    table = "quackdb_ecto_window_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_window")
 
-    QuackDB.IntegrationRepo.query!(
-      "CREATE TEMP TABLE #{table}(id INTEGER, category VARCHAR, score INTEGER)"
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: :integer,
+      category: :varchar,
+      score: :integer
     )
 
-    QuackDB.IntegrationRepo.query!(
-      "INSERT INTO #{table} VALUES (1, 'a', 10), (2, 'a', 20), (3, 'b', 15), (4, 'b', 5)"
-    )
+    insert_rows!(QuackDB.IntegrationRepo, table, [
+      [1, "a", 10],
+      [2, "a", 20],
+      [3, "b", 15],
+      [4, "b", 5]
+    ])
 
     high_scores =
       from(event in table,

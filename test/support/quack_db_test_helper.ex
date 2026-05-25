@@ -50,6 +50,20 @@ defmodule QuackDB.TestHelper do
     write_temp_file!(contents, prefix, ".json")
   end
 
+  def csv_source!(contents, options \\ [header: true])
+      when is_binary(contents) and is_list(options) do
+    contents
+    |> csv_file!()
+    |> QuackDB.Source.csv(options)
+  end
+
+  def json_source!(contents, options \\ [format: :newline_delimited])
+      when is_binary(contents) and is_list(options) do
+    contents
+    |> json_file!()
+    |> QuackDB.Source.json(options)
+  end
+
   defp repo?(target), do: is_atom(target) and function_exported?(target, :query!, 2)
 
   defp insert_columns(nil), do: []

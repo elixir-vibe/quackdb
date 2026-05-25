@@ -2,17 +2,18 @@ defmodule QuackDB.Integration.EctoTransactionTest do
   use ExUnit.Case, async: false
 
   import QuackDB.QuackServerCase
+  import QuackDB.TestHelper
 
   @moduletag :integration
 
   test "Ecto transactions commit through Repo.transaction/1" do
     start_repo!()
-    table = "quackdb_ecto_commit_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_commit")
 
     assert {:ok, :committed} =
              QuackDB.IntegrationRepo.transaction(fn ->
-               QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER)")
-               QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1), (2)")
+               create_table!(QuackDB.IntegrationRepo, table, id: :integer)
+               insert_rows!(QuackDB.IntegrationRepo, table, [[1], [2]])
                :committed
              end)
 
@@ -21,13 +22,13 @@ defmodule QuackDB.Integration.EctoTransactionTest do
 
   test "Ecto Repo.rollback/1 rolls back transaction work" do
     start_repo!()
-    table = "quackdb_ecto_rollback_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_rollback")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER)")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer)
 
     assert {:error, :rolled_back} =
              QuackDB.IntegrationRepo.transaction(fn ->
-               QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1)")
+               insert_rows!(QuackDB.IntegrationRepo, table, [[1]])
                QuackDB.IntegrationRepo.rollback(:rolled_back)
              end)
 
@@ -36,13 +37,13 @@ defmodule QuackDB.Integration.EctoTransactionTest do
 
   test "Ecto transactions roll back after query errors" do
     start_repo!()
-    table = "quackdb_ecto_error_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_ecto_error")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER)")
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer)
 
     assert {:error, %QuackDB.Error{message: message}} =
              QuackDB.IntegrationRepo.transaction(fn ->
-               QuackDB.IntegrationRepo.query!("INSERT INTO #{table} VALUES (1)")
+               insert_rows!(QuackDB.IntegrationRepo, table, [[1]])
 
                case QuackDB.IntegrationRepo.query("SELEC broken") do
                  {:error, error} -> QuackDB.IntegrationRepo.rollback(error)

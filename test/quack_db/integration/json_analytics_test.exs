@@ -3,13 +3,13 @@ defmodule QuackDB.Integration.JSONAnalyticsTest do
 
   import Ecto.Query
   import QuackDB.QuackServerCase
+  import QuackDB.TestHelper
 
   @moduletag :integration
 
   test "QuackDB.Source.json/2 reads newline-delimited JSON" do
     connection = start_connection!()
-    path = write_json_events!()
-    source = QuackDB.Source.json(path, format: :newline_delimited)
+    source = json_events_source!()
 
     assert {:ok,
             %QuackDB.Result{
@@ -31,8 +31,7 @@ defmodule QuackDB.Integration.JSONAnalyticsTest do
 
   test "Ecto aggregates over JSON source helpers" do
     start_repo!()
-    path = write_json_events!()
-    source = QuackDB.Source.json(path, format: :newline_delimited)
+    source = json_events_source!()
 
     query =
       from(event in source,
@@ -53,8 +52,7 @@ defmodule QuackDB.Integration.JSONAnalyticsTest do
 
   test "Ecto fragments query nested JSON-derived columns" do
     start_repo!()
-    path = write_json_events!()
-    source = QuackDB.Source.json(path, format: :newline_delimited)
+    source = json_events_source!()
 
     query =
       from(event in source,
@@ -83,20 +81,11 @@ defmodule QuackDB.Integration.JSONAnalyticsTest do
              )
   end
 
-  defp write_json_events! do
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "quackdb_json_events_#{System.unique_integer([:positive])}.json"
-      )
-
-    File.write!(path, """
+  defp json_events_source! do
+    json_source!("""
     {"category":"a","name":"duck","score":10,"tags":["water","bird"],"payload":{"kind":"bird"}}
     {"category":"a","name":"goose","score":20,"tags":["angry"],"payload":{"kind":"bird"}}
     {"category":"b","name":"salmon","score":5,"tags":["water"],"payload":{"kind":"fish"}}
     """)
-
-    on_exit(fn -> File.rm(path) end)
-    path
   end
 end

@@ -3,22 +3,14 @@ defmodule QuackDB.Integration.EctoSourceAnalyticsTest do
 
   import Ecto.Query
   import QuackDB.QuackServerCase
+  import QuackDB.TestHelper
 
   @moduletag :integration
 
   test "Ecto aggregates over CSV source helpers against a real Quack server" do
     start_repo!()
 
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "quackdb_source_analytics_#{System.unique_integer([:positive])}.csv"
-      )
-
-    File.write!(path, "category,name,score\na,duck,10\na,goose,20\nb,swan,5\n")
-    on_exit(fn -> File.rm(path) end)
-
-    source = QuackDB.Source.csv(path, header: true)
+    source = csv_events_source!()
 
     query =
       from(event in source,
@@ -40,16 +32,7 @@ defmodule QuackDB.Integration.EctoSourceAnalyticsTest do
   test "Ecto windows over CSV source helpers against a real Quack server" do
     start_repo!()
 
-    path =
-      Path.join(
-        System.tmp_dir!(),
-        "quackdb_source_window_#{System.unique_integer([:positive])}.csv"
-      )
-
-    File.write!(path, "category,name,score\na,duck,10\na,goose,20\nb,swan,5\n")
-    on_exit(fn -> File.rm(path) end)
-
-    source = QuackDB.Source.csv(path, header: true)
+    source = csv_events_source!()
 
     query =
       from(event in source,
@@ -72,13 +55,10 @@ defmodule QuackDB.Integration.EctoSourceAnalyticsTest do
 
   test "Ecto fragments run DuckDB analytical functions against a real Quack server" do
     start_repo!()
-    table = "quackdb_analytics_fragments_#{System.unique_integer([:positive])}"
+    table = unique_table("quackdb_analytics_fragments")
 
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(category VARCHAR, score INTEGER)")
-
-    QuackDB.IntegrationRepo.query!(
-      "INSERT INTO #{table} VALUES ('a', 10), ('a', 20), ('a', 30), ('b', 5)"
-    )
+    create_table!(QuackDB.IntegrationRepo, table, category: :varchar, score: :integer)
+    insert_rows!(QuackDB.IntegrationRepo, table, [["a", 10], ["a", 20], ["a", 30], ["b", 5]])
 
     query =
       from(event in table,
@@ -96,5 +76,13 @@ defmodule QuackDB.Integration.EctoSourceAnalyticsTest do
              %{category: "a", median_score: 20.0, p50_score: 20.0, scores: [10, 20, 30]},
              %{category: "b", median_score: 5.0, p50_score: 5.0, scores: [5]}
            ] = QuackDB.IntegrationRepo.all(query)
+  end
+
+  defp csv_events_source! do
+    csv_source!("category,name,score
+a,duck,10
+a,goose,20
+b,swan,5
+")
   end
 end
