@@ -80,6 +80,7 @@ defmodule QuackDB.MixProject do
         "guides/explorer.md",
         "guides/sources.md",
         "guides/spatial.md",
+        "guides/full-text-search.md",
         "guides/telemetry.md",
         "examples/livebook_analytics.livemd",
         "docs/protocol/coverage.md",

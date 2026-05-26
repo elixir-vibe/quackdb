@@ -324,6 +324,28 @@ Keyword rows preserve append order and allow QuackDB to infer the column list fr
 
 Native append columns can be declared with scalar `QuackDB.Type` specs and nested specs such as `{:list, :varchar}`, `{:struct, [source: :varchar, count: :integer]}`, `{:array, :integer, 3}`, and `{:map, :varchar, :varchar}`. Temporal append values are normalized through Elixir's Calendar-aware `Date`, `Time`, `NaiveDateTime`, and `DateTime` conversion APIs before encoding.
 
+## Full-text search helpers
+
+DuckDB's `fts` extension can index text columns and expose BM25 ranking.
+
+```elixir
+alias QuackDB.FullTextSearch, as: FTS
+
+MyApp.AnalyticsRepo.query!(FTS.install())
+MyApp.AnalyticsRepo.query!(FTS.load())
+
+MyApp.AnalyticsRepo.query!(
+  FTS.create_index("documents", :id, [:title, :body], overwrite: true)
+)
+
+from doc in "documents",
+  where: match_bm25("fts_main_documents", doc.id, ^"duckdb analytics") > 0,
+  order_by: [desc: match_bm25("fts_main_documents", doc.id, ^"duckdb analytics")],
+  select: %{id: doc.id, title: doc.title}
+```
+
+See the [full-text search guide](full-text-search.md) for direct SQL and Ecto usage.
+
 ## Spatial helpers
 
 DuckDB's spatial extension can be loaded with SQL helpers. Use Ecto spatial helpers when you want to keep spatial expressions inside Ecto queries:

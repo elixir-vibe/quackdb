@@ -42,6 +42,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Schema lifecycle | `Repo.update/2` / `Repo.delete/2` | Ecto-native | yes | yes | covered |
 | Migrations | create/drop/alter table, indexes, references | Ecto migration DDL | yes | yes | partial |
 | Explain | `Ecto.Adapters.SQL.explain/4` | Ecto SQL | yes | yes | covered |
+| Full-text search | BM25 ranking and stemming | Ecto helper fragments | yes | yes | covered |
 | Advanced joins | semi/anti/asof/positional | Raw SQL | no | no | missing |
 | DuckDB select extensions | `* EXCLUDE`, `* REPLACE`, `COLUMNS(*)` | Raw SQL | no | no | missing |
 | Introspection | summarize/describe/pragma | Raw SQL | no | no | missing |

@@ -19,6 +19,7 @@ QuackDB is useful when your Elixir system needs DuckDB's analytical engine, but 
 - ingestion pipelines that append row, column, or dataframe batches;
 - Ecto-powered analytical queries and setup migrations;
 - spatial data exploration with DuckDB Spatial and optional Geo/WKB conversion;
+- full-text search over DuckDB tables with BM25 ranking;
 - querying Parquet, CSV, JSON, XLSX, Delta, and Iceberg sources from local paths or object stores.
 
 ## Highlights
@@ -31,6 +32,7 @@ QuackDB is useful when your Elixir system needs DuckDB's analytical engine, but 
 | Ecto | Adapter for raw SQL, analytical reads, full schema selects, inserts/upserts, update/delete, basic migrations, `Repo.explain`, transactions |
 | Sources | Helpers for DuckDB table functions: CSV, Parquet, JSON, XLSX, Delta, Iceberg, plus HTTP/S3/R2/GCS/Azure/Hugging Face secrets |
 | Spatial | DuckDB Spatial helpers, Ecto spatial fragments, WKB bytes, optional `%Geo.*{}` conversion |
+| Full-text search | DuckDB FTS extension helpers for index management, BM25 ranking, stemming, and Ecto search expressions |
 | Local server | Supervised DuckDB CLI process, shared client/server token setup, optional managed DuckDB binary download/cache |
 | Observability | Telemetry spans for query, append, and fetch operations, including client query IDs |
 | Protocol | Direct Quack decoding, streaming fetch continuation, scalar/nested type coverage, quack-ts fixture conformance |
@@ -221,6 +223,23 @@ QuackDB.query!(conn, [
 
 `GEOMETRY` values decode as WKB-compatible bytes for tested DuckDB Spatial values. `QuackDB.Geometry` can convert to/from `%Geo.*{}` structs when the optional `:geo` package is installed. See the [spatial guide](guides/spatial.md).
 
+## Full-text search
+
+DuckDB's FTS extension can index text columns and rank matches with BM25. QuackDB wraps the setup pragmas and search expressions:
+
+```elixir
+alias QuackDB.FullTextSearch, as: FTS
+
+QuackDB.query!(conn, FTS.install())
+QuackDB.query!(conn, FTS.load())
+QuackDB.query!(conn, FTS.create_index("documents", :id, [:title, :body], overwrite: true))
+
+score = FTS.match_bm25(~s|"id"|, "duckdb analytics", schema: FTS.schema_name("main.documents"))
+QuackDB.query!(conn, ["SELECT id, title, ", score, " AS score FROM documents ORDER BY score DESC"])
+```
+
+Use `QuackDB.Ecto.FullTextSearch` or `use QuackDB.Ecto` for Ecto query expressions. See the [full-text search guide](guides/full-text-search.md).
+
 ## Explorer, Table.Reader, and Livebook
 
 When Explorer is installed, QuackDB can move data between DuckDB and dataframes:
@@ -343,6 +362,7 @@ Useful docs:
 - [Explorer](guides/explorer.md)
 - [Sources](guides/sources.md)
 - [Spatial](guides/spatial.md)
+- [Full-text search](guides/full-text-search.md)
 - [Telemetry](guides/telemetry.md)
 - [Protocol coverage](docs/protocol/coverage.md)
 - [Ecto coverage](docs/ecto-analytical-coverage.md)

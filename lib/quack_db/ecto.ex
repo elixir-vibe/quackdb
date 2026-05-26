@@ -22,6 +22,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     Imports can be disabled individually:
 
         use QuackDB.Ecto, spatial: false
+        use QuackDB.Ecto, full_text_search: false
         use QuackDB.Ecto, analytics: false
         use QuackDB.Ecto, query: false
     """
@@ -31,6 +32,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       query? = Keyword.get(options, :query, true)
       analytics? = Keyword.get(options, :analytics, true)
       spatial? = Keyword.get(options, :spatial, true)
+      full_text_search? = Keyword.get(options, :full_text_search, true)
 
       imports = []
       imports = if query?, do: [quote(do: import(Ecto.Query)) | imports], else: imports
@@ -40,6 +42,11 @@ if Code.ensure_loaded?(Ecto.Query) do
 
       imports =
         if spatial?, do: [quote(do: import(QuackDB.Ecto.Spatial)) | imports], else: imports
+
+      imports =
+        if full_text_search?,
+          do: [quote(do: import(QuackDB.Ecto.FullTextSearch)) | imports],
+          else: imports
 
       quote do
         (unquote_splicing(Enum.reverse(imports)))

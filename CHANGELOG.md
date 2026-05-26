@@ -32,6 +32,7 @@
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 - Added BIGNUM protocol fixture coverage for zero, positive, and negative large values.
 - Added an optional internal `:fsst` bridge for future Quack FSST payload decoding once DuckDB exposes compressed FSST vectors over Quack.
+- Added `QuackDB.FullTextSearch` and `QuackDB.Ecto.FullTextSearch` helpers for DuckDB FTS indexes, BM25 search ranking, stemming, and Ecto search expressions.
 
 ### Fixed
 
