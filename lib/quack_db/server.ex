@@ -7,10 +7,14 @@ defmodule QuackDB.Server do
   protocol. It is not an embedded DuckDB driver and is not required when your
   Quack server runs elsewhere.
 
-      children = [
-        {QuackDB.Server, name: MyApp.DuckDB, token: "super_secret"},
-        {QuackDB, name: MyApp.QuackDB, uri: "http://[::1]:9494", token: "super_secret"}
-      ]
+      children =
+        QuackDB.Server.child_specs(
+          server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
+          client: [name: MyApp.QuackDB, pool_size: 5]
+        )
+
+  `child_specs/1` generates one shared random token when neither side provides
+  `:token`, then injects the same token and URI into the server and client specs.
 
   By default the server runs DuckDB directly under MuonTrap with `-interactive`
   so the process stays alive after `quack_serve/2` starts:

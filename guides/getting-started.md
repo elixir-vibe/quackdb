@@ -42,19 +42,14 @@ mix deps.get
 For local development, QuackDB can supervise DuckDB's external CLI process for you:
 
 ```elixir
-children = [
-  {QuackDB.Server,
-   name: MyApp.DuckDB,
-   endpoint: "quack:localhost:9494",
-   uri: "http://[::1]:9494",
-   token: "super_secret"},
-
-  {QuackDB,
-   name: MyApp.QuackDB,
-   uri: "http://[::1]:9494",
-   token: "super_secret"}
-]
+children =
+  QuackDB.Server.child_specs(
+    server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
+    client: [name: MyApp.QuackDB]
+  )
 ```
+
+`child_specs/1` generates one shared random token and injects the matching URI/token into both child specs. Pass `:token` on either side when you want to provide it yourself.
 
 Or start DuckDB manually with the `quack` extension loaded:
 
@@ -504,18 +499,11 @@ QuackDB.query(MyApp.QuackDB, "SELECT 1", [], timeout: 10_000)
 For local development, tests, or notebooks, QuackDB can also supervise a local DuckDB Quack server process with MuonTrap:
 
 ```elixir
-children = [
-  {QuackDB.Server,
-   name: MyApp.DuckDB,
-   endpoint: "quack:localhost:9494",
-   uri: "http://[::1]:9494",
-   token: System.fetch_env!("QUACKDB_TOKEN")},
-
-  {QuackDB,
-   name: MyApp.QuackDB,
-   uri: "http://[::1]:9494",
-   token: System.fetch_env!("QUACKDB_TOKEN")}
-]
+children =
+  QuackDB.Server.child_specs(
+    server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
+    client: [name: MyApp.QuackDB, pool_size: 5]
+  )
 ```
 
 `QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers.
