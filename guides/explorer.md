@@ -12,8 +12,10 @@ The Explorer integration is optional. Add Explorer when you want dataframe helpe
 ## Query into a dataframe
 
 ```elixir
+alias QuackDB.Explorer, as: QuackExplorer
+
 {:ok, df} =
-  QuackDB.Explorer.dataframe(conn, """
+  QuackExplorer.dataframe(conn, """
   SELECT category, avg(score) AS avg_score
   FROM events
   GROUP BY category
@@ -26,25 +28,30 @@ The Explorer integration is optional. Add Explorer when you want dataframe helpe
 ```elixir
 import Ecto.Query
 
+alias QuackDB.Explorer, as: QuackExplorer
+
 query =
   from event in Event,
     group_by: event.category,
     select: %{category: event.category, avg_score: avg(event.score)}
 
-summary = QuackDB.Explorer.dataframe!(conn, query)
+summary = QuackExplorer.dataframe!(conn, query)
 ```
 
 ## Append a dataframe
 
 ```elixir
+alias Explorer.DataFrame
+alias QuackDB.Explorer, as: QuackExplorer
+
 df =
-  Explorer.DataFrame.new(
+  DataFrame.new(
     id: [1, 2, 3],
     category: ["alpha", "alpha", "beta"],
     score: [10.0, 20.0, 15.0]
   )
 
-QuackDB.Explorer.insert_dataframe!(conn, "events", df, batch_size: 10_000)
+QuackExplorer.insert_dataframe!(conn, "events", df, batch_size: 10_000)
 ```
 
 This uses `QuackDB.insert_columns/4` internally, preserving Explorer's columnar shape instead of converting the dataframe into row maps.

@@ -5,7 +5,9 @@ QuackDB includes helpers for DuckDB's spatial extension and optional conversion 
 ## Load DuckDB spatial
 
 ```elixir
-QuackDB.query!(conn, QuackDB.Spatial.load())
+alias QuackDB.Spatial
+
+QuackDB.query!(conn, Spatial.load())
 ```
 
 For a supervised local demo server, use `QuackDB.Server` and then load the extension on the client connection.
@@ -54,8 +56,10 @@ Add the optional `:geo` package when you want Elixir geometry structs:
 Then convert decoded WKB bytes:
 
 ```elixir
-geo = QuackDB.Geometry.to_geo!(wkb)
-wkb = QuackDB.Geometry.from_geo!(geo)
+alias QuackDB.Geometry
+
+geo = Geometry.to_geo!(wkb)
+wkb = Geometry.from_geo!(geo)
 ```
 
 `%Geo.*{}` structs can also be passed as SQL/Ecto parameters when `:geo` is available.

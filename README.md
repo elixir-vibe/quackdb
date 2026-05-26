@@ -164,14 +164,16 @@ QuackDB provides a few layers that can be used independently:
 A few common snippets:
 
 ```elixir
+alias QuackDB.{Secret, Source, SQL}
+
 # Source helpers
-source = QuackDB.Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
+source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
 QuackDB.query!(conn, ["SELECT category, count(*) FROM ", source, " GROUP BY category"])
 
 # DuckDB extensions and secrets
-QuackDB.query!(conn, QuackDB.SQL.install(:httpfs))
-QuackDB.query!(conn, QuackDB.SQL.load(:httpfs))
-QuackDB.query!(conn, QuackDB.Secret.s3(provider: :credential_chain))
+QuackDB.query!(conn, SQL.install(:httpfs))
+QuackDB.query!(conn, SQL.load(:httpfs))
+QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
 
 # Native append
 QuackDB.insert_rows!(conn, "events", [

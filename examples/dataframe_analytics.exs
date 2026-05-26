@@ -38,13 +38,15 @@ end
 alias Explorer.DataFrame
 alias ExplorerRoundtrip.Event
 alias ExplorerRoundtrip.Queries
+alias QuackDB.DDL
+alias QuackDB.Explorer, as: QuackExplorer
 
 %{conn: conn} = QuackDBDemo.start_connection()
 
 table = Event.__schema__(:source)
 
-QuackDB.query!(conn, QuackDB.DDL.drop_table(table, if_exists: true))
-QuackDB.query!(conn, QuackDB.DDL.create_table(Event, temporary: true))
+QuackDB.query!(conn, DDL.drop_table(table, if_exists: true))
+QuackDB.query!(conn, DDL.create_table(Event, temporary: true))
 
 df =
   DataFrame.new(
@@ -53,8 +55,8 @@ df =
     score: [10.0, 20.0, 15.0, 25.0]
   )
 
-QuackDB.Explorer.insert_dataframe!(conn, table, df, batch_size: 2)
+QuackExplorer.insert_dataframe!(conn, table, df, batch_size: 2)
 
-summary = QuackDB.Explorer.dataframe!(conn, Queries.summary())
+summary = QuackExplorer.dataframe!(conn, Queries.summary())
 
 IO.inspect(summary, label: "summary dataframe")

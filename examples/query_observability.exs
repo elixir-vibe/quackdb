@@ -38,13 +38,15 @@ end
   nil
 )
 
+alias QuackDB.DDL
+
 %{conn: conn} = QuackDBDemo.start_connection()
 
 table = "telemetry_events_#{System.unique_integer([:positive])}"
 
 QuackDB.query!(
   conn,
-  QuackDB.DDL.create_table(table, [id: :integer, name: :varchar], temporary: true)
+  DDL.create_table(table, [id: :integer, name: :varchar], temporary: true)
 )
 
 QuackDB.insert_rows!(conn, table, [

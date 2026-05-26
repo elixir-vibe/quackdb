@@ -139,8 +139,10 @@ result.rows
 DuckDB can scan files, object stores, and lakehouse table formats directly. `QuackDB.Source` builds safe table-function fragments for raw SQL:
 
 ```elixir
+alias QuackDB.Source
+
 source =
-  QuackDB.Source.parquet("s3://bucket/events/*.parquet",
+  Source.parquet("s3://bucket/events/*.parquet",
     hive_partitioning: true,
     union_by_name: true
   )
@@ -160,22 +162,26 @@ Available helpers include:
 Options are emitted as DuckDB named parameters, and paths/options are formatted as SQL literals instead of interpolated directly:
 
 ```elixir
-QuackDB.Source.csv("events.csv", header: true, columns: %{id: "INTEGER", name: "VARCHAR"})
+Source.csv("events.csv", header: true, columns: %{id: "INTEGER", name: "VARCHAR"})
 #=> "read_csv('events.csv', header = TRUE, columns = {'id': 'INTEGER', 'name': 'VARCHAR'})"
 ```
 
 Use `QuackDB.SQL.install/1`, `QuackDB.SQL.load/1`, and `QuackDB.Secret` to configure remote filesystems:
 
 ```elixir
-QuackDB.query!(conn, QuackDB.SQL.install(:httpfs))
-QuackDB.query!(conn, QuackDB.SQL.load(:httpfs))
-QuackDB.query!(conn, QuackDB.Secret.s3(provider: :credential_chain))
+alias QuackDB.{Secret, SQL}
+
+QuackDB.query!(conn, SQL.install(:httpfs))
+QuackDB.query!(conn, SQL.load(:httpfs))
+QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
 ```
 
 The same fragments can be used as Ecto sources for read-oriented analytical queries:
 
 ```elixir
-source = QuackDB.Source.csv("events.csv", header: true)
+alias QuackDB.Source
+
+source = Source.csv("events.csv", header: true)
 
 MyApp.AnalyticsRepo.all(
   from event in source,
@@ -255,21 +261,28 @@ This is not Arrow IPC yet, but it exposes a column-oriented shape that can back 
 When `:explorer` is available, QuackDB exposes optional helpers for building `Explorer.DataFrame` values from query results:
 
 ```elixir
+alias QuackDB.Explorer, as: QuackExplorer
+
 {:ok, df} =
-  QuackDB.Explorer.dataframe(conn, "SELECT id, name FROM events ORDER BY id")
+  QuackExplorer.dataframe(conn, "SELECT id, name FROM events ORDER BY id")
 ```
 
 You can also pass Ecto queries directly, including source helpers:
 
 ```elixir
-source = QuackDB.Source.csv("events.csv", header: true)
+import Ecto.Query
+
+alias QuackDB.Explorer, as: QuackExplorer
+alias QuackDB.Source
+
+source = Source.csv("events.csv", header: true)
 
 query =
   from event in source,
     where: event.id > ^1,
     select: %{id: event.id, name: event.name}
 
-{:ok, df} = QuackDB.Explorer.dataframe(conn, query)
+{:ok, df} = QuackExplorer.dataframe(conn, query)
 ```
 
 The Explorer integration materializes query results in Elixir before constructing a dataframe. It is useful for interactive analysis and downstream Explorer pipelines, but it is not a zero-copy Arrow IPC path yet.
@@ -277,17 +290,21 @@ The Explorer integration materializes query results in Elixir before constructin
 Explorer dataframes can also be appended through Quack's native column-oriented append path:
 
 ```elixir
-QuackDB.Explorer.insert_dataframe!(conn, "events_copy", df, batch_size: 10_000)
+alias QuackDB.Explorer, as: QuackExplorer
+
+QuackExplorer.insert_dataframe!(conn, "events_copy", df, batch_size: 10_000)
 ```
 
 You can also convert existing results:
 
 ```elixir
+alias QuackDB.Explorer, as: QuackExplorer
+
 {:ok, result} = QuackDB.query(conn, "SELECT 1 AS id, 'duck' AS name")
-{:ok, df} = QuackDB.Explorer.from_result(result)
+{:ok, df} = QuackExplorer.from_result(result)
 
 {:ok, columns} = QuackDB.columnar(conn, "SELECT 1 AS id, 'duck' AS name")
-{:ok, df} = QuackDB.Explorer.from_columns(columns)
+{:ok, df} = QuackExplorer.from_columns(columns)
 ```
 
 ## Work with command results
