@@ -54,15 +54,19 @@ defmodule QuackDB.Ecto.AnalyticsTest do
              ~S[SELECT time_bucket(?::INTERVAL, q0."occurred_at", ?) AS "duration_interval", time_bucket('1 hour'::INTERVAL, q0."occurred_at", ?) AS "string_interval", time_bucket('1 hour'::INTERVAL, q0."occurred_at", ?) AS "string_offset" FROM "events" AS q0]
   end
 
-  test "builds Ecto access JSON path expressions" do
+  test "builds Ecto access JSON path expressions with casts" do
     query =
       from(event in "events",
-        where: event.payload["user"]["name"] == "duck",
-        select: %{name: event.payload["user"]["name"]}
+        where:
+          event.payload["user"]["name"] == "duck" and type(event.payload["score"], :integer) > 10,
+        select: %{
+          name: event.payload["user"]["name"],
+          active: type(event.payload["active"], :boolean)
+        }
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT json_extract_string(q0."payload", '$.user.name') AS "name" FROM "events" AS q0 WHERE (json_extract_string(q0."payload", '$.user.name') = 'duck')]
+             ~S[SELECT json_extract_string(q0."payload", '$.user.name') AS "name", CAST(json_extract_string(q0."payload", '$.active') AS BOOLEAN) AS "active" FROM "events" AS q0 WHERE ((json_extract_string(q0."payload", '$.user.name') = 'duck') AND (CAST(json_extract_string(q0."payload", '$.score') AS INTEGER) > 10))]
   end
 
   test "builds JSON path-list expressions" do

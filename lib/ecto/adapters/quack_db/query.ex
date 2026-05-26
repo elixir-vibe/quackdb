@@ -492,7 +492,9 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp expr({:selected_as, _meta, [expression, name]}) when is_atom(name),
       do: [expr(expression), " AS ", quote_identifier(name)]
 
-    defp expr({:type, _meta, [expression, _type]}), do: expr(expression)
+    defp expr({:type, _meta, [expression, type]}) do
+      ["CAST(", expr(expression), " AS ", ecto_cast_type!(type), ")"]
+    end
 
     defp expr({op, _meta, [left, right]}) when op in [:==, :!=, :>, :<, :>=, :<=] do
       ["(", expr(left), " ", operator(op), " ", expr(right), ")"]
@@ -528,7 +530,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr({:identifier, _meta, [value]}) when is_binary(value), do: quote_identifier(value)
     defp expr({:^, _meta, [_index]}), do: "?"
-    defp expr(%Ecto.Query.Tagged{value: value}), do: literal(value)
+    defp expr(%Ecto.Query.Tagged{value: value, type: type}), do: typed_expr(value, type)
     defp expr(value) when is_binary(value), do: literal(value)
     defp expr(value) when is_integer(value) or is_float(value), do: to_string(value)
     defp expr(value) when is_boolean(value), do: if(value, do: "TRUE", else: "FALSE")
@@ -580,6 +582,10 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp in_expr(expression), do: expr(expression)
 
+    defp typed_expr(value, {_source_index, _field}), do: expr(value)
+    defp typed_expr({:^, _meta, [_index]}, type), do: ["CAST(? AS ", ecto_cast_type!(type), ")"]
+    defp typed_expr(value, type), do: ["CAST(", expr(value), " AS ", ecto_cast_type!(type), ")"]
+
     defp literal(value) when is_binary(value), do: ["'", String.replace(value, "'", "''"), "'"]
     defp literal(%Date{} = value), do: ["DATE '", Date.to_iso8601(value), "'"]
 
@@ -593,6 +599,51 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp operator(:==), do: "="
     defp operator(:!=), do: "<>"
     defp operator(op), do: Atom.to_string(op)
+
+    defp ecto_cast_type!(:id), do: QuackDB.Type.to_sql(:bigint)
+    defp ecto_cast_type!(:binary_id), do: QuackDB.Type.to_sql(:uuid)
+    defp ecto_cast_type!(:integer), do: QuackDB.Type.to_sql(:integer)
+    defp ecto_cast_type!(:float), do: QuackDB.Type.to_sql(:double)
+    defp ecto_cast_type!(:boolean), do: QuackDB.Type.to_sql(:boolean)
+    defp ecto_cast_type!(:string), do: QuackDB.Type.to_sql(:varchar)
+    defp ecto_cast_type!(:binary), do: QuackDB.Type.to_sql(:blob)
+    defp ecto_cast_type!(:decimal), do: QuackDB.Type.to_sql(:decimal)
+    defp ecto_cast_type!(:date), do: QuackDB.Type.to_sql(:date)
+    defp ecto_cast_type!(:time), do: QuackDB.Type.to_sql(:time)
+    defp ecto_cast_type!(:time_usec), do: QuackDB.Type.to_sql(:time)
+    defp ecto_cast_type!(:naive_datetime), do: QuackDB.Type.to_sql(:timestamp)
+    defp ecto_cast_type!(:naive_datetime_usec), do: QuackDB.Type.to_sql(:timestamp)
+    defp ecto_cast_type!(:utc_datetime), do: QuackDB.Type.to_sql(:timestamptz)
+    defp ecto_cast_type!(:utc_datetime_usec), do: QuackDB.Type.to_sql(:timestamptz)
+    defp ecto_cast_type!(:map), do: QuackDB.Type.to_sql(:json)
+
+    defp ecto_cast_type!({:array, type}),
+      do: QuackDB.Type.to_sql({:list, ecto_cast_type_spec!(type)})
+
+    defp ecto_cast_type!(type) do
+      unsupported!(:expression, "unsupported Ecto cast type: #{inspect(type)}")
+    end
+
+    defp ecto_cast_type_spec!(:id), do: :bigint
+    defp ecto_cast_type_spec!(:binary_id), do: :uuid
+    defp ecto_cast_type_spec!(:integer), do: :integer
+    defp ecto_cast_type_spec!(:float), do: :double
+    defp ecto_cast_type_spec!(:boolean), do: :boolean
+    defp ecto_cast_type_spec!(:string), do: :varchar
+    defp ecto_cast_type_spec!(:binary), do: :blob
+    defp ecto_cast_type_spec!(:decimal), do: :decimal
+    defp ecto_cast_type_spec!(:date), do: :date
+    defp ecto_cast_type_spec!(:time), do: :time
+    defp ecto_cast_type_spec!(:time_usec), do: :time
+    defp ecto_cast_type_spec!(:naive_datetime), do: :timestamp
+    defp ecto_cast_type_spec!(:naive_datetime_usec), do: :timestamp
+    defp ecto_cast_type_spec!(:utc_datetime), do: :timestamptz
+    defp ecto_cast_type_spec!(:utc_datetime_usec), do: :timestamptz
+    defp ecto_cast_type_spec!(:map), do: :json
+    defp ecto_cast_type_spec!({:array, type}), do: {:list, ecto_cast_type_spec!(type)}
+
+    defp ecto_cast_type_spec!(type),
+      do: unsupported!(:expression, "unsupported Ecto cast type: #{inspect(type)}")
 
     defp order_direction(:asc), do: "ASC"
     defp order_direction(:desc), do: "DESC"

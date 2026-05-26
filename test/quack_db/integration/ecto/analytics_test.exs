@@ -69,8 +69,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
     create_table!(QuackDB.IntegrationRepo, table, payload: :json, occurred_at: :timestamp)
 
     insert_rows!(QuackDB.IntegrationRepo, table, [
-      [~s({"name":"duck","kind":"bird","score":10}), ~N[2024-01-02 03:04:05]],
-      [~s({"name":"salmon","kind":"fish","score":5}), ~N[2024-01-03 04:05:06]]
+      [~s({"name":"duck","kind":"bird","score":10,"active":true}), ~N[2024-01-02 03:04:05]],
+      [~s({"name":"salmon","kind":"fish","score":5,"active":false}), ~N[2024-01-03 04:05:06]]
     ])
 
     interval = Duration.new!(minute: 15)
@@ -82,6 +82,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
         where: json_extract_string(event.payload, "$.kind") == "bird",
         select: %{
           name: event.payload["name"],
+          high_score: type(event.payload["score"], :integer) > 5,
+          active: type(event.payload["active"], :boolean),
           score: json_extract(event.payload, [:score]),
           has_name: json_exists(event.payload, [:name]),
           contains_name: json_contains(event.payload, ^{:json, %{name: "duck"}}),
@@ -96,6 +98,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
     assert [
              %{
                name: "duck",
+               high_score: true,
+               active: true,
                score: "10",
                has_name: true,
                contains_name: true,

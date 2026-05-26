@@ -499,9 +499,10 @@ use QuackDB.Ecto
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
-    where: event.payload["user"]["name"] == "duck" and json_exists(event.payload, [:user, :name]),
+    where: event.payload["user"]["name"] == "duck" and type(event.payload["score"], :integer) > 10,
     select: %{
       name: event.payload["user"]["name"],
+      active: type(event.payload["active"], :boolean),
       score: json_extract(event.payload, [:scores, 0]),
       has_name: json_exists(event.payload, [:user, :name])
     }
