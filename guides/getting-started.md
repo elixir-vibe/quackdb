@@ -502,7 +502,8 @@ MyApp.AnalyticsRepo.all(
     where: event.payload["user"]["name"] == "duck" and json_exists(event.payload, [:user, :name]),
     select: %{
       name: event.payload["user"]["name"],
-      score: json_extract(event.payload, [:scores, 0])
+      score: json_extract(event.payload, [:scores, 0]),
+      has_name: json_exists(event.payload, [:user, :name])
     }
 )
 ```

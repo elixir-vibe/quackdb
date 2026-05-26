@@ -56,7 +56,7 @@ File.stream!("events.ndjson")
 |> QuackDB.insert_stream!(conn, "events", chunk_every: 10_000)
 ```
 
-Any `Table.Reader`-compatible data can also be appended through QuackDB's native column append path:
+Any `Table.Reader`-compatible data can also be appended through QuackDB's native column append path. The name follows the `Table.Reader` protocol; it accepts tabular inputs, not a database table name as input data.
 
 ```elixir
 QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
