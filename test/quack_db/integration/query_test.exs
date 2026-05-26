@@ -75,13 +75,19 @@ defmodule QuackDB.Integration.QueryTest do
     table = "quackdb_command_#{System.unique_integer([:positive])}"
 
     assert {:ok, %QuackDB.Result{command: :create, columns: nil, rows: nil, num_rows: 0} = create} =
-             QuackDB.query(connection, "CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
+             QuackDB.query(
+               connection,
+               QuackDB.DDL.create_table(table, [id: :integer, name: :varchar], temporary: true)
+             )
 
     assert create.metadata[:duckdb_columns] == ["Count"]
     assert create.metadata[:duckdb_rows] == []
 
     assert {:ok, %QuackDB.Result{command: :insert, columns: nil, rows: nil, num_rows: 2} = insert} =
-             QuackDB.query(connection, "INSERT INTO #{table} VALUES (1, 'duck'), (2, 'goose')")
+             QuackDB.query(
+               connection,
+               QuackDB.DML.insert_into(table, [[id: 1, name: "duck"], [id: 2, name: "goose"]])
+             )
 
     assert insert.metadata[:duckdb_rows] == [[2]]
 

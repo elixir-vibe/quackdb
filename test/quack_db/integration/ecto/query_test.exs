@@ -30,15 +30,19 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     table = unique_table("quackdb_ecto_spatial")
 
     QuackDB.IntegrationRepo.query!(QuackDB.Spatial.load())
-    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, geom GEOMETRY)")
+
+    QuackDB.IntegrationRepo.query!(
+      QuackDB.DDL.create_table(table, [id: :integer, geom: :geometry], temporary: true)
+    )
 
     point = %Geo.Point{coordinates: {1.0, 2.0}, srid: nil}
 
-    QuackDB.IntegrationRepo.query!([
-      "INSERT INTO #{table} VALUES (1, ",
-      QuackDB.Spatial.geom_from_wkb(QuackDB.Geometry.from_geo!(point)),
-      ")"
-    ])
+    QuackDB.IntegrationRepo.query!(
+      QuackDB.DML.insert_into(table,
+        id: 1,
+        geom: {:expr, QuackDB.Spatial.geom_from_wkb(QuackDB.Geometry.from_geo!(point))}
+      )
+    )
 
     query =
       from(place in table,

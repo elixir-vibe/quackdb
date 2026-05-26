@@ -11,8 +11,8 @@ defmodule QuackDB.Integration.TransactionTest do
 
     assert {:error, :rolled_back} =
              DBConnection.transaction(connection, fn tx ->
-               QuackDB.query!(tx, "CREATE TEMP TABLE #{table}(v INTEGER)")
-               QuackDB.query!(tx, "INSERT INTO #{table} VALUES (1)")
+               QuackDB.query!(tx, QuackDB.DDL.create_table(table, [v: :integer], temporary: true))
+               QuackDB.query!(tx, QuackDB.DML.insert_into(table, v: 1))
                DBConnection.rollback(tx, :rolled_back)
              end)
 
