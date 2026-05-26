@@ -2,8 +2,10 @@ defmodule QuackDB.DML do
   @moduledoc """
   Small DuckDB DML SQL builders.
 
-  These helpers return SQL iodata for common insert statements while still
-  allowing DuckDB expressions where needed.
+  These helpers return SQL iodata for setup and example insert statements while
+  still allowing DuckDB expressions where needed. For large batches, prefer
+  `QuackDB.insert_rows/4`, `QuackDB.insert_columns/4`, or
+  `QuackDB.Explorer.insert_dataframe/4`.
   """
 
   @type value :: QuackDB.SQL.parameter() | {:expr, iodata()}
@@ -36,8 +38,34 @@ defmodule QuackDB.DML do
 
   defp columns!([]), do: raise(ArgumentError, "expected at least one insert row")
 
-  defp columns!([row | _rows]) when is_list(row), do: Keyword.keys(row)
-  defp columns!([row | _rows]) when is_map(row), do: Map.keys(row)
+  defp columns!([row | rows]) when is_list(row) do
+    columns = Keyword.keys(row)
+    validate_columns!(columns, rows)
+  end
+
+  defp columns!([row | rows]) when is_map(row) do
+    columns = Map.keys(row)
+    validate_columns!(columns, rows)
+  end
+
+  defp validate_columns!([], _rows),
+    do: raise(ArgumentError, "expected at least one insert column")
+
+  defp validate_columns!(columns, rows) do
+    Enum.each(rows, fn row ->
+      row_columns = row_columns(row)
+
+      if row_columns != columns do
+        raise ArgumentError,
+              "insert rows must have identical columns, expected #{inspect(columns)}, got #{inspect(row_columns)}"
+      end
+    end)
+
+    columns
+  end
+
+  defp row_columns(row) when is_list(row), do: Keyword.keys(row)
+  defp row_columns(row) when is_map(row), do: Map.keys(row)
 
   defp row_values(row, columns) do
     ["(", columns |> Enum.map(&value(row, &1)) |> Enum.intersperse(", "), ")"]

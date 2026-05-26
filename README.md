@@ -28,6 +28,22 @@ QuackDB currently focuses on the remote protocol and `DBConnection` client core.
 
 Raw SQL can use the full DuckDB surface. Ecto query generation is growing toward analytical DuckDB usage while keeping unsupported features explicit.
 
+## How QuackDB fits together
+
+```text
+Elixir application
+  ├─ QuackDB / DBConnection query and stream APIs
+  ├─ Ecto adapter, analytics helpers, and spatial query DSL
+  ├─ Explorer dataframe helpers and native dataframe append
+  ├─ Table.Reader support for Livebook and Table-aware tooling
+  ├─ Geo bridge for DuckDB GEOMETRY WKB bytes
+  ├─ Telemetry spans for query, append, and fetch operations
+  └─ QuackDB.Server for local DuckDB supervision in demos/tests
+        │
+        ▼
+DuckDB + quack extension
+```
+
 ## Why QuackDB?
 
 Use QuackDB when you want DuckDB's analytical SQL from Elixir while keeping DuckDB in a separate process.

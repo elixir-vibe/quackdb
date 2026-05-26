@@ -31,7 +31,7 @@ elixir /path/to/quackdb/examples/dataframe_analytics.exs
 
 ## Append benchmark
 
-[`append_benchmark.exs`](append_benchmark.exs) compares SQL inserts, native row append, native column append, Explorer dataframe append, Ecto SQL `insert_all`, and Ecto native append.
+[`append_benchmark.exs`](append_benchmark.exs) compares SQL inserts, native row append, native column append, Explorer dataframe append, Ecto SQL `insert_all`, and Ecto native append. Tiny row counts mostly measure round-trip overhead; use larger `ROWS` values for meaningful append comparisons.
 
 ```sh
 cd /tmp

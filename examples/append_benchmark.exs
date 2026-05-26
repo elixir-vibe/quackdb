@@ -79,7 +79,7 @@ defmodule AppendBenchmark do
   defp connection_token, do: System.get_env("QUACKDB_TOKEN", "super_secret")
 end
 
-count = System.get_env("ROWS", "1000") |> String.to_integer()
+count = System.get_env("ROWS", "10000") |> String.to_integer()
 batch_size = System.get_env("BATCH_SIZE", "1000") |> String.to_integer()
 %{conn: conn} = AppendBenchmark.setup()
 table = AppendBenchmark.Event.__schema__(:source)
