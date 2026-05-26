@@ -2,21 +2,9 @@ Mix.install([
   {:quackdb, path: Path.expand("..", __DIR__)}
 ])
 
+Code.require_file("support/quackdb_demo.exs", __DIR__)
+
 defmodule QuackDBTelemetryObserver do
-  def connect do
-    case System.get_env("QUACKDB_URI") do
-      nil ->
-        token = "super_secret"
-        {:ok, server} = QuackDB.Server.start_link(token: token)
-        {:ok, conn} = QuackDB.start_link(uri: QuackDB.Server.uri(server), token: token)
-        conn
-
-      uri ->
-        {:ok, conn} = QuackDB.start_link(uri: uri, token: System.get_env("QUACKDB_TOKEN", ""))
-        conn
-    end
-  end
-
   def handle_event([:quackdb, :query, :stop], measurements, metadata, _config) do
     IO.puts(
       "query #{inspect(metadata.command)} rows=#{metadata.rows} duration=#{format_native(measurements.duration)}ms"
@@ -50,7 +38,7 @@ end
   nil
 )
 
-conn = QuackDBTelemetryObserver.connect()
+%{conn: conn} = QuackDBDemo.start_connection()
 
 table = "telemetry_events_#{System.unique_integer([:positive])}"
 

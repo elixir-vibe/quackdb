@@ -28,18 +28,11 @@ defmodule SpatialWMS.Places do
       )
     )
 
-    Enum.each(seed_places(), fn {id, name, {lon, lat}} ->
-      Repo.query!(
-        [
-          "INSERT INTO ",
-          QuackDB.Type.quote_identifier(@table),
-          " VALUES (?, ?, ",
-          Spatial.point(lon, lat),
-          ")"
-        ],
-        [id, name]
-      )
+    seed_places()
+    |> Enum.map(fn {id, name, {lon, lat}} ->
+      [id: id, name: name, geom: {:expr, Spatial.point(lon, lat)}]
     end)
+    |> then(&Repo.query!(QuackDB.DML.insert_into(@table, &1)))
   end
 
   def by_bbox({min_x, min_y, max_x, max_y}) do

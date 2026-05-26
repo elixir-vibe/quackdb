@@ -48,6 +48,7 @@ The `examples/` directory includes runnable scripts and a Livebook notebook:
 - `examples/explorer_roundtrip.exs` — append an `Explorer.DataFrame` through native column append and query it back as a dataframe.
 - `examples/livebook_analytics.livemd` — an interactive analytics notebook with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
 - `examples/spatial_wms/` — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+- `examples/support/quackdb_demo.exs` — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
 
 Run scripts from outside the Mix project so `Mix.install/2` can load the local package. Examples start a local DuckDB Quack server with `QuackDB.Server` unless `QUACKDB_URI` is set:
 
@@ -551,13 +552,31 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` statements:
+For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` statements. It can also derive columns from an Ecto schema:
+
+```elixir
+defmodule Event do
+  use Ecto.Schema
+
+  @primary_key false
+  schema "events" do
+    field :id, :integer
+    field :category, :string
+    field :score, :float
+  end
+end
+
+MyApp.AnalyticsRepo.query!(QuackDB.DDL.create_table(Event, temporary: true))
+```
+
+For expression-heavy inserts in setup code, `QuackDB.DML.insert_into/2` keeps identifiers and literals quoted while allowing explicit SQL expressions:
 
 ```elixir
 MyApp.AnalyticsRepo.query!(
-  QuackDB.DDL.create_table("events",
-    [payload: :json, occurred_at: :timestamp],
-    temporary: true
+  QuackDB.DML.insert_into("places",
+    id: 1,
+    name: "London",
+    geom: {:expr, QuackDB.Spatial.point(-0.1276, 51.5072)}
   )
 )
 ```

@@ -11,6 +11,7 @@
 - Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.
 - Added `:telemetry` events for query, append, and fetch operations, including custom prefixes, metadata options, optional params, and append batch counts.
 - Added optional `Table.Reader` implementations for `QuackDB.Result` and `QuackDB.Columns`.
+- Added schema-driven `QuackDB.DDL.create_table/2` and `QuackDB.DML.insert_into/2` setup helpers.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

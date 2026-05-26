@@ -4,6 +4,8 @@ Mix.install([
   {:explorer, "~> 0.11"}
 ])
 
+Code.require_file("support/quackdb_demo.exs", __DIR__)
+
 defmodule ExplorerRoundtrip.Event do
   use Ecto.Schema
 
@@ -12,20 +14,6 @@ defmodule ExplorerRoundtrip.Event do
     field(:id, :integer)
     field(:category, :string)
     field(:score, :float)
-  end
-end
-
-defmodule ExplorerRoundtrip.Connection do
-  def start do
-    case System.get_env("QUACKDB_URI") do
-      nil ->
-        token = "super_secret"
-        {:ok, server} = QuackDB.Server.start_link(token: token)
-        QuackDB.start_link(uri: QuackDB.Server.uri(server), token: token)
-
-      uri ->
-        QuackDB.start_link(uri: uri, token: System.get_env("QUACKDB_TOKEN", ""))
-    end
   end
 end
 
@@ -48,11 +36,10 @@ defmodule ExplorerRoundtrip.Queries do
 end
 
 alias Explorer.DataFrame
-alias ExplorerRoundtrip.Connection
 alias ExplorerRoundtrip.Event
 alias ExplorerRoundtrip.Queries
 
-{:ok, conn} = Connection.start()
+%{conn: conn} = QuackDBDemo.start_connection()
 
 table = Event.__schema__(:source)
 
