@@ -17,6 +17,7 @@ defmodule SpatialWMS.Places.DuckDB do
   def setup! do
     Repo.query!(Spatial.load())
     Repo.query!(DDL.drop_table(@table, if_exists: true))
+    Repo.query!(DDL.drop_table("schema_migrations", if_exists: true))
     Migrator.up(Repo, @migration_version, CreatePlaces, log: false)
     Seeds.load!()
   end
