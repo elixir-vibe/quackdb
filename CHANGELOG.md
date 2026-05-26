@@ -5,6 +5,7 @@
 ### Added
 
 - Added `QuackDB.insert_columns/4` / `insert_columns!/4` for column-oriented native append batches.
+- Added `QuackDB.Explorer.insert_dataframe/4` / `insert_dataframe!/4` for appending Explorer dataframes through native column append.
 - Added conversion helpers and compact inspect output for DuckDB-specific scalar structs.
 - Added `QuackDB.SQL.install/1`, `QuackDB.Spatial`, and `QuackDB.Ecto.Spatial` helpers for DuckDB spatial extension statements and `ST_*` expressions.
 - Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.

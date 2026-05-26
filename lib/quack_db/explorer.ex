@@ -12,6 +12,40 @@ defmodule QuackDB.Explorer do
   alias QuackDB.Result
 
   @type dataframe_option :: {:dataframe, Keyword.t()} | {:query, Keyword.t()}
+  @type insert_dataframe_option ::
+          {:columns, list()} | {:batch_size, pos_integer()} | {:schema, String.t()}
+
+  @doc """
+  Appends an `Explorer.DataFrame` to a DuckDB table through Quack's native append protocol.
+
+  This uses `QuackDB.insert_columns/4` to preserve Explorer's columnar shape and
+  avoid row materialization. Pass `:columns` to override inferred DuckDB types.
+  `:batch_size` and `:schema` are forwarded to `QuackDB.insert_columns/4`.
+  """
+  @spec insert_dataframe(DBConnection.conn(), String.t() | atom(), DataFrame.t(), Keyword.t()) ::
+          {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
+  def insert_dataframe(connection, table, dataframe, options \\ []) do
+    with :ok <- ensure_explorer() do
+      columns = dataframe_columns(dataframe)
+      append_options = dataframe_append_options(dataframe, options)
+
+      QuackDB.insert_columns(connection, table, columns, append_options)
+    end
+  rescue
+    error -> {:error, error}
+  end
+
+  @doc """
+  Appends an `Explorer.DataFrame` to a DuckDB table, raising on error.
+  """
+  @spec insert_dataframe!(DBConnection.conn(), String.t() | atom(), DataFrame.t(), Keyword.t()) ::
+          QuackDB.Result.t()
+  def insert_dataframe!(connection, table, dataframe, options \\ []) do
+    case insert_dataframe(connection, table, dataframe, options) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
+    end
+  end
 
   @doc """
   Converts a `QuackDB.Columns` struct into an `Explorer.DataFrame`.
@@ -150,6 +184,50 @@ defmodule QuackDB.Explorer do
   end
 
   defp params_from(_expr), do: []
+
+  defp dataframe_columns(dataframe) do
+    values = DataFrame.to_columns(dataframe)
+    Enum.map(DataFrame.names(dataframe), fn name -> {name, Map.fetch!(values, name)} end)
+  end
+
+  defp dataframe_append_options(dataframe, options) do
+    options
+    |> Keyword.take([:batch_size, :schema])
+    |> Keyword.put(:columns, Keyword.get(options, :columns, dataframe_column_types(dataframe)))
+  end
+
+  defp dataframe_column_types(dataframe) do
+    dtypes = DataFrame.dtypes(dataframe)
+
+    Enum.map(DataFrame.names(dataframe), fn name ->
+      {name, dataframe_column_type(Map.fetch!(dtypes, name))}
+    end)
+  end
+
+  defp dataframe_column_type(:boolean), do: :boolean
+  defp dataframe_column_type(:string), do: :varchar
+  defp dataframe_column_type(:date), do: :date
+  defp dataframe_column_type({:s, 8}), do: :tinyint
+  defp dataframe_column_type({:s, 16}), do: :smallint
+  defp dataframe_column_type({:s, 32}), do: :integer
+  defp dataframe_column_type({:s, 64}), do: :bigint
+  defp dataframe_column_type({:u, 8}), do: :utinyint
+  defp dataframe_column_type({:u, 16}), do: :usmallint
+  defp dataframe_column_type({:u, 32}), do: :uinteger
+  defp dataframe_column_type({:u, 64}), do: :ubigint
+  defp dataframe_column_type({:f, 32}), do: :float
+  defp dataframe_column_type({:f, 64}), do: :double
+  defp dataframe_column_type({:naive_datetime, _precision}), do: {:timestamp, :timestamp}
+  defp dataframe_column_type({:datetime, _precision, _time_zone}), do: {:timestamp, :timestamptz}
+  defp dataframe_column_type({:list, dtype}), do: {:list, dataframe_column_type(dtype)}
+
+  defp dataframe_column_type(dtype) do
+    raise QuackDB.Error.new(
+            :unsupported_explorer_dtype,
+            "unsupported Explorer dtype #{inspect(dtype)}",
+            source: :client
+          )
+  end
 
   defp ensure_explorer do
     if Code.ensure_loaded?(DataFrame) do

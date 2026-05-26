@@ -26,6 +26,21 @@ defmodule QuackDB.Integration.AppendTest do
     TestHelper.drop_table!(conn, table)
   end
 
+  test "Explorer dataframes append through column-oriented native append", %{
+    conn: conn,
+    table: table
+  } do
+    dataframe = Explorer.DataFrame.new(id: [1, 2], name: ["one", "two"], active: [true, false])
+
+    assert %QuackDB.Result{num_rows: 2} =
+             QuackDB.Explorer.insert_dataframe!(conn, table, dataframe, batch_size: 1)
+
+    assert %QuackDB.Result{rows: [[1, "one", true], [2, "two", false]]} =
+             QuackDB.query!(conn, "SELECT id, name, active FROM #{table} ORDER BY id")
+
+    TestHelper.drop_table!(conn, table)
+  end
+
   test "insert_columns appends column-oriented values", %{conn: conn, table: table} do
     assert %QuackDB.Result{num_rows: 3} =
              QuackDB.insert_columns!(

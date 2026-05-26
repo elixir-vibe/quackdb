@@ -10,6 +10,45 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
     alias QuackDB.Protocol.Message.Header
     alias QuackDB.Result
 
+    test "appends Explorer dataframes through native column append" do
+      parent = self()
+
+      transport = fn _uri, request, _options ->
+        case request |> IO.iodata_to_binary() |> Codec.decode() do
+          {:ok, {%Header{type: :connection_request}, _body}} ->
+            response = [
+              Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
+              <<1::little-16, 5, "1.5.0">>,
+              <<2::little-16, 6, "darwin">>,
+              <<3::little-16, 1>>,
+              <<0xFFFF::little-16>>
+            ]
+
+            {:ok, IO.iodata_to_binary(response)}
+
+          {:ok, {%Header{type: :append_request}, append}} ->
+            send(parent, {:append, append})
+
+            response =
+              Codec.encode(%QuackDB.Protocol.Message.SuccessResponse{}, connection_id: "conn-1")
+
+            {:ok, IO.iodata_to_binary(response)}
+        end
+      end
+
+      connection =
+        start_supervised!({QuackDB, uri: "http://localhost:9494", transport: transport})
+
+      dataframe = DataFrame.new(%{id: [1, 2], name: ["duck", "goose"]})
+
+      assert {:ok, %QuackDB.Result{command: :insert, num_rows: 2}} =
+               QuackDB.Explorer.insert_dataframe(connection, "events", dataframe)
+
+      assert_received {:append, append}
+      assert append.table_name == "events"
+      assert append.append_chunk.row_count == 2
+    end
+
     test "converts columnar results to Explorer dataframes" do
       columns = %Columns{
         names: ["id", "name"],

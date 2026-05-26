@@ -266,6 +266,12 @@ query =
 
 The Explorer integration materializes query results in Elixir before constructing a dataframe. It is useful for interactive analysis and downstream Explorer pipelines, but it is not a zero-copy Arrow IPC path yet.
 
+Explorer dataframes can also be appended through Quack's native column-oriented append path:
+
+```elixir
+QuackDB.Explorer.insert_dataframe!(conn, "events_copy", df, batch_size: 10_000)
+```
+
 You can also convert existing results:
 
 ```elixir
