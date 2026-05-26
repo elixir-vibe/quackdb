@@ -45,10 +45,12 @@ defmodule QuackDB.TelemetryTest do
     assert metadata.params == [1]
     assert metadata.options == [request_id: "req-1"]
     assert metadata.connection_id == "conn-1"
+    assert metadata.client_query_id == 1
 
     assert_received {:telemetry, [:quackdb, :fetch, :start], %{system_time: _}, metadata}
     assert metadata.result_uuid == 42
     assert metadata.connection_id == "conn-1"
+    assert metadata.client_query_id == 1
 
     assert_received {:telemetry, [:quackdb, :fetch, :stop], %{duration: duration}, metadata}
     assert is_integer(duration)
@@ -75,6 +77,7 @@ defmodule QuackDB.TelemetryTest do
     assert metadata.rows == 2
     assert metadata.batches == 1
     assert metadata.connection_id == "conn-1"
+    assert metadata.client_query_id == 1
 
     assert_received {:telemetry, [:quackdb, :append, :stop], %{duration: duration}, metadata}
     assert is_integer(duration)
@@ -109,7 +112,7 @@ defmodule QuackDB.TelemetryTest do
   end
 
   defp transport do
-    fn _uri, request, _options ->
+    fn _uri, request, options ->
       case request |> IO.iodata_to_binary() |> Codec.decode() do
         {:ok, {%Header{type: :connection_request}, _body}} ->
           response = [
@@ -122,7 +125,8 @@ defmodule QuackDB.TelemetryTest do
 
           {:ok, IO.iodata_to_binary(response)}
 
-        {:ok, {%Header{type: :prepare_request}, _request}} ->
+        {:ok, {%Header{type: :prepare_request, client_query_id: query_id}, _request}} ->
+          assert Keyword.fetch!(options, :client_query_id) == query_id
           chunk = ProtocolFixtures.scalar_chunk_wrapper([{:integer, :int32, [1]}])
 
           {:ok,
@@ -135,7 +139,9 @@ defmodule QuackDB.TelemetryTest do
         {:ok, {%Header{type: :fetch_request}, _request}} ->
           {:ok, ProtocolFixtures.fetch_response([])}
 
-        {:ok, {%Header{type: :append_request}, _request}} ->
+        {:ok, {%Header{type: :append_request, client_query_id: query_id}, _request}} ->
+          assert Keyword.fetch!(options, :client_query_id) == query_id
+
           response =
             Codec.encode(%QuackDB.Protocol.Message.SuccessResponse{}, connection_id: "conn-1")
 

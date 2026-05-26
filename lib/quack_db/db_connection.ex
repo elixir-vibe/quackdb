@@ -35,6 +35,7 @@ defmodule QuackDB.DBConnection do
     :transport_options,
     :client_version,
     :telemetry_prefix,
+    next_query_id: 1,
     status: :idle,
     cursors: %{}
   ]
@@ -49,6 +50,7 @@ defmodule QuackDB.DBConnection do
           transport_options: keyword(),
           client_version: String.t(),
           telemetry_prefix: [atom()],
+          next_query_id: pos_integer(),
           status: DBConnection.status(),
           cursors: map()
         }
@@ -213,9 +215,12 @@ defmodule QuackDB.DBConnection do
   end
 
   defp do_declare_query(%Query{} = query, options, state) do
+    {query_id, state} = next_query_id(state)
+    options = Keyword.put(options, :client_query_id, query_id)
+
     request =
       %PrepareRequest{sql_query: query.statement}
-      |> Codec.encode(connection_id: state.connection_id)
+      |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
 
     with {:ok, response} <- state.transport.(state.uri, request, options),
          {:ok, decoded} <- Codec.decode(response),
@@ -271,6 +276,8 @@ defmodule QuackDB.DBConnection do
     with {:ok, columns} <- DataChunk.columns_from_rows(rows, options),
          {:ok, batches} <- append_batches(rows, options) do
       options = Keyword.put(options, :columns, columns)
+      {query_id, state} = next_query_id(state)
+      options = Keyword.put(options, :client_query_id, query_id)
       metadata = append_metadata(query, table, rows, batches, options, state)
 
       Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
@@ -321,6 +328,8 @@ defmodule QuackDB.DBConnection do
   defp append_columns(%Query{} = query, table, columns, options, state) do
     with {:ok, row_count} <- column_row_count(columns, options),
          {:ok, batches} <- append_column_batches(columns, row_count, options) do
+      {query_id, state} = next_query_id(state)
+      options = Keyword.put(options, :client_query_id, query_id)
       metadata = append_metadata(query, table, row_count, batches, options, state)
 
       Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
@@ -403,7 +412,11 @@ defmodule QuackDB.DBConnection do
            table_name: to_string(table),
            append_chunk: chunk
          },
-         encoded <- Codec.encode(request, connection_id: state.connection_id),
+         encoded <-
+           Codec.encode(request,
+             connection_id: state.connection_id,
+             client_query_id: Keyword.get(options, :client_query_id)
+           ),
          {:ok, response} <- state.transport.(state.uri, encoded, options),
          {:ok, decoded} <- Codec.decode(response) do
       normalize_append_response(decoded)
@@ -430,7 +443,11 @@ defmodule QuackDB.DBConnection do
            table_name: to_string(table),
            append_chunk: chunk
          },
-         encoded <- Codec.encode(request, connection_id: state.connection_id),
+         encoded <-
+           Codec.encode(request,
+             connection_id: state.connection_id,
+             client_query_id: Keyword.get(options, :client_query_id)
+           ),
          {:ok, response} <- state.transport.(state.uri, encoded, options),
          {:ok, decoded} <- Codec.decode(response) do
       normalize_append_response(decoded)
@@ -460,6 +477,9 @@ defmodule QuackDB.DBConnection do
   end
 
   defp do_execute_statement(%Query{} = query, params, options, state) do
+    {query_id, state} = next_query_id(state)
+    options = Keyword.put(options, :client_query_id, query_id)
+
     Telemetry.span(
       state.telemetry_prefix,
       :query,
@@ -467,7 +487,7 @@ defmodule QuackDB.DBConnection do
       fn ->
         request =
           %PrepareRequest{sql_query: query.statement}
-          |> Codec.encode(connection_id: state.connection_id)
+          |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
 
         result =
           with {:ok, response} <- state.transport.(state.uri, request, options),
@@ -637,6 +657,10 @@ defmodule QuackDB.DBConnection do
     %Error{error | query: query.statement, connection_id: state.connection_id}
   end
 
+  defp next_query_id(state) do
+    {state.next_query_id, %{state | next_query_id: state.next_query_id + 1}}
+  end
+
   defp annotate_cursor_error(%Error{} = error, %QuackDB.Cursor{} = cursor) do
     %Error{error | query: cursor.statement, connection_id: cursor.connection_id}
   end
@@ -781,6 +805,7 @@ defmodule QuackDB.DBConnection do
   defp metadata_from_options(options, state) do
     %{
       connection_id: state.connection_id,
+      client_query_id: Keyword.get(options, :client_query_id),
       options: Keyword.get(options, :telemetry_options, [])
     }
   end
