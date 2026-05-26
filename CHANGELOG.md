@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-05-26
+
 ### Added
 
 #### Local DuckDB and transport
@@ -40,7 +42,7 @@
 - Added conversion helpers and compact inspect output for DuckDB-specific scalar structs.
 - Added decode-side checks for quack-ts protocol conformance fixtures.
 - Added quack-ts decode fixtures for nanosecond temporal, interval, spatial geometry, null-heavy nested chunks, and `BIGNUM` values.
-- Added malformed `BIGNUM` protocol coverage.
+- Added malformed protocol coverage for truncated `BIGNUM` values and mismatched data chunk type/vector counts.
 - Added an optional internal `:fsst` bridge for future Quack FSST payload decoding once DuckDB exposes compressed FSST vectors over Quack.
 
 #### Spatial, FTS, and observability
@@ -53,15 +55,15 @@
 #### Docs and examples
 
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, full-text search, Livebook analytics, and a WMS-like spatial GeoJSON app.
-- Added package quality checklist documentation for CI, docs, integration, and Hex package-content audits.
-- Added internal Arrow/columnar handoff research notes and protocol fixture docs for tricky scalar/spatial types.
+- Added contributor documentation for CI, docs, integration, examples, optional dependency smoke checks, and Hex package-content audits.
+- Added Arrow/columnar handoff research notes and protocol fixture docs for tricky scalar/spatial types.
 
 ### Fixed
 
-- Expanded real Ecto insert coverage for `on_conflict: :nothing`, single-row insert upserts, and insert-from-query SQL paths.
+- Expanded real Ecto insert coverage for `on_conflict: :nothing`, single-row insert upserts, insert-from-query SQL paths, renamed `:binary_id` sources, and binary payloads containing NUL bytes.
 - Fixed Mint transport call timeout handling for `timeout: :infinity`, which Ecto migrator uses for migration DDL.
 - Closed Mint transport connections after receive timeouts to avoid reusing sockets with abandoned in-flight responses.
-- Updated user docs to reflect current Ecto migration, write, schema-read, and protocol coverage.
+- Updated user docs to reflect current Ecto migration, write, schema-read, package, and protocol coverage.
 
 ## 0.2.0 - 2026-05-25
 

@@ -44,7 +44,7 @@ Add QuackDB to your dependencies:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.2.0"}
+    {:quackdb, "~> 0.3.0"}
   ]
 end
 ```
@@ -54,7 +54,7 @@ Optional integrations are enabled when their packages are present:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.2.0"},
+    {:quackdb, "~> 0.3.0"},
     {:ecto_sql, "~> 3.13"},
     {:explorer, "~> 0.11"},
     {:geo, "~> 4.1"}
