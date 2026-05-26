@@ -84,7 +84,7 @@ Supported parameter values:
 - `NaiveDateTime.t()`
 - `DateTime.t()`
 - `QuackDB.Interval.t()`
-- `Duration.t()` values, converted to DuckDB interval literals
+- `Duration.t()` values, converted to DuckDB interval literals and accepted by Ecto series/time-bucket helpers
 - `{:interval, months, days, micros}`
 - lists containing supported parameter values
 

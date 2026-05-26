@@ -75,6 +75,12 @@ defmodule QuackDB.Source do
   @doc "Returns true when a value looks like a QuackDB source table-function fragment."
   @spec source?(term()) :: boolean()
   def source?(value) when is_binary(value) do
+    String.starts_with?(value, "(SELECT ") or source_table_function?(value)
+  end
+
+  def source?(_value), do: false
+
+  defp source_table_function?(value) do
     case table_function_name(value) do
       "read_parquet" -> true
       "read_csv" -> true
@@ -82,11 +88,10 @@ defmodule QuackDB.Source do
       "read_xlsx" -> true
       "delta_scan" -> true
       "iceberg_scan" -> true
+      "generate_series" -> true
       _other -> false
     end
   end
-
-  def source?(_value), do: false
 
   defp options([]), do: []
 

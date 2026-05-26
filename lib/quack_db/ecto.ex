@@ -3,8 +3,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     @moduledoc """
     Convenience imports for Ecto-based QuackDB query modules.
 
-    Use this in modules that build DuckDB analytical, spatial, or full-text
-    search Ecto queries and want the standard Ecto query DSL together with
+    Use this in modules that build DuckDB analytical, spatial, series, or
+    full-text search Ecto queries and want the standard Ecto query DSL together with
     QuackDB's Ecto helper macros:
 
         defmodule MyApp.Analytics do
@@ -27,12 +27,14 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.Analytics`.
     - `QuackDB.Ecto.Spatial`.
     - `QuackDB.Ecto.FTS`.
+    - `QuackDB.Ecto.Series`.
 
     Imports can be disabled individually:
 
         use QuackDB.Ecto, spatial: false
         use QuackDB.Ecto, full_text_search: false
         use QuackDB.Ecto, analytics: false
+        use QuackDB.Ecto, series: false
         use QuackDB.Ecto, query: false
     """
 
@@ -42,6 +44,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       analytics? = Keyword.get(options, :analytics, true)
       spatial? = Keyword.get(options, :spatial, true)
       full_text_search? = Keyword.get(options, :full_text_search, true)
+      series? = Keyword.get(options, :series, true)
 
       imports = []
       imports = if query?, do: [quote(do: import(Ecto.Query)) | imports], else: imports
@@ -56,6 +59,8 @@ if Code.ensure_loaded?(Ecto.Query) do
         if full_text_search?,
           do: [quote(do: import(QuackDB.Ecto.FTS)) | imports],
           else: imports
+
+      imports = if series?, do: [quote(do: import(QuackDB.Ecto.Series)) | imports], else: imports
 
       quote do
         (unquote_splicing(Enum.reverse(imports)))
