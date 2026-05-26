@@ -6,7 +6,11 @@ defmodule QuackDB.Protocol.QuackTsConformanceTest do
   alias QuackDB.Protocol.Codec
   alias QuackDB.Protocol.DataChunk
   alias QuackDB.Protocol.Message.AppendRequest
+  alias QuackDB.Interval
+  alias QuackDB.NanosecondTime
+  alias QuackDB.NanosecondTimestamp
   alias QuackDB.ProtocolCrossFixtures
+  alias QuackDB.TimeWithTimeZone
 
   @fixture_dir Path.expand("../../fixtures/quack_ts", __DIR__)
 
@@ -27,6 +31,39 @@ defmodule QuackDB.Protocol.QuackTsConformanceTest do
 
       assert_decodable_fixture(@fixture_file, fixture, expected)
     end
+  end
+
+  test "extra temporal fixture decodes" do
+    assert {:ok, %DataChunk{} = chunk, ""} =
+             "data_chunk_temporal_extra.bin" |> read_fixture!() |> DataChunk.decode_wrapper()
+
+    assert [
+             [
+               %NanosecondTime{nanoseconds: 1_234_567_890},
+               %NanosecondTimestamp{nanoseconds: 1_770_000_000_123_456_789},
+               %TimeWithTimeZone{},
+               %Interval{months: 14, days: 3, microseconds: 987_654_321}
+             ],
+             [nil, nil, nil, nil]
+           ] = DataChunk.rows(chunk, ["time_ns", "timestamp_ns", "time_tz", "interval"])
+  end
+
+  test "extra spatial fixture decodes" do
+    assert {:ok, %DataChunk{} = chunk, ""} =
+             "data_chunk_spatial_extra.bin" |> read_fixture!() |> DataChunk.decode_wrapper()
+
+    assert [[<<1, 1, 0, 0, _rest::binary>>], [nil]] = DataChunk.rows(chunk, ["geom"])
+  end
+
+  test "extra nested null fixture decodes" do
+    assert {:ok, %DataChunk{} = chunk, ""} =
+             "data_chunk_nested_nulls_extra.bin" |> read_fixture!() |> DataChunk.decode_wrapper()
+
+    assert [
+             [nil, nil, nil],
+             [[], %{"count" => 2, "name" => nil}, %{}],
+             [[1, nil, 3], %{"count" => nil, "name" => "duck"}, %{"a" => 1, "b" => nil}]
+           ] = DataChunk.rows(chunk, ["items", "metadata", "labels"])
   end
 
   defp assert_decodable_fixture("data_chunk_nested.bin", fixture, _expected) do
