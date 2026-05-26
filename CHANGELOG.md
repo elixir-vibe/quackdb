@@ -25,6 +25,7 @@
 - Added Ecto upsert SQL generation, schema update/delete callbacks, explain query support, and basic migration DDL generation with real-server coverage.
 - Expanded Ecto coverage for primary-key schema updates/deletes, full schema selects, `Repo.explain/3`, upsert increment/replacement expressions, unsafe conflict targets, composite-key/reference/check-constraint migration DDL, and actual `Ecto.Migrator` execution.
 - Added Ecto SQL generation for additional analytical query expressions, including `selected_as`, `map`, `type`, and identifier fragments.
+- Expanded Ecto schema parameter coverage for `:binary_id` and `:binary` fields.
 
 #### Protocol and DuckDB types
 
@@ -53,6 +54,7 @@
 #### Docs and examples
 
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, full-text search, Livebook analytics, and a WMS-like spatial GeoJSON app.
+- Added package quality checklist documentation for CI, docs, integration, and Hex package-content audits.
 - Added internal Arrow/columnar handoff research notes and protocol fixture docs for tricky scalar/spatial types.
 
 ### Fixed

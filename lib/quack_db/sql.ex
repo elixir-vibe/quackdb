@@ -165,8 +165,21 @@ defmodule QuackDB.SQL do
     {:ok, ["UUID '", String.replace(value, "'", "''"), "'"]}
   end
 
-  def literal(value) when is_binary(value),
-    do: {:ok, ["'", String.replace(value, "'", "''"), "'"]}
+  def literal(value) when is_binary(value) do
+    cond do
+      String.valid?(value) ->
+        {:ok, ["'", String.replace(value, "'", "''"), "'"]}
+
+      byte_size(value) == 16 ->
+        case Ecto.UUID.load(value) do
+          {:ok, uuid} -> literal({:uuid, uuid})
+          :error -> binary_literal(value)
+        end
+
+      true ->
+        binary_literal(value)
+    end
+  end
 
   def literal(values) when is_list(values) do
     values
@@ -195,6 +208,8 @@ defmodule QuackDB.SQL do
     (positional ++ named)
     |> Enum.intersperse(", ")
   end
+
+  defp binary_literal(value), do: literal({:blob, value})
 
   defp literal!(value) do
     case literal(value) do

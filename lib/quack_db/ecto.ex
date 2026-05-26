@@ -1,10 +1,11 @@
 if Code.ensure_loaded?(Ecto.Query) do
   defmodule QuackDB.Ecto do
     @moduledoc """
-    Convenience imports for Ecto-based QuackDB analytics modules.
+    Convenience imports for Ecto-based QuackDB query modules.
 
-    Use this in modules that build DuckDB analytical Ecto queries and want the
-    standard Ecto query DSL together with QuackDB's Ecto helper macros:
+    Use this in modules that build DuckDB analytical, spatial, or full-text
+    search Ecto queries and want the standard Ecto query DSL together with
+    QuackDB's Ecto helper macros:
 
         defmodule MyApp.Analytics do
           use QuackDB.Ecto
@@ -14,10 +15,18 @@ if Code.ensure_loaded?(Ecto.Query) do
               group_by: event.category,
               select: %{
                 category: event.category,
-                median_score: median(event.score)
+                median_score: median(event.score),
+                fts_score: search_score("fts_main_events", event.id, ^"duckdb")
               }
           end
         end
+
+    The macro imports:
+
+    - `Ecto.Query`.
+    - `QuackDB.Ecto.Analytics`.
+    - `QuackDB.Ecto.Spatial`.
+    - `QuackDB.Ecto.FullTextSearch`.
 
     Imports can be disabled individually:
 

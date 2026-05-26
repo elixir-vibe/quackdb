@@ -15,3 +15,4 @@ Scope: this file applies to the whole `quackdb` repository.
 - Preserve command result semantics: DuckDB `Count` outputs for DML should normalize to affected-row `num_rows` without losing raw server output in metadata.
 - Do not publish, tag, or create GitHub releases unless explicitly requested.
 - Use `mix ci` before considering work complete once the CI alias exists.
+- Before release-readiness/package changes, follow `docs/testing/package-quality.md` and keep Hex package contents intentional: no `examples/`, `docs/research/`, `docs/testing/`, `test/`, `deps/`, `_build/`, or local `tmp/` artifacts.

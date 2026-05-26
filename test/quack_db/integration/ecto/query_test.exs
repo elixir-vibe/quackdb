@@ -662,6 +662,36 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert Decimal.equal?(amount, Decimal.new("12.34"))
   end
 
+  test "Ecto schema parameters preserve binary_id and binary values" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "binary_events")
+
+    create_table!(QuackDB.IntegrationRepo, "binary_events",
+      id: :uuid,
+      payload: :blob
+    )
+
+    uuid = Ecto.UUID.generate()
+    payload = <<0, 1, 2, 255>>
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.BinaryEvent, [
+               [id: uuid, payload: payload]
+             ])
+
+    query =
+      from(event in QuackDB.TestSchemas.BinaryEvent,
+        where: event.id == ^uuid and event.payload == ^payload,
+        select: count()
+      )
+
+    assert [1] = QuackDB.IntegrationRepo.all(query)
+
+    assert %{rows: [[^uuid, ^payload]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id::VARCHAR, payload FROM binary_events")
+  end
+
   test "Ecto raw query parameters preserve UUID and blob values" do
     start_repo!()
     uuid = Ecto.UUID.generate()

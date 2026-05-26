@@ -40,6 +40,27 @@ QuackDB.query!(conn, FTS.drop_index("documents"))
 
 DuckDB creates a schema for each index. For `main.documents`, the generated schema is `fts_main_documents`. Use `FTS.schema_name/1` when building raw SQL fragments.
 
+## Index a materialized source
+
+DuckDB's FTS indexes are created over tables, so source files are usually materialized first. This keeps the source workflow explicit and works with local files visible to the DuckDB server, HTTP(S), object stores, and lakehouse table functions.
+
+```elixir
+alias QuackDB.{FullTextSearch, Source}
+alias QuackDB.FullTextSearch, as: FTS
+
+source = Source.parquet("s3://analytics/documents/*.parquet")
+
+QuackDB.query!(conn, [
+  "CREATE TEMP TABLE docs AS ",
+  "SELECT id, title, body FROM ",
+  source
+])
+
+QuackDB.query!(conn, FTS.create_index("docs", :id, [:title, :body], overwrite: true))
+```
+
+The same pattern works for CSV, JSON, Delta, Iceberg, Hugging Face datasets, or any source expression DuckDB can read. Use `QuackDB.Secret.create/2` and `QuackDB.Extension.load/1` when the source needs credentials or an extension such as `httpfs`.
+
 ## Search from direct SQL
 
 ```elixir
