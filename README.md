@@ -3,39 +3,58 @@
 [![Hex.pm](https://img.shields.io/hexpm/v/quackdb.svg)](https://hex.pm/packages/quackdb)
 [![HexDocs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/quackdb)
 
-QuackDB is an Elixir client for remote DuckDB analytics over DuckDB's experimental Quack protocol.
+DuckDB for Elixir applications, over DuckDB's experimental Quack protocol.
 
-It gives Elixir applications a `DBConnection`-first way to query, stream from, and append to DuckDB without embedding DuckDB inside the BEAM. Use it directly for analytical SQL, add Ecto when you want query composition and migrations, hand results to Explorer or Livebook, and let QuackDB supervise a local DuckDB server for development and notebooks.
+QuackDB gives Elixir applications an OTP-supervised DuckDB process, a DBConnection client, an Ecto adapter and query DSL for analytical DuckDB workflows, native append APIs, Explorer dataframe writes, Geo/WKB spatial integration, Table.Reader results, telemetry, and a managed DuckDB binary installer.
 
 > [!WARNING]
 > QuackDB targets DuckDB's experimental Quack protocol and is not production-ready yet. Public APIs, result shapes, Ecto adapter behavior, and supported protocol coverage may still change as DuckDB and QuackDB evolve. Validate behavior against your DuckDB version before relying on it for critical workloads.
 
-## What you can build with it
+```elixir
+defmodule MyApp.Analytics do
+  use QuackDB.Ecto
 
-QuackDB is useful when your Elixir system needs DuckDB's analytical engine, but you want DuckDB to live as a separate process:
+  alias QuackDB.Source
 
-- local analytics services backed by DuckDB files;
-- Livebook and Explorer workflows with supervised DuckDB;
-- ingestion pipelines that append row, column, or dataframe batches;
-- Ecto-powered analytical queries and setup migrations;
-- spatial data exploration with DuckDB Spatial and optional Geo/WKB conversion;
-- full-text search over DuckDB tables with BM25 ranking;
-- querying Parquet, CSV, JSON, XLSX, Delta, and Iceberg sources from local paths or object stores.
+  def category_latency do
+    source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
 
-## Highlights
+    from event in source,
+      group_by: event.category,
+      select: %{
+        category: event.category,
+        p95: quantile_cont(event.duration_ms, 0.95),
+        median: median(event.duration_ms),
+        events: count()
+      }
+  end
+end
+```
 
-| Area | What QuackDB provides |
+## Why QuackDB?
+
+DuckDB is already excellent at analytical SQL. QuackDB focuses on the Elixir side:
+
+- run DuckDB as a supervised process during development, tests, notebooks, examples, or local apps;
+- use DBConnection semantics for pooled sessions, transactions, streams, and query lifecycle;
+- compose DuckDB analytical queries with Ecto instead of assembling SQL strings;
+- use Elixir-native values such as `Duration`, `%Geo.*{}`, `Date.Range`, maps, lists, structs, and Explorer dataframes where possible;
+- append rows, columns, and Explorer dataframes through DuckDB's native append path;
+- expose results to Livebook and dataframe tooling through `Table.Reader`;
+- keep raw SQL available when DuckDB-specific syntax is clearer or not represented by Ecto.
+
+## Elixir integrations
+
+| Elixir layer | QuackDB integration |
 | --- | --- |
-| Core client | `DBConnection` process per Quack session, persistent Mint transport, query/fetch/stream APIs |
-| Results | Row results, column helpers, `Table.Reader` support, Livebook-friendly tabular output |
-| Writes | Native Quack append protocol via `insert_rows/4`, `insert_columns/4`, Explorer dataframe append, Ecto SQL inserts/upserts |
-| Ecto | Adapter for raw SQL, analytical reads, full schema selects, inserts/upserts, update/delete, basic migrations, `Repo.explain`, transactions |
-| Sources | Helpers for DuckDB table functions: CSV, Parquet, JSON, XLSX, Delta, Iceberg, plus HTTP/S3/R2/GCS/Azure/Hugging Face secrets |
-| Spatial | DuckDB Spatial helpers, Ecto spatial fragments, WKB bytes, optional `%Geo.*{}` conversion |
-| Full-text search | DuckDB FTS extension helpers for index management, BM25 ranking, stemming, and Ecto search expressions |
-| Local server | Supervised DuckDB CLI process, shared client/server token setup, optional managed DuckDB binary download/cache |
-| Observability | Telemetry spans for query, append, and fetch operations, including client query IDs |
-| Protocol | Direct Quack decoding, streaming fetch continuation, scalar/nested type coverage, quack-ts fixture conformance |
+| OTP | supervised local DuckDB server, managed binary, restartable child specs |
+| DBConnection | pooled Quack sessions, queries, streams, transactions |
+| Ecto | adapter, query DSL, analytical helpers, migrations, writes |
+| Explorer | dataframe append and dataframe-friendly results |
+| Geo | `%Geo.*{}` params and WKB/GeoJSON workflows |
+| Table.Reader | Livebook/dataframe-friendly result consumption |
+| Telemetry | query, append, and fetch spans |
+| Mix | `quackdb.install` task for managed DuckDB binaries |
 
 ## Installation
 
@@ -64,7 +83,7 @@ end
 
 DuckDB's Quack protocol is experimental. For local development, use DuckDB 1.5.3 or newer with the `quack` extension.
 
-## Quick start with a supervised local DuckDB
+## Supervised DuckDB
 
 For development, tests, examples, and notebooks, QuackDB can supervise DuckDB's CLI process and start a matching client pool. `child_specs/1` generates one random token and injects it into both children.
 
@@ -94,7 +113,9 @@ duckdb -interactive -init /dev/null \
 
 `quack:localhost` often binds on IPv6 localhost, so examples use `http://[::1]:9494`.
 
-## Direct queries
+## DBConnection client
+
+QuackDB can be used directly through its DBConnection-backed client.
 
 ```elixir
 {:ok, conn} =
@@ -114,99 +135,118 @@ result.rows
 
 Use `QuackDB.stream/4` for large result sets, or `QuackDB.columns/4` when a column-oriented shape is more convenient for analytics tooling.
 
-## Native append writes
+## DuckDB workflows as Ecto queries
 
-QuackDB can write through DuckDB's native append protocol instead of generating huge `INSERT VALUES` statements.
+QuackDB exposes common DuckDB analytical workflows as Ecto-compatible helpers so they compose with normal queries.
 
-```elixir
-QuackDB.insert_rows!(conn, "events", [
-  [id: 1, name: "duck", tags: ["bird", "wetland"]],
-  [id: 2, name: "goose", tags: ["bird", "loud"]]
-])
-
-QuackDB.insert_columns!(conn, "measurements", [
-  id: [1, 2, 3],
-  temperature: [12.5, 13.0, 12.8]
-])
-```
-
-Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Explorer dataframes can be appended with `QuackDB.Explorer.insert_dataframe/4` when Explorer is installed.
-
-## Ecto adapter
-
-QuackDB includes an optional Ecto SQL adapter for applications that want Ecto query composition, schema-based reads/writes, migrations, and raw SQL through `Repo.query/3`.
-
-```elixir
-defmodule MyApp.AnalyticsRepo do
-  use Ecto.Repo,
-    otp_app: :my_app,
-    adapter: Ecto.Adapters.QuackDB
-end
-```
-
-```elixir
-import Ecto.Query
-
-MyApp.AnalyticsRepo.all(
-  from event in "events",
-    where: event.score > ^10,
-    group_by: event.category,
-    select: %{category: event.category, events: count()}
-)
-```
-
-For DuckDB-specific analytical helpers, spatial fragments, and normal Ecto query imports together:
+### Analytical aggregates
 
 ```elixir
 defmodule MyApp.Analytics do
   use QuackDB.Ecto
 
-  def median_scores do
+  def category_scores do
     from event in "events",
       group_by: event.category,
-      select: %{category: event.category, median_score: median(event.score)}
+      select: %{
+        category: event.category,
+        p95: quantile_cont(event.duration_ms, 0.95),
+        median: median(event.duration_ms),
+        values: duckdb_list(event.duration_ms),
+        events: count()
+      }
   end
 end
 ```
 
-The adapter currently covers:
-
-- raw SQL via `Repo.query/3`;
-- schema-backed full selects and `Repo.get!/2`;
-- analytical reads with joins, filters, grouping, windows, CTEs, combinations, locks, and fragments;
-- `Repo.insert/2`, `Repo.insert_all/3`, `RETURNING`, `ON CONFLICT DO NOTHING`, and common `DO UPDATE` upserts;
-- explicit native append fast path via `insert_method: :append`;
-- `update_all`, `delete_all`, schema `update/delete`, and transaction usage;
-- `Ecto.Adapters.SQL.explain/4`;
-- basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames.
-
-DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/3`. See the [Ecto coverage matrix](docs/ecto-analytical-coverage.md).
-
-## Query files, object stores, and lakehouse tables
-
-DuckDB can query data where it lives. QuackDB provides small helpers that generate DuckDB table-function SQL while leaving credentials and file access to DuckDB.
+### Date and timestamp series
 
 ```elixir
-alias QuackDB.{Extension, Secret, Source}
+use QuackDB.Ecto
 
-QuackDB.query!(conn, Extension.install(:httpfs))
-QuackDB.query!(conn, Extension.load(:httpfs))
-QuackDB.query!(conn, Secret.create(:s3, provider: :credential_chain))
+from day in series(Date.range(~D[2024-01-01], ~D[2024-01-31])),
+  left_join: event in "events",
+  on: event.occurred_on == day.value,
+  group_by: day.value,
+  order_by: day.value,
+  select: %{
+    day: day.value,
+    events: count(event.id)
+  }
+```
+
+Timestamp series use `Duration` steps:
+
+```elixir
+from bucket in series(
+       ~N[2024-01-01 00:00:00],
+       ~N[2024-01-02 00:00:00],
+       step: Duration.new!(hour: 1)
+     ),
+  select: bucket.value
+```
+
+### Source scans
+
+DuckDB can query data where it already lives. QuackDB source helpers can be used directly as Ecto sources.
+
+```elixir
+use QuackDB.Ecto
+
+alias QuackDB.Source
 
 source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
 
-MyApp.AnalyticsRepo.all(
-  from event in source,
-    group_by: event.category,
-    select: %{category: event.category, events: count()}
-)
+from event in source,
+  group_by: event.category,
+  select: %{
+    category: event.category,
+    events: count(),
+    avg_score: avg(event.score)
+  }
 ```
 
 QuackDB does not upload local files for you. The DuckDB server must be able to see the path, URL, object store, or lakehouse catalog. See the [sources guide](guides/sources.md).
 
-## Spatial workflows
+### CTAS and full-text search
 
-DuckDB Spatial works well with Ecto queries and `%Geo.*{}` structs when the optional `:geo` package is installed.
+External data can be materialized with `CREATE TABLE AS`, indexed with DuckDB FTS, and queried with BM25 from Ecto.
+
+```elixir
+use QuackDB.Ecto
+
+alias QuackDB.{DDL, FTS, Source}
+
+query =
+  from doc in Source.parquet("s3://bucket/docs/*.parquet"),
+    select: %{
+      id: doc.id,
+      title: doc.title,
+      body: doc.body
+    }
+
+MyApp.AnalyticsRepo.query!(DDL.create_table("docs", as: query, temporary: true))
+MyApp.AnalyticsRepo.query!(FTS.create_index("docs", :id, [:title, :body], overwrite: true))
+
+schema = FTS.schema_name("main.docs")
+search = "duckdb analytics"
+
+from doc in "docs",
+  where: bm25(^schema, doc.id, ^search) > 0,
+  order_by: [desc: bm25(^schema, doc.id, ^search)],
+  limit: 10,
+  select: %{
+    id: doc.id,
+    title: doc.title,
+    score: bm25(^schema, doc.id, ^search)
+  }
+```
+
+See the [full-text search guide](guides/full-text-search.md).
+
+### Spatial queries
+
+DuckDB Spatial works with Ecto queries and `%Geo.*{}` structs when the optional `:geo` package is installed.
 
 ```elixir
 use QuackDB.Ecto
@@ -228,39 +268,25 @@ from place in "places",
   }
 ```
 
-`GEOMETRY` values decode as WKB-compatible bytes for tested DuckDB Spatial values. `QuackDB.Geometry` can convert to/from `%Geo.*{}` structs when the optional `:geo` package is installed. See the [spatial guide](guides/spatial.md).
+`GEOMETRY` values decode as WKB-compatible bytes for tested DuckDB Spatial values. `QuackDB.Geometry` can convert to/from `%Geo.*{}` structs when the optional `:geo` package is installed. See the [spatial guide](guides/spatial.md) and the [Spatial WMS example](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms).
 
-## Full-text search
+## Writes and dataframes
 
-DuckDB's FTS extension can index text columns and rank matches with BM25. QuackDB wraps index management and Ecto search expressions:
+QuackDB can write through DuckDB's native append protocol instead of generating huge `INSERT VALUES` statements.
 
 ```elixir
-use QuackDB.Ecto
+QuackDB.insert_rows!(conn, "events", [
+  [id: 1, name: "duck", tags: ["bird", "wetland"]],
+  [id: 2, name: "goose", tags: ["bird", "loud"]]
+])
 
-alias QuackDB.FTS
-
-MyApp.AnalyticsRepo.query!(FTS.load())
-MyApp.AnalyticsRepo.query!(FTS.create_index("documents", :id, [:title, :body], overwrite: true))
-
-schema = FTS.schema_name("main.documents")
-search = "duckdb analytics"
-
-from doc in "documents",
-  where: bm25(^schema, doc.id, ^search) > 0,
-  order_by: [desc: bm25(^schema, doc.id, ^search)],
-  limit: 10,
-  select: %{
-    id: doc.id,
-    title: doc.title,
-    score: bm25(^schema, doc.id, ^search)
-  }
+QuackDB.insert_columns!(conn, "measurements", [
+  id: [1, 2, 3],
+  temperature: [12.5, 13.0, 12.8]
+])
 ```
 
-Use `QuackDB.Ecto.FTS` or `use QuackDB.Ecto` for Ecto query expressions. See the [full-text search guide](guides/full-text-search.md).
-
-## Explorer, Table.Reader, and Livebook
-
-When Explorer is installed, QuackDB can move data between DuckDB and dataframes:
+When Explorer is installed, dataframes can be appended directly:
 
 ```elixir
 alias Explorer.DataFrame
@@ -268,14 +294,18 @@ alias QuackDB.Explorer, as: QuackExplorer
 
 frame = DataFrame.new(id: [1, 2], name: ["duck", "goose"])
 QuackExplorer.insert_dataframe!(conn, "events", frame)
-
-result = QuackDB.query!(conn, "SELECT * FROM events")
-DataFrame.new(result)
 ```
 
-`QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so they can be consumed by Livebook and other Table-aware tooling. See the [Explorer guide](guides/explorer.md) and the [Livebook example](https://github.com/elixir-vibe/quackdb/blob/master/examples/livebook_analytics.livemd).
+Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. See the [Explorer guide](guides/explorer.md).
 
-## Observability
+## Results, Livebook, and telemetry
+
+`QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so they can be consumed by Livebook and other Table-aware tooling. When Explorer is installed, query results can be turned into dataframes:
+
+```elixir
+result = QuackDB.query!(conn, "SELECT * FROM events")
+Explorer.DataFrame.new(result)
+```
 
 QuackDB emits telemetry spans for query, append, and fetch operations:
 
@@ -285,58 +315,41 @@ QuackDB emits telemetry spans for query, append, and fetch operations:
 
 Metadata includes connection/session information, command details, append batch counts, and client query IDs. Params are not included unless you opt in with `telemetry_params: true`. See the [telemetry guide](guides/telemetry.md).
 
-## Architecture
+## Ecto coverage
 
-```text
-Elixir application
-  ├─ QuackDB / DBConnection query and stream APIs
-  ├─ Ecto adapter, analytics helpers, and migration DDL
-  ├─ Native row, column, and dataframe append APIs
-  ├─ Explorer and Table.Reader integrations
-  ├─ Spatial helpers and optional Geo/WKB bridge
-  ├─ Source, extension, secret, DDL, and DML SQL helpers
-  ├─ Telemetry spans and client query IDs
-  └─ QuackDB.Server for local DuckDB supervision
-        │
-        ▼
-DuckDB + quack extension
-```
-
-Each DBConnection process owns one Quack session and one persistent Mint HTTP connection. This matches Quack's sessionful protocol: prepared statements, fetch cursors, append requests, and disconnect messages all belong to a DuckDB connection id.
-
-For local supervised DuckDB, QuackDB defaults to performance-conscious settings:
+QuackDB includes an optional Ecto SQL adapter for applications that want Ecto query composition, schema-based reads/writes, migrations, and raw SQL through `Repo.query/3`.
 
 ```elixir
-settings: [threads: System.schedulers_online()],
-global_settings: [quack_fetch_batch_chunks: 4]
+defmodule MyApp.AnalyticsRepo do
+  use Ecto.Repo,
+    otp_app: :my_app,
+    adapter: Ecto.Adapters.QuackDB
+end
 ```
 
-For heavy analytical scans, prefer a smaller client `pool_size` such as `1..4` because DuckDB parallelizes internally. For many small concurrent queries, `System.schedulers_online()` is a reasonable starting point.
+The adapter currently covers:
 
-## Type and protocol coverage
+- raw SQL via `Repo.query/3`;
+- schema-backed full selects and `Repo.get!/2`;
+- analytical reads with joins, filters, grouping, windows, CTEs, combinations, locks, fragments, and QuackDB helper macros;
+- `Repo.insert/2`, `Repo.insert_all/3`, `RETURNING`, `ON CONFLICT DO NOTHING`, and common `DO UPDATE` upserts;
+- explicit native append fast path via `insert_method: :append`;
+- `update_all`, `delete_all`, schema `update/delete`, and transaction usage;
+- `Ecto.Adapters.SQL.explain/4`;
+- basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames.
 
-QuackDB decodes common DuckDB scalars and nested values, including:
-
-- booleans and integers through huge integers;
-- floats and decimals;
-- UUID, enum, blob, varchar, bit, and `BIGNUM`;
-- date/time/timestamp families, including nanosecond values and `TIME WITH TIME ZONE`;
-- intervals;
-- `LIST`, `STRUCT`, `ARRAY`, and `MAP`;
-- DuckDB Spatial `GEOMETRY` as WKB-compatible bytes.
-
-The protocol implementation is intentionally explicit about unsupported features. Remaining low-level gaps, conformance fixtures, and unsupported vector/logical types are tracked in [`docs/protocol/coverage.md`](docs/protocol/coverage.md) and [`guides/type-support.md`](guides/type-support.md).
+DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/3`. See the [Ecto coverage matrix](docs/ecto-analytical-coverage.md).
 
 ## Examples
 
-The repository includes runnable scripts and a Livebook notebook:
+The repository includes runnable scripts, a Livebook notebook, and a small WMS app:
 
-- [`examples/query_observability.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/query_observability.exs) — attach telemetry handlers and print query, append, and fetch timings.
 - [`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) — derive DDL from an Ecto schema, append an Explorer dataframe, query with Ecto DSL, and return a dataframe.
-- [`examples/livebook_analytics.livemd`](https://github.com/elixir-vibe/quackdb/blob/master/examples/livebook_analytics.livemd) — interactive analytics with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
-- [`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+- [`examples/full_text_search.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/full_text_search.exs) — materialize a source scan, build a DuckDB FTS index, and query BM25 search through direct helpers and Ecto.
+- [`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) — an Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+- [`examples/query_observability.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/query_observability.exs) — attach telemetry handlers and print query, append, and fetch timings.
 - [`examples/append_benchmark.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/append_benchmark.exs) — compares SQL inserts, native row/column append, Explorer append, and Ecto insert paths.
-- [`examples/support/quackdb_demo.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/support/quackdb_demo.exs) — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
+- [`examples/livebook_analytics.livemd`](https://github.com/elixir-vibe/quackdb/blob/master/examples/livebook_analytics.livemd) — interactive analytics with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
 
 Run scripts from outside the Mix project so `Mix.install/2` can load the local package:
 
@@ -347,14 +360,28 @@ elixir /path/to/quackdb/examples/dataframe_analytics.exs
 
 ## Current boundaries
 
-QuackDB is already broad, but intentionally not a complete DuckDB or Postgrex replacement:
+QuackDB is intentionally focused on DuckDB analytics over Quack:
 
 - the Quack wire protocol is experimental and may change;
 - unsupported vector/logical types raise explicit protocol errors;
-- Ecto coverage focuses on analytical workflows and common write/setup paths, not every relational adapter feature;
+- Ecto coverage focuses on analytical workflows and common write/setup paths, not every adapter edge case;
 - QuackDB does not stage/upload local files to a remote server;
 - Arrow IPC / zero-copy columnar handoff is research for now;
 - managed DuckDB binary downloads currently cover Linux/macOS targets, not Windows.
+
+## Documentation
+
+- [Getting started](guides/getting-started.md)
+- [Type support](guides/type-support.md)
+- [Examples](guides/examples.md)
+- [Managed DuckDB](guides/managed-duckdb.md)
+- [Explorer](guides/explorer.md)
+- [Sources](guides/sources.md)
+- [Spatial](guides/spatial.md)
+- [Full-text search](guides/full-text-search.md)
+- [Telemetry](guides/telemetry.md)
+- [Protocol coverage](docs/protocol/coverage.md)
+- [Ecto coverage](docs/ecto-analytical-coverage.md)
 
 ## Development
 
@@ -372,17 +399,3 @@ QUACKDB_TEST_URI='http://[::1]:9494' \
 QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
-
-Useful docs:
-
-- [Getting started](guides/getting-started.md)
-- [Type support](guides/type-support.md)
-- [Examples](guides/examples.md)
-- [Managed DuckDB](guides/managed-duckdb.md)
-- [Explorer](guides/explorer.md)
-- [Sources](guides/sources.md)
-- [Spatial](guides/spatial.md)
-- [Full-text search](guides/full-text-search.md)
-- [Telemetry](guides/telemetry.md)
-- [Protocol coverage](docs/protocol/coverage.md)
-- [Ecto coverage](docs/ecto-analytical-coverage.md)
