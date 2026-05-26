@@ -60,6 +60,16 @@ defmodule QuackDB.DDLTest do
              ~s|CREATE TEMP TABLE IF NOT EXISTS "docs" AS SELECT * FROM read_parquet('docs.parquet')|
   end
 
+  test "create_table rejects CTAS from parameterized Ecto queries" do
+    import Ecto.Query
+
+    query = from(doc in "docs", where: doc.id == ^1, select: doc.id)
+
+    assert_raise ArgumentError, ~r/does not support parameterized Ecto queries/, fn ->
+      QuackDB.DDL.create_table("docs_copy", as: query)
+    end
+  end
+
   test "create_table builds CTAS statements from Ecto queries" do
     import Ecto.Query
 

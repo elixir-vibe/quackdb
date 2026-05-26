@@ -60,7 +60,7 @@ QuackDB.query!(conn, DDL.create_table("docs", as: query, temporary: true))
 QuackDB.query!(conn, FTS.create_index("docs", :id, [:title, :body], overwrite: true))
 ```
 
-The same pattern works for CSV, JSON, Delta, Iceberg, Hugging Face datasets, or any source expression DuckDB can read. Use `QuackDB.Secret.create/2` and `QuackDB.Extension.load/1` when the source needs credentials or an extension such as `httpfs`.
+The same pattern works for CSV, JSON, Delta, Iceberg, Hugging Face datasets, or any source expression DuckDB can read. `DDL.create_table/2` accepts Ecto queries without pinned parameters because DDL helpers return SQL iodata rather than `{sql, params}` tuples. Use literal query expressions in the CTAS query, or materialize parameterized results before indexing. Use `QuackDB.Secret.create/2` and `QuackDB.Extension.load/1` when the source needs credentials or an extension such as `httpfs`.
 
 ## Search from direct SQL
 

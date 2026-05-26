@@ -6,10 +6,17 @@ defmodule QuackDB.FTS do
   autoloads the `fts` extension on first use in many configurations, but you can
   install/load it explicitly:
 
-      QuackDB.query!(conn, QuackDB.FTS.load())
+      alias QuackDB.FTS
 
-  Create an index with `create_index/4`, then use `match_bm25/3` in a `SELECT`,
-  `WHERE`, or `ORDER BY` expression.
+      QuackDB.query!(conn, FTS.install())
+      QuackDB.query!(conn, FTS.load())
+      QuackDB.query!(conn, FTS.create_index("documents", :id, [:title, :body]))
+
+      score = FTS.match_bm25(~s|"id"|, "duckdb analytics", schema: FTS.schema_name("main.documents"))
+      QuackDB.query!(conn, ["SELECT id, ", score, " AS score FROM documents ORDER BY score DESC"])
+
+  `bm25/3` and `search_score/3` are aliases for `match_bm25/3`. Use `stem/2`
+  for DuckDB's stemming helper.
   """
 
   @type create_option ::

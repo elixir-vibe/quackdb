@@ -49,7 +49,16 @@ defmodule QuackDB.DDL do
     end
   end
 
-  @doc "Builds a `CREATE TABLE` statement."
+  @doc """
+  Builds a `CREATE TABLE` statement.
+
+      QuackDB.DDL.create_table("events", id: :integer, name: :varchar)
+      QuackDB.DDL.create_table("events", [id: :integer], temporary: true)
+
+  Pass `:as` to build `CREATE TABLE AS` from iodata or an Ecto query without pinned params:
+
+      QuackDB.DDL.create_table("docs", as: query, temporary: true)
+  """
   @spec create_table(String.t() | atom(), [column()], [create_table_option()]) :: iodata()
   def create_table(name, columns, options \\ []) when is_list(columns) and is_list(options) do
     [
@@ -90,10 +99,49 @@ defmodule QuackDB.DDL do
   end
 
   if Code.ensure_loaded?(Ecto.Query) do
-    defp table_query(%Ecto.Query{} = query), do: Ecto.Adapters.QuackDB.Query.all(query)
+    defp table_query(%Ecto.Query{} = query) do
+      assert_unparameterized_query!(query)
+      Ecto.Adapters.QuackDB.Query.all(query)
+    end
   end
 
   defp table_query(query), do: query
+
+  defp assert_unparameterized_query!(query) do
+    if parameterized_query?(query) do
+      raise ArgumentError,
+            "QuackDB.DDL.create_table/2 with :as does not support parameterized Ecto queries; use literal query expressions or materialize with Repo.all/query first"
+    end
+  end
+
+  defp parameterized_query?(%Ecto.Query{} = query) do
+    query
+    |> Map.take([
+      :wheres,
+      :havings,
+      :order_bys,
+      :group_bys,
+      :combinations,
+      :select,
+      :joins,
+      :limit,
+      :offset
+    ])
+    |> parameterized_query?()
+  end
+
+  defp parameterized_query?(%{params: [_ | _]}), do: true
+
+  defp parameterized_query?(value) when is_map(value) do
+    value
+    |> Map.values()
+    |> Enum.any?(&parameterized_query?/1)
+  end
+
+  defp parameterized_query?(value) when is_list(value),
+    do: Enum.any?(value, &parameterized_query?/1)
+
+  defp parameterized_query?(_value), do: false
 
   defp schema_columns(schema) do
     Enum.map(schema.__schema__(:fields), fn field ->
