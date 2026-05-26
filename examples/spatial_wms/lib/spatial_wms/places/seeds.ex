@@ -6,6 +6,11 @@ defmodule SpatialWMS.Places.Seeds do
 
   @table "wms_places"
 
+  def reset! do
+    Repo.delete_all(@table)
+    load!()
+  end
+
   def load! do
     @table
     |> DML.insert_into(seed_rows())

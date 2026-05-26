@@ -32,8 +32,14 @@ defmodule SpatialWMS.Application do
         token = "super_secret"
 
         {
-          [{QuackDB.Server, name: SpatialWMS.DuckDB, duckdb: :managed, token: token}],
-          [uri: "http://[::1]:9494", token: token, pool_size: 1, log: false]
+          [
+            {QuackDB.Server,
+             name: SpatialWMS.DuckDB,
+             duckdb: :managed,
+             endpoint: "quack:localhost:9495",
+             token: token}
+          ],
+          [uri: "http://[::1]:9495", token: token, pool_size: 1, log: false]
         }
 
       uri ->

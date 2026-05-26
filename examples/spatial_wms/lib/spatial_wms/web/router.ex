@@ -1,7 +1,7 @@
 defmodule SpatialWMS.Web.Router do
   use Plug.Router
 
-  alias SpatialWMS.Places.DuckDB
+  alias SpatialWMS.Places
   alias SpatialWMS.Web.{GeoJSON, WMS}
 
   plug(:fetch_query_params)
@@ -34,7 +34,7 @@ defmodule SpatialWMS.Web.Router do
   defp send_map(conn, params) do
     case WMS.validate_map_request(params) do
       {:ok, bbox} ->
-        body = bbox |> DuckDB.by_bbox() |> GeoJSON.feature_collection() |> Jason.encode!()
+        body = bbox |> Places.by_bbox!() |> GeoJSON.feature_collection() |> Jason.encode!()
 
         conn
         |> put_resp_content_type("application/geo+json")

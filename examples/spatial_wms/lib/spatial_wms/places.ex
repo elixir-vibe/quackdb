@@ -7,7 +7,7 @@ defmodule SpatialWMS.Places do
 
   resources do
     resource Place do
-      define(:place, action: :new)
+      define(:by_bbox, args: [:bbox])
     end
   end
 
