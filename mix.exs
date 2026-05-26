@@ -95,7 +95,8 @@ defmodule QuackDB.MixProject do
   defp public_doc_module?(module, _metadata) do
     name = Atom.to_string(module)
 
-    not (name in internal_doc_modules() or String.starts_with?(name, "Elixir.QuackDB.Protocol."))
+    not (name in internal_doc_modules() or String.starts_with?(name, "Elixir.QuackDB.Protocol.") or
+           String.starts_with?(name, "Elixir.Mix.Tasks."))
   end
 
   defp internal_doc_modules do

@@ -9,9 +9,13 @@ defmodule QuackDB.Server do
 
       children =
         QuackDB.Server.child_specs(
-          server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
+          server: [name: MyApp.DuckDB, duckdb: :managed, endpoint: "quack:localhost:9494"],
           client: [name: MyApp.QuackDB, pool_size: 5]
         )
+
+  Use `duckdb: :managed` to download and cache DuckDB's official CLI binary via
+  `QuackDB.Binary`. Pass `duckdb: "/path/to/duckdb"` or set
+  `QUACKDB_BINARY_PATH` when you want to provide the executable yourself.
 
   `child_specs/1` generates one shared random token when neither side provides
   `:token`, then injects the same token and URI into the server and client specs.
@@ -48,7 +52,8 @@ defmodule QuackDB.Server do
 
   @type option ::
           {:name, GenServer.name()}
-          | {:duckdb, String.t()}
+          | {:duckdb, String.t() | :managed}
+          | {:duckdb_options, keyword()}
           | {:database, String.t()}
           | {:endpoint, String.t()}
           | {:uri, String.t()}
@@ -169,7 +174,7 @@ defmodule QuackDB.Server do
   def terminate(_reason, _state), do: :ok
 
   defp build_state(options) do
-    duckdb = Keyword.get(options, :duckdb, "duckdb")
+    duckdb = duckdb_path(options)
     database = Keyword.get(options, :database, ":memory:")
     endpoint = Keyword.get(options, :endpoint, "quack:localhost")
     uri = Keyword.get(options, :uri, default_uri(endpoint))
@@ -193,6 +198,13 @@ defmodule QuackDB.Server do
       daemon_args: args,
       daemon_options: daemon_options
     }
+  end
+
+  defp duckdb_path(options) do
+    case Keyword.get(options, :duckdb, "duckdb") do
+      :managed -> QuackDB.Binary.path!(Keyword.get(options, :duckdb_options, []))
+      path -> path
+    end
   end
 
   defp daemon_options(options) do

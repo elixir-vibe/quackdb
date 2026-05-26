@@ -44,12 +44,20 @@ For local development, QuackDB can supervise DuckDB's external CLI process for y
 ```elixir
 children =
   QuackDB.Server.child_specs(
-    server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
+    server: [name: MyApp.DuckDB, duckdb: :managed, endpoint: "quack:localhost:9494"],
     client: [name: MyApp.QuackDB, pool_size: System.schedulers_online()]
   )
 ```
 
 `child_specs/1` generates one shared random token and injects the matching URI/token into both child specs. Pass `:token` on either side when you want to provide it yourself.
+
+`duckdb: :managed` downloads and caches DuckDB's official CLI binary when the local server starts. For explicit setup, run:
+
+```sh
+mix quackdb.install
+```
+
+Use `QUACKDB_BINARY_PATH` or pass `duckdb: "/path/to/duckdb"` when you want QuackDB to use a system or custom executable instead.
 
 Or start DuckDB manually with the `quack` extension loaded:
 

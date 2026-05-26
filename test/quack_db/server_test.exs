@@ -121,6 +121,25 @@ defmodule QuackDB.ServerTest do
              QuackDB.Server.start_link(duckdb: "definitely_missing_duckdb_exe", wait: false)
   end
 
+  test "managed DuckDB uses downloaded binary path" do
+    path = System.find_executable("duckdb")
+
+    if path do
+      server =
+        start_supervised!(
+          {QuackDB.Server,
+           duckdb: :managed,
+           duckdb_options: [path: path],
+           boot_sql: "ignored",
+           token: "secret",
+           wait: false,
+           daemon_command: {"tail", ["-f", "/dev/null"]}}
+        )
+
+      assert %{duckdb: ^path} = QuackDB.Server.info(server)
+    end
+  end
+
   test "starts a supervised MuonTrap daemon without waiting" do
     server =
       start_supervised!(
