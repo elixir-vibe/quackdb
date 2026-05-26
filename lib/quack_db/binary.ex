@@ -33,6 +33,16 @@ defmodule QuackDB.Binary do
           | {:sha256, String.t()}
           | {:force, boolean()}
 
+  @doc "Returns QuackDB's pinned DuckDB CLI version for managed downloads."
+  @spec default_version() :: String.t()
+  def default_version, do: @default_version
+
+  @doc "Returns known `{version, target}` checksum pairs for managed downloads."
+  @spec known_targets() :: [{String.t(), String.t()}]
+  def known_targets do
+    @checksums |> Map.keys() |> Enum.sort()
+  end
+
   @doc "Returns a path to a usable DuckDB binary, downloading it when needed."
   @spec path([option()]) :: {:ok, Path.t()} | {:error, Error.t()}
   def path(options \\ []) do

@@ -2,7 +2,7 @@
 
 These binary fixtures were generated from the independent `quack-ts` implementation in `/tmp/quack-protocol` and are used as golden wire-format fixtures for QuackDB protocol conformance tests.
 
-The ExUnit tests compare QuackDB's encoder output byte-for-byte against these files. The TypeScript generator is intentionally not part of this repository; regenerate these fixtures from a checked-out quack-ts copy when the upstream protocol encoding changes.
+The ExUnit tests compare QuackDB's encoder output byte-for-byte against these files and also decode each fixture before re-encoding it to prove decode-side compatibility for the covered shapes. The TypeScript generator is intentionally not part of this repository; regenerate these fixtures from a checked-out quack-ts copy when the upstream protocol encoding changes.
 
 Fixtures:
 

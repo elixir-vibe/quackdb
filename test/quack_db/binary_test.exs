@@ -1,6 +1,15 @@
 defmodule QuackDB.BinaryTest do
   use ExUnit.Case, async: false
 
+  test "exposes pinned version and known checksum targets" do
+    assert QuackDB.Binary.default_version() == "1.5.3"
+
+    assert {"1.5.3", "linux-amd64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.3", "linux-arm64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.3", "osx-amd64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.3", "osx-arm64"} in QuackDB.Binary.known_targets()
+  end
+
   test "respects explicit path option" do
     path = System.find_executable("duckdb")
 

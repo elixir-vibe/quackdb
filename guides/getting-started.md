@@ -51,7 +51,7 @@ children =
 
 `child_specs/1` generates one shared random token and injects the matching URI/token into both child specs. Pass `:token` on either side when you want to provide it yourself.
 
-`duckdb: :managed` downloads and caches DuckDB's official CLI binary when the local server starts. Managed downloads are checksum-verified for QuackDB's pinned DuckDB version. For explicit setup, run:
+`duckdb: :managed` downloads and caches DuckDB's official CLI binary when the local server starts. Managed downloads are checksum-verified for `QuackDB.Binary.default_version/0`; other DuckDB versions require passing an explicit `:sha256`. For explicit setup, run:
 
 ```sh
 mix quackdb.install
