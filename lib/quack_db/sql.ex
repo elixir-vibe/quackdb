@@ -128,6 +128,10 @@ defmodule QuackDB.SQL do
         ] do
       def literal(%unquote(module){} = value), do: geo_literal(value)
     end
+
+    defp geo_literal(value) do
+      {:ok, ["ST_GeomFromWKB(", literal!({:blob, QuackDB.Geometry.from_geo!(value)}), ")"]}
+    end
   end
 
   def literal({:interval, months, days, micros})
@@ -184,10 +188,6 @@ defmodule QuackDB.SQL do
       {:ok, literal} -> literal
       {:error, %Error{} = error} -> raise error
     end
-  end
-
-  defp geo_literal(value) do
-    {:ok, ["ST_GeomFromWKB(", literal!({:blob, QuackDB.Geometry.from_geo!(value)}), ")"]}
   end
 
   defp unsupported_parameter(value) do

@@ -40,6 +40,23 @@ That gives you:
 - explicit unsupported-feature errors instead of silent lossy behavior
 - optional Ecto and Explorer layers without making them required
 
+## Examples
+
+The `examples/` directory includes runnable scripts and a Livebook notebook:
+
+- `examples/telemetry_observer.exs` — attach telemetry handlers and print query, append, and fetch timings.
+- `examples/explorer_roundtrip.exs` — append an `Explorer.DataFrame` through native column append and query it back as a dataframe.
+- `examples/livebook_analytics.livemd` — an interactive analytics notebook with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
+
+Run scripts from outside the Mix project so `Mix.install/2` can load the local package:
+
+```sh
+cd /tmp
+QUACKDB_TEST_URI='http://[::1]:9494' \
+QUACKDB_TEST_TOKEN=super_secret \
+elixir /path/to/quackdb/examples/explorer_roundtrip.exs
+```
+
 ## Installation
 
 Add `:quackdb` to your dependencies:

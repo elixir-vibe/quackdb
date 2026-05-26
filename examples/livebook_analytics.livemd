@@ -1,0 +1,99 @@
+# QuackDB analytics in Livebook
+
+This notebook shows QuackDB as an Elixir-native analytics bridge: DuckDB over Quack, Explorer dataframes, `Table.Reader` friendly results, telemetry, and native dataframe append.
+
+## Setup
+
+```elixir
+Mix.install([
+  {:quackdb, path: Path.expand("..", __DIR__)},
+  {:explorer, "~> 0.11"},
+  {:vega_lite, "~> 0.1"},
+  {:kino, "~> 0.14"}
+])
+```
+
+Start DuckDB with Quack locally before running the notebook:
+
+```sh
+duckdb -interactive -init /dev/null \
+  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
+```
+
+```elixir
+alias Explorer.DataFrame
+alias VegaLite, as: Vl
+
+uri = System.get_env("QUACKDB_TEST_URI", "http://localhost:9494")
+token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
+
+{:ok, conn} = QuackDB.start_link(uri: uri, token: token)
+```
+
+## Observe queries
+
+```elixir
+:telemetry.attach_many(
+  "quackdb-livebook-observer",
+  [[:quackdb, :query, :stop], [:quackdb, :append, :stop], [:quackdb, :fetch, :stop]],
+  fn event, measurements, metadata, _config ->
+    ms = measurements.duration |> System.convert_time_unit(:native, :microsecond) |> Kernel./(1_000)
+    IO.inspect(%{event: event, ms: Float.round(ms, 2), metadata: metadata})
+  end,
+  nil
+)
+```
+
+## Create sample data
+
+```elixir
+table = "livebook_events_#{System.unique_integer([:positive])}"
+
+QuackDB.query!(conn, "CREATE TEMP TABLE #{table}(id INTEGER, category VARCHAR, score DOUBLE)")
+
+df =
+  DataFrame.new(
+    id: 1..8,
+    category: ["alpha", "alpha", "alpha", "beta", "beta", "gamma", "gamma", "gamma"],
+    score: [10.0, 20.0, 15.0, 30.0, 25.0, 7.0, 12.0, 18.0]
+  )
+
+QuackDB.Explorer.insert_dataframe!(conn, table, df, batch_size: 3)
+```
+
+## Query with SQL
+
+```elixir
+result =
+  QuackDB.query!(conn, """
+  SELECT category, count(*) AS events, avg(score) AS avg_score
+  FROM #{table}
+  GROUP BY category
+  ORDER BY category
+  """)
+
+result
+```
+
+`QuackDB.Result` implements `Table.Reader` when the optional `:table` package is available, so Table-aware tools can consume it directly.
+
+```elixir
+Table.Reader.init(result)
+```
+
+## Convert to Explorer
+
+```elixir
+summary = QuackDB.Explorer.from_result!(result)
+```
+
+## Visualize
+
+```elixir
+summary
+|> DataFrame.to_rows()
+|> Vl.new(width: 500, height: 300)
+|> Vl.mark(:bar)
+|> Vl.encode_field(:x, "category", type: :nominal)
+|> Vl.encode_field(:y, "avg_score", type: :quantitative)
+```
