@@ -206,36 +206,54 @@ QuackDB does not upload local files for you. The DuckDB server must be able to s
 
 ## Spatial workflows
 
-DuckDB Spatial works well through raw SQL, QuackDB expression helpers, or Ecto fragments.
+DuckDB Spatial works well with Ecto queries and `%Geo.*{}` structs when the optional `:geo` package is installed.
 
 ```elixir
+use QuackDB.Ecto
+
+import QuackDB.Ecto.Spatial
+
 alias QuackDB.Spatial
 
-QuackDB.query!(conn, Spatial.install())
-QuackDB.query!(conn, Spatial.load())
+MyApp.AnalyticsRepo.query!(Spatial.load())
 
-QuackDB.query!(conn, [
-  "SELECT ",
-  Spatial.as_geojson(Spatial.point(13.405, 52.52)),
-  " AS berlin"
-])
+point = %Geo.Point{coordinates: {13.405, 52.52}, srid: nil}
+
+from place in "places",
+  where: intersects(place.geom, ^point),
+  select: %{
+    id: place.id,
+    name: place.name,
+    wkt: as_text(place.geom)
+  }
 ```
 
 `GEOMETRY` values decode as WKB-compatible bytes for tested DuckDB Spatial values. `QuackDB.Geometry` can convert to/from `%Geo.*{}` structs when the optional `:geo` package is installed. See the [spatial guide](guides/spatial.md).
 
 ## Full-text search
 
-DuckDB's FTS extension can index text columns and rank matches with BM25. QuackDB wraps the setup pragmas and search expressions:
+DuckDB's FTS extension can index text columns and rank matches with BM25. QuackDB wraps index management and Ecto search expressions:
 
 ```elixir
+use QuackDB.Ecto
+
 alias QuackDB.FTS
 
-QuackDB.query!(conn, FTS.install())
-QuackDB.query!(conn, FTS.load())
-QuackDB.query!(conn, FTS.create_index("documents", :id, [:title, :body], overwrite: true))
+MyApp.AnalyticsRepo.query!(FTS.load())
+MyApp.AnalyticsRepo.query!(FTS.create_index("documents", :id, [:title, :body], overwrite: true))
 
-score = FTS.match_bm25(~s|"id"|, "duckdb analytics", schema: FTS.schema_name("main.documents"))
-QuackDB.query!(conn, ["SELECT id, title, ", score, " AS score FROM documents ORDER BY score DESC"])
+schema = FTS.schema_name("main.documents")
+search = "duckdb analytics"
+
+from doc in "documents",
+  where: bm25(^schema, doc.id, ^search) > 0,
+  order_by: [desc: bm25(^schema, doc.id, ^search)],
+  limit: 10,
+  select: %{
+    id: doc.id,
+    title: doc.title,
+    score: bm25(^schema, doc.id, ^search)
+  }
 ```
 
 Use `QuackDB.Ecto.FTS` or `use QuackDB.Ecto` for Ecto query expressions. See the [full-text search guide](guides/full-text-search.md).
