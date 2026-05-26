@@ -106,6 +106,30 @@ defmodule QuackDB.SQL do
     literal({:interval, interval.months, interval.days, interval.microseconds})
   end
 
+  if Code.ensure_loaded?(Geo.WKB) do
+    for module <- [
+          Geo.Point,
+          Geo.PointZ,
+          Geo.PointM,
+          Geo.PointZM,
+          Geo.LineString,
+          Geo.LineStringZ,
+          Geo.LineStringZM,
+          Geo.Polygon,
+          Geo.PolygonZ,
+          Geo.MultiPoint,
+          Geo.MultiPointZ,
+          Geo.MultiLineString,
+          Geo.MultiLineStringZ,
+          Geo.MultiLineStringZM,
+          Geo.MultiPolygon,
+          Geo.MultiPolygonZ,
+          Geo.GeometryCollection
+        ] do
+      def literal(%unquote(module){} = value), do: geo_literal(value)
+    end
+  end
+
   def literal({:interval, months, days, micros})
       when is_integer(months) and is_integer(days) and is_integer(micros) do
     {:ok,
@@ -141,9 +165,7 @@ defmodule QuackDB.SQL do
     end
   end
 
-  def literal(value) do
-    error(:unsupported_parameter, "unsupported SQL parameter #{inspect(value)}")
-  end
+  def literal(value), do: unsupported_parameter(value)
 
   defp call_arguments(positional_args, named_args) do
     positional = Enum.map(positional_args, &literal!/1)
@@ -162,6 +184,14 @@ defmodule QuackDB.SQL do
       {:ok, literal} -> literal
       {:error, %Error{} = error} -> raise error
     end
+  end
+
+  defp geo_literal(value) do
+    {:ok, ["ST_GeomFromWKB(", literal!({:blob, QuackDB.Geometry.from_geo!(value)}), ")"]}
+  end
+
+  defp unsupported_parameter(value) do
+    error(:unsupported_parameter, "unsupported SQL parameter #{inspect(value)}")
   end
 
   defp identifier!(value, kind) when is_atom(value),

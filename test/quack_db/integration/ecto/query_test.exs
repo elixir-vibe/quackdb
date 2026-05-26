@@ -2,6 +2,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
   use ExUnit.Case, async: false
 
   import Ecto.Query
+  import QuackDB.Ecto.Spatial, only: [as_text: 1, intersects: 2]
   import QuackDB.QuackServerCase
   import QuackDB.TestHelper
 
@@ -22,6 +23,30 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              insert = insert_rows!(QuackDB.IntegrationRepo, table, [[1], [2]])
 
     assert insert.metadata[:duckdb_rows] == [[2]]
+  end
+
+  test "Ecto spatial helpers accept pinned Geo structs" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_spatial")
+
+    QuackDB.IntegrationRepo.query!(QuackDB.Spatial.load())
+    QuackDB.IntegrationRepo.query!("CREATE TEMP TABLE #{table}(id INTEGER, geom GEOMETRY)")
+
+    point = %Geo.Point{coordinates: {1.0, 2.0}, srid: nil}
+
+    QuackDB.IntegrationRepo.query!([
+      "INSERT INTO #{table} VALUES (1, ",
+      QuackDB.Spatial.geom_from_wkb(QuackDB.Geometry.from_geo!(point)),
+      ")"
+    ])
+
+    query =
+      from(place in table,
+        where: intersects(place.geom, ^point),
+        select: as_text(place.geom)
+      )
+
+    assert ["POINT (1 2)"] = QuackDB.IntegrationRepo.all(query)
   end
 
   test "Ecto Repo.insert_all/3 inserts rows with generated SQL" do

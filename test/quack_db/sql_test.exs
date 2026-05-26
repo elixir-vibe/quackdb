@@ -51,6 +51,13 @@ defmodule QuackDB.SQLTest do
              "SELECT '?' AS literal, 'Robert''); DROP TABLE users;--' AS value -- ? comment\n/* ? block */"
   end
 
+  test "formats Geo structs as DuckDB geometry literals" do
+    assert {:ok, sql} = QuackDB.SQL.literal(%Geo.Point{coordinates: {1.0, 2.0}, srid: nil})
+
+    assert sql |> IO.iodata_to_binary() ==
+             "ST_GeomFromWKB(from_hex('0101000000000000000000f03f0000000000000040'))"
+  end
+
   test "formats blobs, intervals, and lists" do
     assert {:ok, sql} =
              QuackDB.SQL.format("SELECT ?, ?, ?", [

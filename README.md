@@ -362,7 +362,21 @@ QuackDB.query!(conn, [
 ])
 ```
 
-DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`.
+DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`, or pass `%Geo.*{}` structs as raw SQL/Ecto parameters.
+
+Ecto queries can import `QuackDB.Ecto.Spatial` for fragment-backed spatial expressions:
+
+```elixir
+import Ecto.Query
+import QuackDB.Ecto.Spatial
+
+point = %Geo.Point{coordinates: {1.0, 2.0}, srid: nil}
+
+from(place in "places",
+  where: intersects(place.geom, ^point),
+  select: as_text(place.geom)
+)
+```
 
 ### Prepare and execute
 
