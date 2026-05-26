@@ -9,7 +9,14 @@ defmodule QuackDB do
   alias QuackDB.Query
   alias QuackDB.Stream
 
-  @type start_option :: {:uri, String.t()} | {:token, String.t()} | {:name, GenServer.name()}
+  @type start_option ::
+          {:uri, String.t()}
+          | {:token, String.t()}
+          | {:name, GenServer.name()}
+          | {:connect_timeout, timeout()}
+          | {:receive_timeout, timeout()}
+          | {:shutdown_timeout, timeout()}
+          | {:mint_options, keyword()}
   @type insert_row :: map() | Keyword.t()
   @type insert_column :: {atom() | String.t(), [term()]}
 

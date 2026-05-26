@@ -32,6 +32,7 @@ defmodule QuackDB.DBConnection do
     :server,
     :transport,
     :transport_owner,
+    :transport_options,
     :client_version,
     :telemetry_prefix,
     status: :idle,
@@ -45,6 +46,7 @@ defmodule QuackDB.DBConnection do
           server: ConnectionResponse.t() | nil,
           transport: function(),
           transport_owner: pid() | nil,
+          transport_options: keyword(),
           client_version: String.t(),
           telemetry_prefix: [atom()],
           status: DBConnection.status(),
@@ -665,6 +667,7 @@ defmodule QuackDB.DBConnection do
          token: Keyword.get(options, :token, ""),
          transport: Keyword.get(options, :transport),
          transport_owner: nil,
+         transport_options: transport_options(options),
          client_version: Keyword.get(options, :client_version, client_version()),
          telemetry_prefix: Keyword.get(options, :telemetry_prefix, Telemetry.default_prefix())
        }}
@@ -693,7 +696,7 @@ defmodule QuackDB.DBConnection do
   end
 
   defp start_transport(%{transport: nil, uri: uri} = state) do
-    case QuackDB.Transport.start_link(uri) do
+    case QuackDB.Transport.start_link(uri, state.transport_options) do
       {:ok, owner} ->
         {:ok,
          %{state | transport: &QuackDB.Transport.post(owner, &1, &2, &3), transport_owner: owner}}
@@ -705,6 +708,10 @@ defmodule QuackDB.DBConnection do
 
   defp start_transport(%{transport: transport} = state) when is_function(transport, 3),
     do: {:ok, state}
+
+  defp transport_options(options) do
+    Keyword.take(options, [:connect_timeout, :receive_timeout, :shutdown_timeout, :mint_options])
+  end
 
   defp normalize_connect_response({header, %ConnectionResponse{} = response}, state) do
     {:ok, %{state | connection_id: header.connection_id, server: response}}
