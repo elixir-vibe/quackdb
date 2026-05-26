@@ -29,13 +29,22 @@ cd /tmp
 elixir /path/to/quackdb/examples/dataframe_analytics.exs
 ```
 
+## Append benchmark
+
+[`append_benchmark.exs`](append_benchmark.exs) compares SQL inserts, native row append, native column append, Explorer dataframe append, Ecto SQL `insert_all`, and Ecto native append.
+
+```sh
+cd /tmp
+ROWS=1000 BATCH_SIZE=1000 elixir /path/to/quackdb/examples/append_benchmark.exs
+```
+
 ## Livebook analytics
 
 [`livebook_analytics.livemd`](livebook_analytics.livemd) is an interactive notebook using Explorer, Table.Reader, VegaLite, telemetry, and a local `QuackDB.Server`.
 
 ## Spatial WMS
 
-[`spatial_wms/`](spatial_wms/) is a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+[`spatial_wms/`](spatial_wms/README.md) is a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
 
 It supports:
 

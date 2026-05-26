@@ -73,6 +73,11 @@ defmodule QuackDB.MixProject do
         "README.md",
         "guides/getting-started.md",
         "guides/type-support.md",
+        "guides/examples.md",
+        "guides/explorer.md",
+        "guides/spatial.md",
+        "guides/telemetry.md",
+        "examples/livebook_analytics.livemd",
         "docs/research.md",
         "docs/postgrex-comparison.md",
         "docs/duckdb-capabilities.md",
@@ -83,6 +88,7 @@ defmodule QuackDB.MixProject do
       ],
       groups_for_extras: [
         Guides: ~r/guides\//,
+        Examples: ~r/examples\//,
         Research: ~r/docs\//
       ]
     ]

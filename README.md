@@ -48,6 +48,7 @@ The `examples/` directory includes runnable scripts and a Livebook notebook:
 - `examples/dataframe_analytics.exs` — derive DDL from an Ecto schema, append an `Explorer.DataFrame`, query with Ecto DSL, and return a dataframe.
 - `examples/livebook_analytics.livemd` — an interactive analytics notebook with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
 - `examples/spatial_wms/` — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+- `examples/append_benchmark.exs` — compares SQL inserts, native row/column append, Explorer append, and Ecto insert paths.
 - `examples/support/quackdb_demo.exs` — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
 
 Run scripts from outside the Mix project so `Mix.install/2` can load the local package. Examples start a local DuckDB Quack server with `QuackDB.Server` unless `QUACKDB_URI` is set:
@@ -644,4 +645,4 @@ QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
 
-See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, and [`docs/research.md`](docs/research.md) for protocol notes.
+See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/spatial.md`](guides/spatial.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/research.md`](docs/research.md) for protocol notes.

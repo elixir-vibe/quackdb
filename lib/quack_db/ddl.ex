@@ -26,6 +26,9 @@ defmodule QuackDB.DDL do
   @type create_table_option :: {:temporary, boolean()} | {:if_not_exists, boolean()}
 
   @doc "Builds a `CREATE TABLE` statement from an Ecto schema module."
+  @spec create_table(module()) :: iodata()
+  def create_table(schema) when is_atom(schema), do: create_table(schema, [])
+
   @spec create_table(module(), [create_table_option()]) :: iodata()
   def create_table(schema, options) when is_atom(schema) and is_list(options) do
     create_table(schema.__schema__(:source), schema_columns(schema), options)
