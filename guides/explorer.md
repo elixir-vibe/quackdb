@@ -48,6 +48,14 @@ This uses `QuackDB.insert_columns/4` internally, preserving Explorer's columnar 
 
 ## Table.Reader
 
+Streams and other enumerables of row maps/keywords can be appended without materializing the whole input:
+
+```elixir
+File.stream!("events.ndjson")
+|> Stream.map(&Jason.decode!/1)
+|> QuackDB.insert_stream!(conn, "events", chunk_every: 10_000)
+```
+
 Any `Table.Reader`-compatible data can also be appended through QuackDB's native column append path:
 
 ```elixir

@@ -297,6 +297,14 @@ frame = DataFrame.new(id: [1, 2], name: ["duck", "goose"])
 QuackExplorer.insert_dataframe!(conn, "events", frame)
 ```
 
+Enumerable rows can be streamed into native append batches:
+
+```elixir
+File.stream!("events.ndjson")
+|> Stream.map(&Jason.decode!/1)
+|> QuackDB.insert_stream!(conn, "events", chunk_every: 10_000)
+```
+
 Any `Table.Reader`-compatible data can be appended through the same column append path:
 
 ```elixir

@@ -137,32 +137,64 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     end
 
     defmacro time_bucket(%Duration{} = interval, timestamp, options) when is_list(options) do
-      origin = Keyword.fetch!(options, :origin)
+      {_kind, anchor} = time_bucket_anchor!(options)
 
-      quote do
-        fragment(
-          unquote([
-            "time_bucket(",
-            QuackDB.SQL.literal!(interval),
-            ", ?, ",
-            QuackDB.SQL.literal!(origin),
-            ")"
-          ]),
-          unquote(timestamp)
-        )
+      case sql_literal(anchor, __CALLER__) do
+        {:ok, anchor_sql} ->
+          quote do
+            fragment(
+              unquote([
+                "time_bucket(",
+                QuackDB.SQL.literal!(interval),
+                ", ?, ",
+                anchor_sql,
+                ")"
+              ]),
+              unquote(timestamp)
+            )
+          end
+
+        :error ->
+          quote do
+            fragment(
+              unquote(["time_bucket(", QuackDB.SQL.literal!(interval), ", ?, ?)"]),
+              unquote(timestamp),
+              unquote(anchor)
+            )
+          end
       end
     end
 
     defmacro time_bucket(interval, timestamp, options) when is_list(options) do
-      origin = Keyword.fetch!(options, :origin)
+      {_kind, anchor} = time_bucket_anchor!(options)
 
       quote do
         fragment(
           "time_bucket(?::INTERVAL, ?, ?)",
           unquote(interval),
           unquote(timestamp),
-          unquote(origin)
+          unquote(anchor)
         )
+      end
+    end
+
+    defp sql_literal(value, caller) do
+      value
+      |> Macro.expand(caller)
+      |> QuackDB.SQL.literal()
+      |> case do
+        {:ok, literal} -> {:ok, literal}
+        {:error, _reason} -> :error
+      end
+    end
+
+    defp time_bucket_anchor!(options) do
+      present = Enum.filter([:origin, :offset], &Keyword.has_key?(options, &1))
+
+      case present do
+        [kind] -> {kind, Keyword.fetch!(options, kind)}
+        [] -> raise ArgumentError, "time_bucket/3 expects :origin or :offset"
+        _ -> raise ArgumentError, "time_bucket/3 accepts either :origin or :offset, not both"
       end
     end
   end

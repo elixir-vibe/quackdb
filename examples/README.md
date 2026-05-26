@@ -29,6 +29,15 @@ cd /tmp
 elixir /path/to/quackdb/examples/dataframe_analytics.exs
 ```
 
+## Stream append
+
+[`stream_append.exs`](stream_append.exs) parses newline-delimited JSON as an Elixir stream and appends it with `QuackDB.insert_stream!/4` in small native append batches.
+
+```sh
+cd /tmp
+elixir /path/to/quackdb/examples/stream_append.exs
+```
+
 ## Append benchmark
 
 [`append_benchmark.exs`](append_benchmark.exs) compares SQL inserts, native row append, native column append, Explorer dataframe append, Ecto SQL `insert_all`, and Ecto native append. Tiny row counts mostly measure round-trip overhead; use larger `ROWS` values for meaningful append comparisons.
