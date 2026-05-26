@@ -4,7 +4,7 @@ QuackDB keeps byte-for-byte quack-ts fixtures for representative scalar and nest
 
 ## High-priority fixtures
 
-- `BIGNUM` values with positive, negative, zero, and very large magnitudes.
+- Malformed `BIGNUM` payloads with mismatched header sizes.
 - `INTERVAL` values with months, days, and microseconds all non-zero.
 - `TIME_NS` values preserving nanoseconds beyond Elixir `Time` microseconds.
 - `TIMESTAMP_NS` values preserving nanoseconds beyond Elixir `NaiveDateTime` microseconds.

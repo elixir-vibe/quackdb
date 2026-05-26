@@ -476,13 +476,36 @@ MyApp.AnalyticsRepo.query!(
 )
 ```
 
-Ecto support covers analytical reads and common write/setup flows. `Repo.query/3`, read-only `Repo.all/2` table queries, combinations, straightforward inserts/upserts, schema update/delete callbacks, `update_all` / `delete_all` mutations, `EXPLAIN`, and basic migration DDL work; advanced migration features and adapter-specific upsert expressions may still require `Repo.query/3`.
+Ecto support covers analytical reads and common write/setup flows. `Repo.query/3`, schema-backed reads, combinations, inserts/upserts, schema update/delete callbacks, `update_all` / `delete_all` mutations, `EXPLAIN`, transactions, and basic migrator-backed DDL work; advanced migration features and DuckDB-specific SQL should still use `Repo.query/3`.
+
+### Basic Ecto migrations
+
+QuackDB implements the Ecto migration DDL callbacks needed for common analytical setup migrations:
+
+```elixir
+defmodule MyApp.Repo.Migrations.CreateEvents do
+  use Ecto.Migration
+
+  def change do
+    create table(:events, primary_key: false) do
+      add(:id, :integer, primary_key: true)
+      add(:name, :string, null: false)
+      add(:score, :integer, default: 0)
+    end
+
+    create(index(:events, [:name]))
+    create(constraint(:events, :positive_score, check: "score >= 0"))
+  end
+end
+```
+
+Supported DDL includes create/drop/alter table, add/modify/drop columns, references, ordinary and unique indexes, primary keys, composite primary keys, check constraints, and table/column renames. DuckDB-incompatible options such as concurrent indexes, covering indexes, exclude constraints, constraint comments, and `NOT VALID` constraints raise explicit QuackDB errors.
 
 ## Current limitations
 
 - Server-side bind parameters are not exposed by this Quack client path yet. QuackDB formats supported parameter values as DuckDB SQL literals client-side.
-- Native appends support row batches but not Arrow IPC or automatic local-file/data staging yet.
-- Ecto support is limited to raw SQL, read-only analytical table queries, and straightforward `insert_all/3` row inserts.
+- Native appends support row and column batches but not Arrow IPC or automatic local-file/data staging yet.
+- Ecto coverage focuses on analytical reads and common write/setup workflows, not every relational adapter feature.
 - Quack is experimental and may change with DuckDB releases.
 
 ## Supervision and connection options

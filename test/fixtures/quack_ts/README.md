@@ -10,6 +10,7 @@ Fixtures:
 - `data_chunk_nested.bin` — wrapped nested `DataChunk` with list, struct, array, and map columns.
 - `append_request_scalar.bin` — `APPEND_REQUEST` wrapping the scalar chunk for `main.events`.
 - `append_request_nested.bin` — `APPEND_REQUEST` wrapping the nested chunk for `main.events`.
+- `data_chunk_bignum_extra.bin` — wrapped `DataChunk` with zero, positive, and negative `BIGNUM` values.
 - `data_chunk_temporal_extra.bin` — wrapped `DataChunk` with `TIME_NS`, `TIMESTAMP_NS`, `TIME WITH TIME ZONE`, and `INTERVAL` columns.
 - `data_chunk_spatial_extra.bin` — wrapped `DataChunk` with a WKB-compatible `GEOMETRY` column.
 - `data_chunk_nested_nulls_extra.bin` — wrapped nested `DataChunk` with null-heavy list, struct, and map columns.

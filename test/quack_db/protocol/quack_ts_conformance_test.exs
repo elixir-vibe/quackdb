@@ -33,6 +33,17 @@ defmodule QuackDB.Protocol.QuackTsConformanceTest do
     end
   end
 
+  test "extra BIGNUM fixture decodes" do
+    assert {:ok, %DataChunk{} = chunk, ""} =
+             "data_chunk_bignum_extra.bin" |> read_fixture!() |> DataChunk.decode_wrapper()
+
+    assert [
+             [0],
+             [123_456_789_012_345_678_901_234_567_890],
+             [-123_456_789_012_345_678_901_234_567_890]
+           ] = DataChunk.rows(chunk, ["bignum"])
+  end
+
   test "extra temporal fixture decodes" do
     assert {:ok, %DataChunk{} = chunk, ""} =
              "data_chunk_temporal_extra.bin" |> read_fixture!() |> DataChunk.decode_wrapper()

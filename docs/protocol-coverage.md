@@ -25,7 +25,7 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | Constant | Supported | Not emitted | Decode expands constants to row values |
 | Dictionary | Supported | Not emitted | Decode validates selection indexes |
 | Sequence | Supported | Not emitted | Decode materializes generated values |
-| FSST | Unsupported | Unsupported | Raises explicit `:unsupported_vector_type` |
+| FSST | Unsupported | Unsupported | Raises explicit `:unsupported_vector_type`; integration is pending a public FSST table-from-symbols API |
 | Unknown vector ids | Unsupported | Unsupported | Raises explicit `:unknown_vector_type` |
 
 ## Logical type coverage
@@ -41,7 +41,7 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | UUID | Supported | Partial | Decode supported; append can encode integer storage but public UUID append ergonomics are not finalized |
 | ENUM | Supported | Partial | Decode supported; append requires encoded enum index today |
 | BIT | Supported | Partial | Decode to bit string; append expects DuckDB bit payload bytes |
-| BIGNUM | Supported | Supported | Elixir integers |
+| BIGNUM | Supported | Supported | Elixir integers; fixture covers zero, positive, and negative large values |
 | DATE/TIME/TIMESTAMP/TIMESTAMPTZ | Supported | Supported | Calendar-aware append encoding |
 | TIME_NS | Supported | Supported | `QuackDB.NanosecondTime` |
 | TIMESTAMP_NS | Supported | Supported | `QuackDB.NanosecondTimestamp` |
@@ -71,8 +71,8 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | Native column append | Supported | Unit and integration |
 | Ecto raw SQL | Supported | Unit and integration |
 | Ecto analytical reads | Partial | Broad SQL-generation and integration coverage |
-| Ecto insert/insert_all | Partial | Plain inserts, returning, insert-from-query, and `on_conflict: :nothing` covered |
-| Ecto mutations and DDL | Partial | Inserts, upserts, returning, insert-from-query, `on_conflict: :nothing`, joined `update_all`, joined `delete_all`, rowid-filtered ordered/limited mutations, and basic migration DDL covered where DuckDB SQL allows it |
+| Ecto insert/insert_all | Covered | Plain inserts, returning, insert-from-query, common upserts, `on_conflict: :nothing`, and explicit native append fast path covered |
+| Ecto mutations and DDL | Partial | Schema update/delete, joined `update_all`, joined `delete_all`, rowid-filtered ordered/limited mutations, `Repo.explain`, transactions, and basic migrator-backed DDL covered where DuckDB SQL allows it |
 
 ## Conformance fixtures
 
@@ -80,5 +80,5 @@ Current cross-implementation fixtures compare QuackDB's append/data chunk encodi
 
 Missing fixture areas:
 
-- BIGNUM encode fixtures.
+- Malformed BIGNUM fixtures.
 - Malformed protocol fixtures for unsupported vector encodings and unsupported logical type metadata.

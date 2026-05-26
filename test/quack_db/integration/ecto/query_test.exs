@@ -610,6 +610,58 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
            ] = QuackDB.IntegrationRepo.all(query)
   end
 
+  test "Ecto schema parameters preserve common DuckDB scalar types" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "typed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "typed_events",
+      id: :integer,
+      amount: {:decimal, 8, 2},
+      event_date: :date,
+      event_time: :time,
+      occurred_at: :timestamp,
+      occurred_tz: :timestamp_tz,
+      tags: {:list, :varchar}
+    )
+
+    row = [
+      id: 1,
+      amount: Decimal.new("12.34"),
+      event_date: ~D[2026-05-26],
+      event_time: ~T[12:34:56],
+      occurred_at: ~N[2026-05-26 12:34:56],
+      occurred_tz: ~U[2026-05-26 12:34:56Z],
+      tags: ["duck", "analytics"]
+    ]
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.TypedEvent, [row])
+
+    query =
+      from(event in QuackDB.TestSchemas.TypedEvent,
+        where:
+          event.amount == ^Decimal.new("12.34") and
+            event.event_date == ^~D[2026-05-26] and
+            event.event_time == ^~T[12:34:56] and
+            event.occurred_at == ^~N[2026-05-26 12:34:56] and
+            event.occurred_tz == ^~U[2026-05-26 12:34:56Z],
+        select: event
+      )
+
+    assert [
+             %QuackDB.TestSchemas.TypedEvent{
+               id: 1,
+               amount: amount,
+               event_date: ~D[2026-05-26],
+               event_time: ~T[12:34:56],
+               occurred_at: ~N[2026-05-26 12:34:56],
+               tags: ["duck", "analytics"]
+             }
+           ] = QuackDB.IntegrationRepo.all(query)
+
+    assert Decimal.equal?(amount, Decimal.new("12.34"))
+  end
+
   test "Ecto Repo.all/2 supports pinned parameters against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_params")

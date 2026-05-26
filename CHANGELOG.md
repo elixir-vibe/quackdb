@@ -30,11 +30,13 @@
 - Added Ecto upsert SQL generation, schema update/delete callbacks, explain query support, and basic migration DDL generation with real-server coverage.
 - Expanded Ecto coverage for primary-key schema updates/deletes, full schema selects, `Repo.explain/3`, upsert increment/replacement expressions, unsafe conflict targets, composite-key/reference/check-constraint migration DDL, and actual `Ecto.Migrator` execution.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
+- Added BIGNUM protocol fixture coverage for zero, positive, and negative large values.
 
 ### Fixed
 
 - Expanded real Ecto insert coverage for `on_conflict: :nothing`, single-row insert upserts, and insert-from-query SQL paths.
 - Fixed Mint transport call timeout handling for `timeout: :infinity`, which Ecto migrator uses for migration DDL.
+- Updated user docs to reflect current Ecto migration, write, schema-read, and protocol coverage.
 
 ## 0.2.0 - 2026-05-25
 
