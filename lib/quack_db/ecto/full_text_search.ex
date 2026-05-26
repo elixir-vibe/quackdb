@@ -13,6 +13,12 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro match_bm25({:^, _, [schema]}, id, query) do
+      quote do
+        fragment("?.match_bm25(?, ?)", identifier(^unquote(schema)), unquote(id), unquote(query))
+      end
+    end
+
     defmacro match_bm25(id, query, options) do
       fields = Keyword.get(options, :fields)
       k = Keyword.get(options, :k)

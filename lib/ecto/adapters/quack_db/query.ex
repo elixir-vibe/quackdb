@@ -462,6 +462,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       ["(", expr(expression), " IS NULL)"]
     end
 
+    defp expr({:identifier, _meta, [value]}) when is_binary(value), do: quote_identifier(value)
     defp expr({:^, _meta, [_index]}), do: "?"
     defp expr(%Ecto.Query.Tagged{value: value}), do: literal(value)
     defp expr(value) when is_binary(value), do: literal(value)

@@ -10,6 +10,58 @@ defmodule QuackDB.Integration.FullTextSearchTest do
 
   @moduletag :integration
 
+  test "full-text search options support field filters and conjunctive queries" do
+    start_repo!()
+    table = "quackdb_fts_options"
+
+    QuackDB.IntegrationRepo.query!("DROP TABLE IF EXISTS #{table}")
+
+    TestHelper.create_table!(QuackDB.IntegrationRepo, table,
+      id: :integer,
+      title: :varchar,
+      body: :varchar
+    )
+
+    QuackDB.IntegrationRepo.insert_all(table, [
+      [id: 1, title: "DuckDB protocol", body: "Elixir analytics"],
+      [id: 2, title: "DuckDB only", body: "Protocol notes"],
+      [id: 3, title: "Elixir only", body: "DuckDB protocol"]
+    ])
+
+    QuackDB.IntegrationRepo.query!(FTS.install())
+    QuackDB.IntegrationRepo.query!(FTS.load())
+
+    QuackDB.IntegrationRepo.query!(
+      FTS.create_index(table, :id, :all, stemmer: :none, stopwords: :none, overwrite: true)
+    )
+
+    schema = "fts_main_quackdb_fts_options"
+
+    title_only =
+      QuackDB.IntegrationRepo.query!([
+        "SELECT id FROM ",
+        table,
+        " WHERE ",
+        FTS.match_bm25(~s|"id"|, "DuckDB", schema: schema, fields: :title),
+        " > 0 ORDER BY id"
+      ])
+
+    assert title_only.rows == [[1], [2]]
+
+    conjunctive =
+      QuackDB.IntegrationRepo.query!([
+        "SELECT id FROM ",
+        table,
+        " WHERE ",
+        FTS.match_bm25(~s|"id"|, "DuckDB protocol", schema: schema, conjunctive: true),
+        " > 0 ORDER BY id"
+      ])
+
+    assert conjunctive.rows == [[1], [2], [3]]
+
+    QuackDB.IntegrationRepo.query!(FTS.drop_index(table))
+  end
+
   test "full-text search helpers build and query an FTS index" do
     start_repo!()
     table = "quackdb_fts_documents"

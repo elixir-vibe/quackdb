@@ -38,6 +38,15 @@ SMOKE=1 ROWS=10 BATCH_SIZE=5 elixir /path/to/quackdb/examples/append_benchmark.e
 
 Remove `SMOKE=1` and increase `ROWS` for benchmark runs.
 
+## Full-text search
+
+[`examples/full_text_search.exs`](examples/full_text_search.exs) creates a DuckDB FTS index, runs direct SQL BM25 search, and runs the same search through Ecto fragments.
+
+```sh
+cd /tmp
+elixir /path/to/quackdb/examples/full_text_search.exs
+```
+
 ## Livebook analytics
 
 [`examples/livebook_analytics.livemd`](examples/livebook_analytics.livemd) is an interactive notebook using Explorer, Table.Reader, VegaLite, telemetry, and a local `QuackDB.Server`.
