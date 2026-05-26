@@ -53,7 +53,7 @@ QuackDB.query!(conn, [
 ])
 ```
 
-`match_bm25/3` accepts DuckDB's BM25 options:
+`match_bm25/3` accepts DuckDB's BM25 options. `bm25/3` and `search_score/3` are aliases when those read better in query-building code:
 
 ```elixir
 FTS.match_bm25(~s|"id"|, "duckdb analytics",
@@ -86,7 +86,15 @@ query =
 MyApp.AnalyticsRepo.all(query)
 ```
 
-The schema-qualified Ecto helper requires the generated FTS schema name as a literal string because Ecto fragments require compile-time SQL fragments. Use `QuackDB.FullTextSearch.schema_name/1` when building raw SQL, or define the schema name in your query module.
+For static query modules, pass the generated FTS schema as a literal string. For runtime table names, pin the schema name and the helper will emit an Ecto `identifier(^schema)` fragment:
+
+```elixir
+schema = QuackDB.FullTextSearch.schema_name("main.documents")
+
+from doc in "documents",
+  where: match_bm25(^schema, doc.id, ^"duckdb analytics") > 0,
+  select: %{score: search_score(^schema, doc.id, ^"duckdb analytics")}
+```
 
 ## Text stemming
 

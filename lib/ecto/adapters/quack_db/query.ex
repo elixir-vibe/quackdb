@@ -104,9 +104,9 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp select(nil, distinct, _from), do: ["SELECT ", distinct(distinct), "*"]
 
-    defp select(%Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}}, distinct, from)
+    defp select(%Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}, take: take}, distinct, from)
          when is_integer(binding) do
-      ["SELECT ", distinct(distinct), schema_fields(from, binding)]
+      ["SELECT ", distinct(distinct), source_fields(from, binding, Map.get(take, binding))]
     end
 
     defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, _from) do
@@ -126,6 +126,15 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp distinct(%{expr: expression}), do: ["DISTINCT ON (", expr(expression), ") "]
+
+    defp source_fields(from, binding, nil), do: schema_fields(from, binding)
+    defp source_fields(_from, binding, {_shape, fields}), do: selected_fields(binding, fields)
+
+    defp selected_fields(binding, fields) do
+      fields
+      |> Enum.map(fn field -> ["q", to_string(binding), ".", quote_identifier(field)] end)
+      |> Enum.intersperse(", ")
+    end
 
     defp schema_fields(%{source: {_table, schema}}, binding) when is_atom(schema) do
       schema.__schema__(:fields)
@@ -147,7 +156,13 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp select_expr({:%{}, _meta, fields}) do
       fields
-      |> Enum.map(fn {alias_name, expr} -> [expr(expr), " AS ", quote_identifier(alias_name)] end)
+      |> Enum.map(fn
+        {_alias_name, {:selected_as, _meta, [expression, name]}} ->
+          [expr(expression), " AS ", quote_identifier(name)]
+
+        {alias_name, expression} ->
+          [expr(expression), " AS ", quote_identifier(alias_name)]
+      end)
       |> Enum.intersperse(", ")
     end
 
@@ -429,6 +444,13 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp expr({:fragment, _meta, parts}), do: fragment(parts)
+
+    defp expr({:selected_as, _meta, [name]}) when is_atom(name), do: quote_identifier(name)
+
+    defp expr({:selected_as, _meta, [expression, name]}) when is_atom(name),
+      do: [expr(expression), " AS ", quote_identifier(name)]
+
+    defp expr({:type, _meta, [expression, _type]}), do: expr(expression)
 
     defp expr({op, _meta, [left, right]}) when op in [:==, :!=, :>, :<, :>=, :<=] do
       ["(", expr(left), " ", operator(op), " ", expr(right), ")"]

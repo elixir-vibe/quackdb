@@ -84,6 +84,7 @@ defmodule QuackDB.MixProject do
         "guides/telemetry.md",
         "examples/livebook_analytics.livemd",
         "docs/protocol/coverage.md",
+        "docs/protocol/fixtures.md",
         "docs/ecto-analytical-coverage.md"
       ],
       groups_for_extras: [

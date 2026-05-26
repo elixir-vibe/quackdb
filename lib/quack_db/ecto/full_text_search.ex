@@ -66,6 +66,30 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro bm25(id, query) do
+      quote do
+        match_bm25(unquote(id), unquote(query))
+      end
+    end
+
+    defmacro bm25(schema, id, query) do
+      quote do
+        match_bm25(unquote(schema), unquote(id), unquote(query))
+      end
+    end
+
+    defmacro search_score(id, query) do
+      quote do
+        match_bm25(unquote(id), unquote(query))
+      end
+    end
+
+    defmacro search_score(schema, id, query) do
+      quote do
+        match_bm25(unquote(schema), unquote(id), unquote(query))
+      end
+    end
+
     defmacro stem(text) do
       quote do
         fragment("stem(?)", unquote(text))

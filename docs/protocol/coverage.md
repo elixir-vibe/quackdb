@@ -76,9 +76,4 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 
 ## Conformance fixtures
 
-Current cross-implementation fixtures compare QuackDB's append/data chunk encoding byte-for-byte with quack-ts for scalar and nested chunks.
-
-Missing fixture areas:
-
-- Malformed BIGNUM fixtures.
-- Malformed protocol fixtures for unsupported vector encodings and unsupported logical type metadata.
+Current cross-implementation fixtures compare QuackDB's append/data chunk encoding byte-for-byte with quack-ts for scalar and nested chunks. See [`docs/protocol/fixtures.md`](fixtures.md) for the fixture inventory and backlog.

@@ -73,6 +73,15 @@ defmodule QuackDB.FullTextSearch do
     [match_function(options), "(", Enum.intersperse(args, ", "), ")"]
   end
 
+  @doc "Alias for `match_bm25/3`."
+  @spec bm25(iodata(), String.t(), [match_option()]) :: iodata()
+  def bm25(id_expression, query, options \\ []), do: match_bm25(id_expression, query, options)
+
+  @doc "Alias for `match_bm25/3` when using the expression as a score/rank."
+  @spec search_score(iodata(), String.t(), [match_option()]) :: iodata()
+  def search_score(id_expression, query, options \\ []),
+    do: match_bm25(id_expression, query, options)
+
   @doc "Builds `stem(text, stemmer)`."
   @spec stem(iodata(), atom() | String.t()) :: iodata()
   def stem(text_expression, stemmer \\ :porter) do
