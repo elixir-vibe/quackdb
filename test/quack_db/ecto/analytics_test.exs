@@ -52,6 +52,24 @@ defmodule QuackDB.Ecto.AnalyticsTest do
              ~S[SELECT time_bucket(?::INTERVAL, q0."occurred_at", ?) AS "duration_interval", time_bucket('1 hour'::INTERVAL, q0."occurred_at", ?) AS "string_interval" FROM "events" AS q0]
   end
 
+  test "builds JSON path-list expressions" do
+    query =
+      from(event in "events",
+        where: json_extract_string(event.payload, [:user, :name]) == "duck",
+        select: %{
+          name: json_extract_string(event.payload, [:user, :name]),
+          first_score: json_extract(event.payload, [:scores, 0]),
+          dashed: json_extract_string(event.payload, ["display name"])
+        }
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             "SELECT json_extract_string(q0.\"payload\", '$.user.name') AS \"name\", " <>
+               "json_extract(q0.\"payload\", '$.scores[0]') AS \"first_score\", " <>
+               "json_extract_string(q0.\"payload\", '$[''display name'']') AS \"dashed\" " <>
+               "FROM \"events\" AS q0 WHERE (json_extract_string(q0.\"payload\", '$.user.name') = 'duck')"
+  end
+
   test "builds JSON and time-series expressions" do
     query =
       from(event in "events",

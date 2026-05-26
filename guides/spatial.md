@@ -27,7 +27,8 @@ query =
       id: place.id,
       name: place.name,
       wkt: as_text(place.geom),
-      geojson: as_geojson(place.geom)
+      geojson: as_geojson(place.geom),
+      nearby: distance(place.geom, ^%Geo.Point{coordinates: {1.0, 2.0}, srid: nil}) < 1_000
     }
 
 MyApp.AnalyticsRepo.all(query)

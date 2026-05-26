@@ -153,6 +153,7 @@ defmodule MyApp.Analytics do
         p95: quantile_cont(event.duration_ms, 0.95),
         median: median(event.duration_ms),
         values: duckdb_list(event.duration_ms),
+        slow_events: filter(count(event.id), event.duration_ms > 1_000),
         events: count()
       }
   end
@@ -260,7 +261,7 @@ MyApp.AnalyticsRepo.query!(Spatial.load())
 point = %Geo.Point{coordinates: {13.405, 52.52}, srid: nil}
 
 from place in "places",
-  where: intersects(place.geom, ^point),
+  where: intersects(place.geom, ^point) and distance(place.geom, ^point) < 1_000,
   select: %{
     id: place.id,
     name: place.name,

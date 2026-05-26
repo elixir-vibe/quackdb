@@ -2,7 +2,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
   use ExUnit.Case, async: false
 
   import Ecto.Query
-  import QuackDB.Ecto.Spatial, only: [as_text: 1, intersects: 2]
+  import QuackDB.Ecto.Spatial, only: [as_text: 1, distance: 2, intersects: 2]
   import QuackDB.QuackServerCase
   import QuackDB.TestHelper
 
@@ -46,7 +46,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
 
     query =
       from(place in table,
-        where: intersects(place.geom, ^point),
+        where: intersects(place.geom, ^point) and distance(place.geom, ^point) < 1,
         select: as_text(place.geom)
       )
 

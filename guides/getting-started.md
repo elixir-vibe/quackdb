@@ -459,7 +459,8 @@ MyApp.AnalyticsRepo.all(
       category: event.category,
       median_score: median(event.score),
       p95_score: quantile_cont(event.score, 0.95),
-      scores: duckdb_list(event.score)
+      scores: duckdb_list(event.score),
+      high_score_events: filter(count(event.id), event.score > 100)
     }
 )
 ```

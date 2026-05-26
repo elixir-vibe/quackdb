@@ -4,6 +4,17 @@ defmodule QuackDB.Ecto.SQLGeneration.SpatialTest do
   import Ecto.Query
   import QuackDB.Ecto.Spatial
 
+  test "composes spatial distance with comparison operators" do
+    query =
+      from(place in "places",
+        where: distance(place.geom, ^%Geo.Point{coordinates: {3.0, 4.0}, srid: nil}) < 1_000,
+        select: %{id: place.id}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~s|SELECT q0."id" AS "id" FROM "places" AS q0 WHERE (ST_Distance(q0."geom", ?) < 1000)|
+  end
+
   test "generates spatial fragments" do
     query =
       from(place in "places",

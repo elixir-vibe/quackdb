@@ -67,9 +67,21 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro json_extract(expression, path) when is_list(path) do
+      quote do
+        fragment("json_extract(?, ?)", unquote(expression), unquote(json_path!(path)))
+      end
+    end
+
     defmacro json_extract(expression, path) do
       quote do
         fragment("json_extract(?, ?)", unquote(expression), unquote(path))
+      end
+    end
+
+    defmacro json_extract_string(expression, path) when is_list(path) do
+      quote do
+        fragment("json_extract_string(?, ?)", unquote(expression), unquote(json_path!(path)))
       end
     end
 
@@ -83,6 +95,30 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       quote do
         fragment("date_trunc(?, ?)", unquote(part), unquote(timestamp))
       end
+    end
+
+    defp json_path!(path) do
+      ["$", Enum.map(path, &json_path_segment!/1)]
+      |> IO.iodata_to_binary()
+    end
+
+    defp json_path_segment!(segment) when is_atom(segment),
+      do: json_path_segment!(Atom.to_string(segment))
+
+    defp json_path_segment!(segment) when is_binary(segment) do
+      if Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*$/, segment) do
+        [".", segment]
+      else
+        ["[", QuackDB.SQL.literal!(segment), "]"]
+      end
+    end
+
+    defp json_path_segment!(segment) when is_integer(segment) and segment >= 0 do
+      ["[", Integer.to_string(segment), "]"]
+    end
+
+    defp json_path_segment!(segment) do
+      raise ArgumentError, "unsupported JSON path segment: #{inspect(segment)}"
     end
 
     defmacro time_bucket(%Duration{} = interval, timestamp) do
