@@ -8,6 +8,48 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
 
   @moduletag :integration
 
+  defmodule ConditionalQueries do
+    use QuackDB.Ecto, conditionals: true
+
+    def summary(table) do
+      from(event in table,
+        order_by: event.id,
+        select: %{
+          tier:
+            if event.score >= 10 do
+              "high"
+            else
+              "normal"
+            end,
+          hour: date_part("hour", event.occurred_at),
+          safe_score: nullif(event.score, 0),
+          score_stddev: over(stddev(event.score), [])
+        }
+      )
+    end
+  end
+
+  test "conditional and statistical helpers execute against a real Quack server" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_conditionals")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: :integer,
+      score: :integer,
+      occurred_at: :timestamp
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, table, [
+      [1, 10, ~N[2024-01-02 03:04:05]],
+      [2, 20, ~N[2024-01-02 04:05:06]]
+    ])
+
+    assert [%{tier: "high", hour: 3, safe_score: 10, score_stddev: stddev}, _second] =
+             QuackDB.IntegrationRepo.all(ConditionalQueries.summary(table))
+
+    assert is_float(stddev)
+  end
+
   test "analytical aggregate helpers execute against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_analytics")

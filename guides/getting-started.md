@@ -529,6 +529,29 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+Opt into `conditionals: true` when you want Elixir `if ... do ... else ... end` syntax to build DuckDB `CASE WHEN` expressions inside queries:
+
+```elixir
+use QuackDB.Ecto, conditionals: true
+
+MyApp.AnalyticsRepo.all(
+  from event in "events",
+    group_by: [date_part("hour", event.occurred_at)],
+    select: %{
+      hour: date_part("hour", event.occurred_at),
+      tier:
+        if event.score >= 90 do
+          "high"
+        else
+          "normal"
+        end,
+      safe_score: nullif(event.score, 0),
+      score_stddev: stddev(event.score),
+      score_variance: variance(event.score)
+    }
+)
+```
+
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir

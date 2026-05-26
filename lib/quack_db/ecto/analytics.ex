@@ -115,6 +115,36 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro date_part(part, timestamp) do
+      quote do
+        fragment("date_part(?, ?)", unquote(part), unquote(timestamp))
+      end
+    end
+
+    defmacro nullif(left, right) do
+      quote do
+        fragment("nullif(?, ?)", unquote(left), unquote(right))
+      end
+    end
+
+    defmacro corr(left, right) do
+      quote do
+        fragment("corr(?, ?)", unquote(left), unquote(right))
+      end
+    end
+
+    defmacro stddev(expression) do
+      quote do
+        fragment("stddev(?)", unquote(expression))
+      end
+    end
+
+    defmacro variance(expression) do
+      quote do
+        fragment("variance(?)", unquote(expression))
+      end
+    end
+
     defp json_path!(path) do
       ["$", Enum.map(path, &json_path_segment!/1)]
       |> IO.iodata_to_binary()
