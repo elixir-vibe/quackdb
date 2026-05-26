@@ -288,7 +288,7 @@ QuackDB decodes common DuckDB scalars and nested values, including:
 - `LIST`, `STRUCT`, `ARRAY`, and `MAP`;
 - DuckDB Spatial `GEOMETRY` as WKB-compatible bytes.
 
-The protocol implementation is intentionally explicit about unsupported features. Remaining low-level gaps, conformance fixtures, and unsupported vector/logical types are tracked in [`docs/protocol-coverage.md`](docs/protocol-coverage.md) and [`guides/type-support.md`](guides/type-support.md).
+The protocol implementation is intentionally explicit about unsupported features. Remaining low-level gaps, conformance fixtures, and unsupported vector/logical types are tracked in [`docs/protocol/coverage.md`](docs/protocol/coverage.md) and [`guides/type-support.md`](guides/type-support.md).
 
 ## Examples
 
@@ -344,5 +344,5 @@ Useful docs:
 - [Sources](guides/sources.md)
 - [Spatial](guides/spatial.md)
 - [Telemetry](guides/telemetry.md)
-- [Protocol coverage](docs/protocol-coverage.md)
+- [Protocol coverage](docs/protocol/coverage.md)
 - [Ecto coverage](docs/ecto-analytical-coverage.md)

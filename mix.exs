@@ -81,7 +81,7 @@ defmodule QuackDB.MixProject do
         "guides/spatial.md",
         "guides/telemetry.md",
         "examples/livebook_analytics.livemd",
-        "docs/protocol-coverage.md",
+        "docs/protocol/coverage.md",
         "docs/ecto-analytical-coverage.md"
       ],
       groups_for_extras: [
