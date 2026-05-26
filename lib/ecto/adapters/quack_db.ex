@@ -27,7 +27,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     def lock_for_migrations(_meta, _options, _fun) do
       unsupported!(
         :migrations,
-        "Ecto migrations are not supported yet; use Repo.query/3 for raw SQL"
+        "Ecto migrations are unsupported; use QuackDB.DDL or Repo.query/3 for raw SQL"
       )
     end
 

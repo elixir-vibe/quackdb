@@ -52,7 +52,7 @@ defmodule QuackDB.Ecto.SQLGeneration.InsertTest do
   end
 
   test "rejects unsupported upserts" do
-    assert_raise QuackDB.Error, ~r/Ecto upserts are not supported yet/, fn ->
+    assert_raise QuackDB.Error, ~r/Ecto upserts are unsupported/, fn ->
       Connection.insert(nil, "events", [:id], [[:id]], {[:name], [], [:id]}, [], [])
     end
   end

@@ -28,13 +28,70 @@ if Code.ensure_loaded?(Ecto.Query) do
       ]
     end
 
+    @spec update_all(Ecto.Query.t()) :: iodata()
+    def update_all(%Ecto.Query{} = query) do
+      assert_mutation_query!(query)
+
+      [
+        with_ctes(query.with_ctes),
+        "UPDATE ",
+        source(query.from, 0),
+        " SET ",
+        updates(query.updates),
+        wheres(query.wheres)
+      ]
+    end
+
+    @spec delete_all(Ecto.Query.t()) :: iodata()
+    def delete_all(%Ecto.Query{} = query) do
+      assert_mutation_query!(query)
+
+      [
+        with_ctes(query.with_ctes),
+        "DELETE FROM ",
+        source(query.from, 0),
+        wheres(query.wheres)
+      ]
+    end
+
     defp assert_read_only_query!(%Ecto.Query{} = query) do
       cond do
         query.combinations != [] ->
-          unsupported!(:combinations, "Ecto combinations are not supported yet; use Repo.query/3")
+          unsupported!(:combinations, "Ecto combinations are unsupported; use Repo.query/3")
 
         query.lock != nil ->
-          unsupported!(:locks, "Ecto locks are not supported yet; use Repo.query/3")
+          unsupported!(:locks, "Ecto locks are unsupported; use Repo.query/3")
+
+        true ->
+          :ok
+      end
+    end
+
+    defp assert_mutation_query!(%Ecto.Query{} = query) do
+      cond do
+        query.joins != [] ->
+          unsupported!(
+            :joins,
+            "Ecto update_all/delete_all with joins is unsupported; use Repo.query/3"
+          )
+
+        query.group_bys != [] or query.havings != [] or query.windows != [] ->
+          unsupported!(
+            :mutation_query,
+            "grouped Ecto update_all/delete_all is unsupported; use Repo.query/3"
+          )
+
+        query.order_bys != [] or query.limit != nil or query.offset != nil ->
+          unsupported!(
+            :mutation_query,
+            "ordered or limited Ecto update_all/delete_all is unsupported; use Repo.query/3"
+          )
+
+        query.combinations != [] ->
+          unsupported!(:combinations, "Ecto combinations are unsupported; use Repo.query/3")
+
+        query.lock != nil ->
+          unsupported!(:locks, "Ecto locks are unsupported; use Repo.query/3")
 
         true ->
           :ok
@@ -148,6 +205,36 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp join_qualifier(qualifier) do
       unsupported!(:join, "unsupported Ecto join qualifier: #{inspect(qualifier)}")
+    end
+
+    defp updates([]),
+      do: unsupported!(:schema_updates, "Ecto update_all requires update expressions")
+
+    defp updates(updates) do
+      updates
+      |> Enum.flat_map(&update_expr/1)
+      |> Enum.intersperse(", ")
+    end
+
+    defp update_expr(%Ecto.Query.QueryExpr{expr: expressions}) do
+      Enum.flat_map(expressions, fn
+        {:set, fields} ->
+          Enum.map(fields, fn {field, expression} ->
+            [quote_identifier(field), " = ", expr(expression)]
+          end)
+
+        {:inc, fields} ->
+          Enum.map(fields, fn {field, expression} ->
+            quoted = quote_identifier(field)
+            [quoted, " = ", quoted, " + ", expr(expression)]
+          end)
+
+        {operation, _fields} ->
+          unsupported!(
+            :schema_updates,
+            "Ecto update operation #{inspect(operation)} is unsupported"
+          )
+      end)
     end
 
     defp wheres([]), do: []

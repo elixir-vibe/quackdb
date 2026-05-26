@@ -82,6 +82,37 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.update_all/3 updates rows" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_update_all")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar, score: :integer)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck", 10], [2, "goose", 20]])
+
+    query = from(event in table, where: event.id == ^1)
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.update_all(query, set: [name: "mallard"], inc: [score: 5])
+
+    assert %{rows: [[1, "mallard", 15], [2, "goose", 20]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM #{table} ORDER BY id")
+  end
+
+  test "Ecto Repo.delete_all/2 deletes rows" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_delete_all")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, "duck"], [2, "goose"]])
+
+    query = from(event in table, where: event.id == ^2)
+
+    assert {1, nil} = QuackDB.IntegrationRepo.delete_all(query)
+
+    assert %{rows: [[1, "duck"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 supports insert from query" do
     start_repo!()
     source = unique_table("quackdb_ecto_insert_source")

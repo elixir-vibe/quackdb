@@ -62,7 +62,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     @impl true
     def query_many(_connection, _statement, _params, _options) do
-      unsupported!(:query_many, "multiple-result raw SQL is not supported yet")
+      unsupported!(:query_many, "multiple-result raw SQL is unsupported")
     end
 
     @impl true
@@ -80,20 +80,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     def all(%Ecto.Query{} = query), do: Ecto.Adapters.QuackDB.Query.all(query)
 
     @impl true
-    def update_all(_query),
-      do:
-        unsupported_iodata!(
-          :schema_updates,
-          "Ecto update_all is not supported yet; use Repo.query/3"
-        )
+    def update_all(%Ecto.Query{} = query), do: Ecto.Adapters.QuackDB.Query.update_all(query)
 
     @impl true
-    def delete_all(_query),
-      do:
-        unsupported_iodata!(
-          :schema_deletes,
-          "Ecto delete_all is not supported yet; use Repo.query/3"
-        )
+    def delete_all(%Ecto.Query{} = query), do: Ecto.Adapters.QuackDB.Query.delete_all(query)
 
     @impl true
     def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
@@ -110,24 +100,24 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     @impl true
     def update(_prefix, _table, _fields, _filters, _returning) do
-      unsupported_iodata!(:schema_updates, "Ecto updates are not supported yet; use Repo.query/3")
+      unsupported_iodata!(:schema_updates, "Ecto updates are unsupported; use Repo.query/3")
     end
 
     @impl true
     def delete(_prefix, _table, _filters, _returning) do
-      unsupported_iodata!(:schema_deletes, "Ecto deletes are not supported yet; use Repo.query/3")
+      unsupported_iodata!(:schema_deletes, "Ecto deletes are unsupported; use Repo.query/3")
     end
 
     @impl true
     def explain_query(_connection, _query, _params, _options) do
-      unsupported!(:explain, "Ecto explain is not supported yet")
+      unsupported!(:explain, "Ecto explain is unsupported")
     end
 
     @impl true
     def execute_ddl(_command) do
       unsupported_iodata!(
         :migrations,
-        "Ecto migrations are not supported yet; use Repo.query/3 for raw SQL"
+        "Ecto migrations are unsupported; use QuackDB.DDL or Repo.query/3 for raw SQL"
       )
     end
 
@@ -183,7 +173,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp on_conflict({_fields, _params, _targets}) do
       unsupported_iodata!(
         :schema_upserts,
-        "Ecto upserts are not supported yet; use Repo.query/3 or QuackDB.insert_rows/4"
+        "Ecto upserts are unsupported; use Repo.query/3 or QuackDB.insert_rows/4"
       )
     end
 
@@ -201,7 +191,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       do: [" RETURNING ", returning |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", ")]
 
     defp returning(_returning, _placeholders) do
-      unsupported_iodata!(:placeholders, ":placeholders with RETURNING are not supported yet")
+      unsupported_iodata!(:placeholders, ":placeholders with RETURNING are unsupported")
     end
 
     defp quote_table(nil, table), do: quote_identifier(table)

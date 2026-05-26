@@ -72,7 +72,7 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | Ecto raw SQL | Supported | Unit and integration |
 | Ecto analytical reads | Partial | Broad SQL-generation and integration coverage |
 | Ecto insert/insert_all | Partial | Plain inserts, returning, insert-from-query, and `on_conflict: :nothing` covered |
-| Ecto migrations/updates/deletes/upserts | Unsupported | Explicit errors |
+| Ecto mutations | Partial | Plain inserts, returning, insert-from-query, `on_conflict: :nothing`, simple `update_all`, and simple `delete_all` covered; migrations and richer upserts remain unsupported |
 
 ## Conformance fixtures
 
