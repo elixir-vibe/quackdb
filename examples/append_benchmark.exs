@@ -5,6 +5,14 @@ Mix.install([
   {:benchee, "~> 1.3"}
 ])
 
+System.put_env(
+  "QUACKDB_DATABASE",
+  System.get_env(
+    "QUACKDB_DATABASE",
+    Path.join(System.tmp_dir!(), "quackdb_append_benchmark.duckdb")
+  )
+)
+
 Code.require_file("support/quackdb_demo.exs", __DIR__)
 
 defmodule AppendBenchmark.Event do
@@ -40,7 +48,7 @@ defmodule AppendBenchmark do
       log: false
     )
 
-    {:ok, _repo} = Repo.start_link()
+    start_repo!()
     %{conn: conn}
   end
 
@@ -73,6 +81,22 @@ defmodule AppendBenchmark do
     QuackDB.query!(conn, DML.insert_into(table, rows))
   end
 
+  def start_repo! do
+    case Process.whereis(Repo) do
+      nil -> :ok
+      pid -> GenServer.stop(pid)
+    end
+
+    {:ok, _repo} = Repo.start_link()
+    :ok
+  end
+
+  def reset_table_with_repo!(table) do
+    start_repo!()
+    Repo.query!(QuackDB.DDL.drop_table(table, if_exists: true))
+    Repo.query!(QuackDB.DDL.create_table(Event))
+  end
+
   defp category(id), do: Enum.at(["alpha", "beta", "gamma", "delta"], rem(id, 4))
 
   defp connection_uri(_conn), do: System.get_env("QUACKDB_URI", "http://[::1]:9494")
@@ -87,7 +111,7 @@ rows = AppendBenchmark.rows(count)
 columns = AppendBenchmark.columns(rows)
 dataframe = AppendBenchmark.dataframe(rows)
 
-Benchee.run(
+benchmarks =
   %{
     "SQL INSERT VALUES" => fn ->
       AppendBenchmark.reset_table!(conn, table)
@@ -106,19 +130,30 @@ Benchee.run(
       QuackDB.Explorer.insert_dataframe!(conn, table, dataframe, batch_size: batch_size)
     end,
     "Ecto insert_all SQL" => fn ->
-      AppendBenchmark.reset_table!(conn, table)
+      AppendBenchmark.reset_table_with_repo!(table)
       AppendBenchmark.Repo.insert_all(AppendBenchmark.Event, rows)
     end,
     "Ecto insert_all append" => fn ->
-      AppendBenchmark.reset_table!(conn, table)
+      AppendBenchmark.reset_table_with_repo!(table)
 
       AppendBenchmark.Repo.insert_all(AppendBenchmark.Event, rows,
         insert_method: :append,
         chunk_every: batch_size
       )
     end
-  },
-  time: 3,
-  memory_time: 0,
-  warmup: 1
-)
+  }
+
+if System.get_env("SMOKE") in ["1", "true"] do
+  Enum.each(benchmarks, fn {name, fun} ->
+    fun.()
+    IO.puts("#{name}: ok")
+  end)
+else
+  Benchee.run(
+    benchmarks,
+    time: 3,
+    memory_time: 0,
+    warmup: 1,
+    parallel: 1
+  )
+end

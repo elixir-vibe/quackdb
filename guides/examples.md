@@ -27,6 +27,17 @@ cd /tmp
 elixir /path/to/quackdb/examples/dataframe_analytics.exs
 ```
 
+## Append benchmark
+
+[`examples/append_benchmark.exs`](examples/append_benchmark.exs) compares SQL inserts, native row/column append, Explorer dataframe append, and Ecto insert paths.
+
+```sh
+cd /tmp
+SMOKE=1 ROWS=10 BATCH_SIZE=5 elixir /path/to/quackdb/examples/append_benchmark.exs
+```
+
+Remove `SMOKE=1` and increase `ROWS` for benchmark runs.
+
 ## Livebook analytics
 
 [`examples/livebook_analytics.livemd`](examples/livebook_analytics.livemd) is an interactive notebook using Explorer, Table.Reader, VegaLite, telemetry, and a local `QuackDB.Server`.

@@ -3,7 +3,11 @@ defmodule QuackDBDemo do
     case System.get_env("QUACKDB_URI") do
       nil ->
         token = "super_secret"
-        {:ok, server} = QuackDB.Server.start_link(duckdb: :managed, token: token)
+        database = System.get_env("QUACKDB_DATABASE", ":memory:")
+
+        {:ok, server} =
+          QuackDB.Server.start_link(duckdb: :managed, database: database, token: token)
+
         {:ok, conn} = QuackDB.start_link(uri: QuackDB.Server.uri(server), token: token)
         %{conn: conn, server: server}
 

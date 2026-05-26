@@ -38,6 +38,13 @@ cd /tmp
 ROWS=1000 BATCH_SIZE=1000 elixir /path/to/quackdb/examples/append_benchmark.exs
 ```
 
+Use smoke mode when you only want to verify each path once:
+
+```sh
+cd /tmp
+SMOKE=1 ROWS=10 BATCH_SIZE=5 elixir /path/to/quackdb/examples/append_benchmark.exs
+```
+
 ## Livebook analytics
 
 [`livebook_analytics.livemd`](livebook_analytics.livemd) is an interactive notebook using Explorer, Table.Reader, VegaLite, telemetry, and a local `QuackDB.Server`.

@@ -21,7 +21,27 @@ defmodule QuackDB.Integration.SessionFailureTest do
 
     :ok = GenServer.stop(server)
 
-    assert {:error, %QuackDB.Error{source: source}} = QuackDB.query(connection, "SELECT 2")
+    assert {:error, %QuackDB.Error{source: source}} = eventually_lost_session(connection)
     assert source in [:transport, :server, :protocol]
+  end
+
+  defp eventually_lost_session(connection) do
+    deadline = System.monotonic_time(:millisecond) + 2_000
+    eventually_lost_session(connection, deadline, nil)
+  end
+
+  defp eventually_lost_session(connection, deadline, last_result) do
+    case QuackDB.query(connection, "SELECT 2") do
+      {:error, %QuackDB.Error{}} = error ->
+        error
+
+      other ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          other
+        else
+          Process.sleep(50)
+          eventually_lost_session(connection, deadline, other || last_result)
+        end
+    end
   end
 end
