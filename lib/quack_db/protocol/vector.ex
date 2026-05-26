@@ -1,10 +1,5 @@
 defmodule QuackDB.Protocol.Vector do
-  @moduledoc """
-  Decoder for DuckDB vector encodings inside Quack data chunks.
-
-  Handles flat, constant, dictionary, and sequence vectors plus nested DuckDB
-  logical types such as `LIST`, `STRUCT`, `ARRAY`, and `MAP`.
-  """
+  @moduledoc false
 
   import Bitwise
 

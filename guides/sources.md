@@ -67,7 +67,7 @@ Source.parquet("/data/events/*.parquet")
 Source.csv("file:///data/events.csv", header: true)
 ```
 
-When QuackDB is connected to a remote DuckDB server, paths are resolved on the server side, not in the Elixir VM.
+When QuackDB is connected to a remote DuckDB server, paths are resolved on the server side, not in the Elixir VM. QuackDB does not automatically upload local files; use paths that the DuckDB server can see, or put data behind HTTP(S), object storage, Azure/ADLS, Hugging Face, or another DuckDB-supported source.
 
 ## HTTP and HTTPS
 

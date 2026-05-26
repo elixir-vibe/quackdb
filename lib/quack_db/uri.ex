@@ -1,11 +1,5 @@
 defmodule QuackDB.URI do
-  @moduledoc """
-  URI normalization for Quack HTTP endpoints.
-
-  Accepts bare hosts, `quack://`, `http://`, and `https://` values, then returns
-  a normalized `%URI{}` with the `/quack` path default expected by DuckDB Quack
-  servers.
-  """
+  @moduledoc false
 
   alias QuackDB.Error
 

@@ -1,11 +1,5 @@
 defmodule QuackDB.Protocol.Message do
-  @moduledoc """
-  Struct definitions for Quack protocol messages.
-
-  These structs represent the protocol layer only. Encoding and decoding live in
-  `QuackDB.Protocol.Codec`, while transport and DBConnection concerns stay in
-  higher-level modules.
-  """
+  @moduledoc false
 
   defmodule Header do
     @moduledoc """

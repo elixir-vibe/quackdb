@@ -1,10 +1,5 @@
 defmodule QuackDB.Protocol.Writer do
-  @moduledoc """
-  Binary writer primitives for the Quack wire format.
-
-  Builds field-tagged objects and scalar encodings used by message codecs while
-  returning iodata so callers can avoid unnecessary binary copies.
-  """
+  @moduledoc false
 
   import Bitwise
 

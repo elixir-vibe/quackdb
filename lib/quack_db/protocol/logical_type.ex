@@ -1,10 +1,5 @@
 defmodule QuackDB.Protocol.LogicalType do
-  @moduledoc """
-  Decoder and metadata helpers for DuckDB logical types.
-
-  Maps Quack logical type ids to names, derives physical storage types, and
-  exposes nested type metadata used by vector decoding.
-  """
+  @moduledoc false
 
   alias QuackDB.Error
   alias QuackDB.Protocol.Reader

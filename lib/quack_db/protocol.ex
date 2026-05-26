@@ -1,11 +1,5 @@
 defmodule QuackDB.Protocol do
-  @moduledoc """
-  Quack protocol constants and codec entry point.
-
-  The actual encoder/decoder will live below this namespace. This module keeps
-  protocol-level names in one place so message codecs, transport, and tests do
-  not duplicate numeric ids.
-  """
+  @moduledoc false
 
   @field_end 0xFFFF
   @optional_index_invalid 0xFFFF_FFFF_FFFF_FFFF

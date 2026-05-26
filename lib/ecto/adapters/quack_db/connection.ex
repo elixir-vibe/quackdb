@@ -1,7 +1,7 @@
 if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
   defmodule Ecto.Adapters.QuackDB.Connection do
     @moduledoc """
-    Ecto SQL connection callbacks backed by `QuackDB.DBConnection`.
+    Ecto SQL connection callbacks backed by the QuackDB DBConnection driver.
 
     This module implements the raw query path used by
     `Ecto.Adapters.SQL.query/4` and `Repo.query/3`, plus read-oriented Ecto

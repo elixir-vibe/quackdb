@@ -1,11 +1,5 @@
 defmodule QuackDB.Inspect do
-  @moduledoc """
-  Shared helpers for compact `Inspect` protocol implementations.
-
-  The helpers keep IEx output useful for manual protocol debugging by truncating
-  large strings, shortening connection ids, and summarizing potentially large
-  row sets.
-  """
+  @moduledoc false
 
   import Inspect.Algebra
 

@@ -1,12 +1,5 @@
 defmodule QuackDB.DBConnection do
-  @moduledoc """
-  `DBConnection` implementation for the remote DuckDB Quack protocol.
-
-  This module owns connection lifecycle, request execution, cursor-based
-  streaming, transaction callbacks, and result normalization. It intentionally
-  keeps HTTP transport and binary protocol encoding delegated to lower-level
-  modules so the protocol codec can stay independent from DBConnection.
-  """
+  @moduledoc false
 
   use DBConnection
 

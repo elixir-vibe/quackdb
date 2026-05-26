@@ -1,10 +1,5 @@
 defmodule QuackDB.Application do
-  @moduledoc """
-  OTP application entry point for QuackDB.
-
-  Starts the supervision tree used by the package. Connection processes are
-  started by callers through `QuackDB.start_link/1` or child specs.
-  """
+  @moduledoc false
 
   use Application
 

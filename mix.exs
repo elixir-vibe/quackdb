@@ -79,13 +79,8 @@ defmodule QuackDB.MixProject do
         "guides/spatial.md",
         "guides/telemetry.md",
         "examples/livebook_analytics.livemd",
-        "docs/research.md",
-        "docs/postgrex-comparison.md",
-        "docs/duckdb-capabilities.md",
         "docs/protocol-coverage.md",
-        "docs/ecto-analytical-coverage.md",
-        "docs/test-coverage-audit.md",
-        "docs/test-structure.md"
+        "docs/ecto-analytical-coverage.md"
       ],
       groups_for_extras: [
         Guides: ~r/guides\//,

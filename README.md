@@ -264,4 +264,4 @@ QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
 
-See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/sources.md`](guides/sources.md), [`guides/spatial.md`](guides/spatial.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/research.md`](docs/research.md) for protocol notes.
+See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/sources.md`](guides/sources.md), [`guides/spatial.md`](guides/spatial.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/protocol-coverage.md`](docs/protocol-coverage.md) for protocol notes.
