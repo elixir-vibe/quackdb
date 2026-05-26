@@ -91,6 +91,24 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro json_exists(expression, path) when is_list(path) do
+      quote do
+        fragment("json_exists(?, ?)", unquote(expression), unquote(json_path!(path)))
+      end
+    end
+
+    defmacro json_exists(expression, path) do
+      quote do
+        fragment("json_exists(?, ?)", unquote(expression), unquote(path))
+      end
+    end
+
+    defmacro json_contains(expression, value) do
+      quote do
+        fragment("json_contains(?, ?)", unquote(expression), unquote(value))
+      end
+    end
+
     defmacro date_trunc(part, timestamp) do
       quote do
         fragment("date_trunc(?, ?)", unquote(part), unquote(timestamp))

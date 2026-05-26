@@ -481,6 +481,10 @@ if Code.ensure_loaded?(Ecto.Query) do
       [expr(aggregate), " FILTER (WHERE ", expr(predicate), ")"]
     end
 
+    defp expr({:json_extract_path, _meta, [expression, path]}) when is_list(path) do
+      ["json_extract_string(", expr(expression), ", ", literal(json_path!(path)), ")"]
+    end
+
     defp expr({:fragment, _meta, parts}), do: fragment(parts)
 
     defp expr({:selected_as, _meta, [name]}) when is_atom(name), do: quote_identifier(name)
@@ -542,6 +546,30 @@ if Code.ensure_loaded?(Ecto.Query) do
         {:raw, value} -> value
         {:expr, expression} -> expr(expression)
       end)
+    end
+
+    defp json_path!(path) do
+      ["$", Enum.map(path, &json_path_segment!/1)]
+      |> IO.iodata_to_binary()
+    end
+
+    defp json_path_segment!(segment) when is_atom(segment),
+      do: json_path_segment!(Atom.to_string(segment))
+
+    defp json_path_segment!(segment) when is_binary(segment) do
+      if Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*$/, segment) do
+        [".", segment]
+      else
+        ["[", QuackDB.SQL.literal!(segment), "]"]
+      end
+    end
+
+    defp json_path_segment!(segment) when is_integer(segment) and segment >= 0 do
+      ["[", Integer.to_string(segment), "]"]
+    end
+
+    defp json_path_segment!(segment) do
+      unsupported!(:expression, "unsupported JSON path segment: #{inspect(segment)}")
     end
 
     defp in_expr(%Ecto.Query.Tagged{value: values}) when is_list(values), do: in_expr(values)

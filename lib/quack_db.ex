@@ -93,12 +93,17 @@ defmodule QuackDB do
 
     rows
     |> Elixir.Stream.chunk_every(chunk_every)
-    |> Enum.reduce_while({:ok, nil}, fn batch, _acc ->
+    |> Enum.reduce_while({:ok, nil, 0}, fn batch, {:ok, _result, total_rows} ->
       case insert_rows(connection, table, batch, options) do
-        {:ok, result} -> {:cont, {:ok, result}}
+        {:ok, result} -> {:cont, {:ok, result, total_rows + result.num_rows}}
         {:error, error} -> {:halt, {:error, error}}
       end
     end)
+    |> case do
+      {:ok, nil, _total_rows} -> {:ok, nil}
+      {:ok, result, total_rows} -> {:ok, %{result | num_rows: total_rows}}
+      {:error, error} -> {:error, error}
+    end
   end
 
   @spec insert_stream!(DBConnection.conn(), String.t() | atom(), Enumerable.t(), Keyword.t()) ::

@@ -81,8 +81,10 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
       from(event in table,
         where: json_extract_string(event.payload, "$.kind") == "bird",
         select: %{
-          name: json_extract_string(event.payload, [:name]),
+          name: event.payload["name"],
           score: json_extract(event.payload, [:score]),
+          has_name: json_exists(event.payload, [:name]),
+          contains_name: json_contains(event.payload, ^{:json, %{name: "duck"}}),
           day: date_trunc("day", event.occurred_at),
           bucket: time_bucket("1 day", event.occurred_at),
           fifteen_minute_bucket: time_bucket(^interval, event.occurred_at),
@@ -95,6 +97,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
              %{
                name: "duck",
                score: "10",
+               has_name: true,
+               contains_name: true,
                day: ~N[2024-01-02 00:00:00.000000],
                bucket: ~N[2024-01-02 00:00:00.000000],
                fifteen_minute_bucket: ~N[2024-01-02 03:00:00.000000],

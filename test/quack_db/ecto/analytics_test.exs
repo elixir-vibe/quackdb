@@ -54,6 +54,17 @@ defmodule QuackDB.Ecto.AnalyticsTest do
              ~S[SELECT time_bucket(?::INTERVAL, q0."occurred_at", ?) AS "duration_interval", time_bucket('1 hour'::INTERVAL, q0."occurred_at", ?) AS "string_interval", time_bucket('1 hour'::INTERVAL, q0."occurred_at", ?) AS "string_offset" FROM "events" AS q0]
   end
 
+  test "builds Ecto access JSON path expressions" do
+    query =
+      from(event in "events",
+        where: event.payload["user"]["name"] == "duck",
+        select: %{name: event.payload["user"]["name"]}
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT json_extract_string(q0."payload", '$.user.name') AS "name" FROM "events" AS q0 WHERE (json_extract_string(q0."payload", '$.user.name') = 'duck')]
+  end
+
   test "builds JSON path-list expressions" do
     query =
       from(event in "events",
@@ -61,14 +72,18 @@ defmodule QuackDB.Ecto.AnalyticsTest do
         select: %{
           name: json_extract_string(event.payload, [:user, :name]),
           first_score: json_extract(event.payload, [:scores, 0]),
-          dashed: json_extract_string(event.payload, ["display name"])
+          dashed: json_extract_string(event.payload, ["display name"]),
+          has_name: json_exists(event.payload, [:user, :name]),
+          has_duck: json_contains(event.payload, ^{:json, %{name: "duck"}})
         }
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
              "SELECT json_extract_string(q0.\"payload\", '$.user.name') AS \"name\", " <>
                "json_extract(q0.\"payload\", '$.scores[0]') AS \"first_score\", " <>
-               "json_extract_string(q0.\"payload\", '$[''display name'']') AS \"dashed\" " <>
+               "json_extract_string(q0.\"payload\", '$[''display name'']') AS \"dashed\", " <>
+               "json_exists(q0.\"payload\", '$.user.name') AS \"has_name\", " <>
+               "json_contains(q0.\"payload\", ?) AS \"has_duck\" " <>
                "FROM \"events\" AS q0 WHERE (json_extract_string(q0.\"payload\", '$.user.name') = 'duck')"
   end
 

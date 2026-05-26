@@ -47,6 +47,15 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+Use Ecto query composition for relational operations such as `UNION ALL` instead of source-specific SQL helpers:
+
+```elixir
+first = from event in Source.parquet("2024/*.parquet"), select: %{id: event.id, name: event.name}
+second = from event in Source.parquet("2025/*.parquet"), select: %{id: event.id, name: event.name}
+
+MyApp.AnalyticsRepo.all(union_all(first, ^second))
+```
+
 ## Materialize sources for FTS or repeated queries
 
 DuckDB features such as FTS indexes operate on tables, so source scans are often materialized first:

@@ -492,6 +492,21 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+JSON columns can use Ecto access syntax or explicit DuckDB JSON helpers:
+
+```elixir
+use QuackDB.Ecto
+
+MyApp.AnalyticsRepo.all(
+  from event in "events",
+    where: event.payload["user"]["name"] == "duck" and json_exists(event.payload, [:user, :name]),
+    select: %{
+      name: event.payload["user"]["name"],
+      score: json_extract(event.payload, [:scores, 0])
+    }
+)
+```
+
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir
@@ -504,7 +519,7 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-Use `insert_method: :append` to opt into Quack's native append protocol for plain `insert_all` workloads. This fast path does not support query inserts, `:returning`, placeholders, or upserts.
+Use `insert_method: :append` to opt into Quack's native append protocol for plain `insert_all` workloads. This fast path does not support query inserts, streams, `:returning`, placeholders, or upserts; use `QuackDB.insert_stream!/4` for streaming rows.
 
 ```elixir
 MyApp.AnalyticsRepo.insert_all(
