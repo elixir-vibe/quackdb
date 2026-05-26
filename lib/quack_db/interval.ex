@@ -16,4 +16,28 @@ defmodule QuackDB.Interval do
       when is_integer(months) and is_integer(days) and is_integer(microseconds) do
     %__MODULE__{months: months, days: days, microseconds: microseconds}
   end
+
+  @doc "Returns the interval as `{months, days, microseconds}`."
+  @spec to_tuple(t()) :: {integer(), integer(), integer()}
+  def to_tuple(%__MODULE__{} = interval) do
+    {interval.months, interval.days, interval.microseconds}
+  end
+end
+
+if Code.ensure_loaded?(Inspect) do
+  defimpl Inspect, for: QuackDB.Interval do
+    import Inspect.Algebra
+
+    def inspect(interval, opts) do
+      concat([
+        string("#QuackDB.Interval<"),
+        to_doc(interval.months, opts),
+        string(" months, "),
+        to_doc(interval.days, opts),
+        string(" days, "),
+        to_doc(interval.microseconds, opts),
+        string(" microseconds>")
+      ])
+    end
+  end
 end

@@ -12,6 +12,20 @@ defmodule QuackDB.Protocol.DataChunkTest do
     assert DataChunk.rows(chunk) == [[1], [nil], [3]]
   end
 
+  test "encodes column-oriented values as a flat data chunk" do
+    assert {:ok, chunk} =
+             DataChunk.from_columns(
+               [id: [1, 2], name: ["one", nil], active: [true, false]],
+               columns: [id: :integer, name: :varchar, active: :boolean]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+    assert Enum.map(decoded.types, & &1.name) == [:integer, :varchar, :boolean]
+    assert DataChunk.rows(decoded) == [[1, "one", true], [2, nil, false]]
+  end
+
   test "encodes row maps as a flat data chunk" do
     assert {:ok, chunk} =
              DataChunk.from_rows(

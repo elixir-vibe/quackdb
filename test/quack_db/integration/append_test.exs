@@ -26,6 +26,22 @@ defmodule QuackDB.Integration.AppendTest do
     TestHelper.drop_table!(conn, table)
   end
 
+  test "insert_columns appends column-oriented values", %{conn: conn, table: table} do
+    assert %QuackDB.Result{num_rows: 3} =
+             QuackDB.insert_columns!(
+               conn,
+               table,
+               [id: [1, 2, 3], name: ["one", "two", "three"], active: [true, false, true]],
+               columns: [id: :integer, name: :varchar, active: :boolean],
+               batch_size: 2
+             )
+
+    assert %QuackDB.Result{rows: [[1, "one", true], [2, "two", false], [3, "three", true]]} =
+             QuackDB.query!(conn, "SELECT id, name, active FROM #{table} ORDER BY id")
+
+    TestHelper.drop_table!(conn, table)
+  end
+
   test "insert_rows batches row appends", %{conn: conn, table: table} do
     assert %QuackDB.Result{num_rows: 3} =
              QuackDB.insert_rows!(

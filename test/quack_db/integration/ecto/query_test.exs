@@ -40,6 +40,43 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.insert_all/3 supports on_conflict nothing" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_insert_conflict")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: "INTEGER PRIMARY KEY", name: :varchar)
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1, name: "duck"]])
+
+    assert {0, nil} =
+             QuackDB.IntegrationRepo.insert_all(table, [[id: 1, name: "goose"]],
+               on_conflict: :nothing
+             )
+
+    assert %{rows: [[1, "duck"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
+  end
+
+  test "Ecto Repo.insert_all/3 supports insert from query" do
+    start_repo!()
+    source = unique_table("quackdb_ecto_insert_source")
+    target = unique_table("quackdb_ecto_insert_target")
+
+    create_table!(QuackDB.IntegrationRepo, source, id: :integer, name: :varchar)
+    create_table!(QuackDB.IntegrationRepo, target, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, source, [[1, "duck"], [2, "goose"]])
+
+    query =
+      from(event in source,
+        select: %{id: event.id + 10, name: event.name}
+      )
+
+    assert {2, nil} = QuackDB.IntegrationRepo.insert_all(target, query)
+
+    assert %{rows: [[11, "duck"], [12, "goose"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{target} ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 supports returning rows" do
     start_repo!()
     table = unique_table("quackdb_ecto_insert_returning")

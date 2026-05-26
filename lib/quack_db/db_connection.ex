@@ -99,6 +99,21 @@ defmodule QuackDB.DBConnection do
     end
   end
 
+  def handle_execute(
+        %Query{operation: {:insert_columns, table, columns, insert_options}} = query,
+        params,
+        options,
+        state
+      ) do
+    if params == [] do
+      append_columns(query, table, columns, Keyword.merge(insert_options, options), state)
+    else
+      {:error,
+       Error.new(:unsupported_params, "append queries do not accept params", source: :client),
+       state}
+    end
+  end
+
   def handle_execute(%Query{} = query, params, options, state) do
     execute_statement(query, params, options, state)
   end
@@ -279,9 +294,65 @@ defmodule QuackDB.DBConnection do
      )}
   end
 
+  defp append_columns(%Query{} = query, table, columns, options, state) do
+    with {:ok, row_count} <- column_row_count(columns, options),
+         {:ok, batches} <- append_column_batches(columns, row_count, options),
+         :ok <- append_column_batches(table, batches, options, state) do
+      result = append_result(row_count, state)
+      {:ok, query, result, %{state | status: successful_status(state.status)}}
+    else
+      {:error, error} ->
+        {:error, annotate_error(error, query, state),
+         %{state | status: failed_status(state.status)}}
+    end
+  end
+
+  defp column_row_count(columns, options) do
+    case DataChunk.from_columns(columns, options) do
+      {:ok, chunk} -> {:ok, chunk.row_count}
+      {:error, _error} = error -> error
+    end
+  end
+
+  defp append_column_batches(columns, 0, options) do
+    case Keyword.get(options, :batch_size, 1) do
+      batch_size when is_integer(batch_size) and batch_size >= 1 -> {:ok, [columns]}
+      _batch_size -> invalid_batch_size()
+    end
+  end
+
+  defp append_column_batches(columns, row_count, options) do
+    batch_size = Keyword.get(options, :batch_size, row_count)
+
+    if is_integer(batch_size) and batch_size >= 1 do
+      {:ok, columns |> Enum.map(&chunk_column(&1, batch_size)) |> transpose_column_batches()}
+    else
+      invalid_batch_size()
+    end
+  end
+
+  defp chunk_column({name, values}, batch_size), do: {name, Enum.chunk_every(values, batch_size)}
+
+  defp transpose_column_batches(chunked_columns) do
+    chunk_count = chunked_columns |> List.first() |> elem(1) |> length()
+
+    for index <- 0..(chunk_count - 1)//1 do
+      Enum.map(chunked_columns, fn {name, chunks} -> {name, Enum.at(chunks, index)} end)
+    end
+  end
+
   defp append_batches(table, batches, options, state) do
     Enum.reduce_while(batches, :ok, fn rows, :ok ->
       case append_batch(table, rows, options, state) do
+        :ok -> {:cont, :ok}
+        {:error, _error} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp append_column_batches(table, batches, options, state) do
+    Enum.reduce_while(batches, :ok, fn columns, :ok ->
+      case append_column_batch(table, columns, options, state) do
         :ok -> {:cont, :ok}
         {:error, _error} = error -> {:halt, error}
       end
@@ -315,12 +386,28 @@ defmodule QuackDB.DBConnection do
      )}
   end
 
-  defp append_result(rows, state) do
+  defp append_column_batch(table, columns, options, state) do
+    with {:ok, chunk} <- DataChunk.from_columns(columns, options),
+         request = %AppendRequest{
+           schema_name: Keyword.get(options, :schema, ""),
+           table_name: to_string(table),
+           append_chunk: chunk
+         },
+         encoded <- Codec.encode(request, connection_id: state.connection_id),
+         {:ok, response} <- state.transport.(state.uri, encoded, options),
+         {:ok, decoded} <- Codec.decode(response) do
+      normalize_append_response(decoded)
+    end
+  end
+
+  defp append_result(rows, state) when is_list(rows), do: append_result(length(rows), state)
+
+  defp append_result(row_count, state) do
     %Result{
       command: :insert,
       columns: [],
       rows: nil,
-      num_rows: length(rows),
+      num_rows: row_count,
       connection_id: state.connection_id,
       messages: [],
       metadata: %{}

@@ -331,6 +331,16 @@ result.num_rows
 
 Keyword rows preserve append order and allow QuackDB to infer the column list from the first row. Map rows are also accepted, but pass `:columns` for stable append order and types. Explicit columns are still required for empty batches or all-null columns. Use `batch_size: n` to split large inputs across multiple append requests while returning the total inserted row count.
 
+For large in-memory batches that are already column-shaped, use `QuackDB.insert_columns/4` to avoid building row maps or keyword rows:
+
+```elixir
+QuackDB.insert_columns(conn, "events",
+  id: [1, 2],
+  name: ["duck", "goose"],
+  active: [true, false]
+)
+```
+
 Native append columns can be declared with scalar `QuackDB.Type` specs and nested specs such as `{:list, :varchar}`, `{:struct, [source: :varchar, count: :integer]}`, `{:array, :integer, 3}`, and `{:map, :varchar, :varchar}`. Temporal append values are normalized through Elixir's Calendar-aware `Date`, `Time`, `NaiveDateTime`, and `DateTime` conversion APIs before encoding.
 
 ### Prepare and execute

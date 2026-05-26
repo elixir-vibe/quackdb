@@ -28,4 +28,22 @@ defmodule QuackDB.NanosecondTimestamp do
   def to_naive_datetime(%__MODULE__{nanoseconds: nanoseconds}) do
     NaiveDateTime.add(~N[1970-01-01 00:00:00], div(nanoseconds, 1_000), :microsecond)
   end
+
+  @doc "Returns the stored nanoseconds since the Unix epoch."
+  @spec to_integer(t()) :: integer()
+  def to_integer(%__MODULE__{nanoseconds: nanoseconds}), do: nanoseconds
+end
+
+if Code.ensure_loaded?(Inspect) do
+  defimpl Inspect, for: QuackDB.NanosecondTimestamp do
+    import Inspect.Algebra
+
+    def inspect(value, opts) do
+      concat([
+        string("#QuackDB.NanosecondTimestamp<"),
+        to_doc(value.nanoseconds, opts),
+        string(" ns>")
+      ])
+    end
+  end
 end

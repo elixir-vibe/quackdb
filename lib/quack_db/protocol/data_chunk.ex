@@ -49,6 +49,26 @@ defmodule QuackDB.Protocol.DataChunk do
   end
 
   @type row :: map() | Keyword.t()
+  @type column_values :: {atom() | String.t(), [term()]}
+
+  @spec from_columns([column_values()], Keyword.t()) :: {:ok, t()} | {:error, Error.t()}
+  def from_columns(column_values, options \\ []) when is_list(column_values) do
+    with {:ok, values} <- normalize_column_values(column_values),
+         {:ok, row_count} <- column_row_count(values),
+         {:ok, columns} <- columns_from_column_values(values, options) do
+      vectors =
+        Enum.map(columns, fn column ->
+          %{
+            type: column.type,
+            vector_type: :flat,
+            values: column_values_for_name(values, column.name)
+          }
+        end)
+
+      {:ok,
+       %__MODULE__{row_count: row_count, types: Enum.map(columns, & &1.type), columns: vectors}}
+    end
+  end
 
   @spec from_rows([row()], Keyword.t()) :: {:ok, t()} | {:error, Error.t()}
   def from_rows(rows, options \\ []) when is_list(rows) do
@@ -70,6 +90,17 @@ defmodule QuackDB.Protocol.DataChunk do
     resolve_columns(rows, Keyword.get(options, :columns))
   end
 
+  @spec columns_from_column_values([column_values()], Keyword.t()) ::
+          {:ok, [map()]} | {:error, Error.t()}
+  def columns_from_column_values(column_values, options \\ []) when is_list(column_values) do
+    with {:ok, values} <- normalize_column_values(column_values) do
+      case Keyword.get(options, :columns) do
+        nil -> infer_columns_from_column_values(values)
+        columns -> resolve_columns([], columns)
+      end
+    end
+  end
+
   @spec decode_wrapper(binary()) :: Reader.read_result(t())
   def decode_wrapper(binary), do: decode_wrapper(binary, nil)
 
@@ -86,6 +117,79 @@ defmodule QuackDB.Protocol.DataChunk do
 
   defp encode_column(%{type: type, values: values}) do
     Vector.encode(type, values, length(values))
+  end
+
+  defp infer_columns_from_column_values(values) do
+    values
+    |> Enum.map(fn {name, column_values} ->
+      with {:ok, type} <- infer_type(column_values) do
+        {:ok, %{name: name, type: type}}
+      end
+    end)
+    |> collect_ok()
+  end
+
+  defp column_values_for_name(values, name) do
+    values
+    |> Enum.find_value(fn
+      {^name, column_values} ->
+        {:value, column_values}
+
+      {column_name, column_values} when is_binary(name) and is_atom(column_name) ->
+        if Atom.to_string(column_name) == name, do: {:value, column_values}
+
+      {column_name, column_values} when is_atom(name) and is_binary(column_name) ->
+        if column_name == Atom.to_string(name), do: {:value, column_values}
+
+      _entry ->
+        nil
+    end)
+    |> case do
+      {:value, column_values} -> column_values
+      nil -> []
+    end
+  end
+
+  defp normalize_column_values(column_values) do
+    column_values
+    |> Enum.map(fn
+      {name, values} when is_list(values) ->
+        {:ok, {name, values}}
+
+      {name, values} ->
+        error(
+          :invalid_append_column,
+          "column #{inspect(name)} values must be a list, got #{inspect(values)}"
+        )
+
+      value ->
+        error(:invalid_append_column, "invalid append column values #{inspect(value)}")
+    end)
+    |> collect_ok()
+    |> case do
+      {:ok, values} -> {:ok, values}
+      {:error, _error} = error -> error
+    end
+  end
+
+  defp column_row_count([]) do
+    error(:missing_append_columns, "cannot infer append row count from an empty column set")
+  end
+
+  defp column_row_count(values) do
+    values
+    |> Enum.map(fn {_name, column_values} -> length(column_values) end)
+    |> Enum.uniq()
+    |> case do
+      [row_count] ->
+        {:ok, row_count}
+
+      counts ->
+        error(
+          :invalid_vector_size,
+          "append columns have mismatched row counts #{inspect(counts)}"
+        )
+    end
   end
 
   defp resolve_columns(rows, nil), do: infer_columns(rows)

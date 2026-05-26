@@ -39,4 +39,37 @@ defmodule QuackDB.TimeWithTimeZone do
 
     micros <<< 24 ||| encoded_offset
   end
+
+  @doc "Formats the value as an ISO-like time with numeric UTC offset."
+  @spec to_iso8601(t()) :: String.t()
+  def to_iso8601(%__MODULE__{} = value) do
+    value.time
+    |> Time.to_iso8601()
+    |> Kernel.<>(offset_to_string(value.utc_offset))
+  end
+
+  defp offset_to_string(offset) do
+    sign = if offset < 0, do: "-", else: "+"
+    offset = abs(offset)
+    hours = div(offset, 3600)
+    minutes = div(rem(offset, 3600), 60)
+
+    sign <> pad2(hours) <> ":" <> pad2(minutes)
+  end
+
+  defp pad2(value), do: value |> Integer.to_string() |> String.pad_leading(2, "0")
+end
+
+if Code.ensure_loaded?(Inspect) do
+  defimpl Inspect, for: QuackDB.TimeWithTimeZone do
+    import Inspect.Algebra
+
+    def inspect(value, _opts) do
+      concat([
+        string("#QuackDB.TimeWithTimeZone<"),
+        string(QuackDB.TimeWithTimeZone.to_iso8601(value)),
+        string(">")
+      ])
+    end
+  end
 end

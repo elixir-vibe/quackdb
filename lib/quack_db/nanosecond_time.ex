@@ -27,14 +27,30 @@ defmodule QuackDB.NanosecondTime do
   @doc "Converts to an Elixir `Time`, truncating sub-microsecond precision."
   @spec to_time(t()) :: Time.t()
   def to_time(%__MODULE__{nanoseconds: nanoseconds}) do
-    ~T[00:00:00]
-    |> Time.add(div(nanoseconds, 1_000), :microsecond)
-    |> Map.put(:microsecond, {rem(div(nanoseconds, 1_000), 1_000_000), 6})
+    Time.add(~T[00:00:00], div(nanoseconds, 1_000), :microsecond)
   end
 
   @doc "Returns true when the value is in DuckDB's time-of-day range."
   @spec valid?(t()) :: boolean()
   def valid?(%__MODULE__{nanoseconds: nanoseconds}) do
     nanoseconds in 0..(@day_nanoseconds - 1)
+  end
+
+  @doc "Returns the stored nanoseconds since midnight."
+  @spec to_integer(t()) :: integer()
+  def to_integer(%__MODULE__{nanoseconds: nanoseconds}), do: nanoseconds
+end
+
+if Code.ensure_loaded?(Inspect) do
+  defimpl Inspect, for: QuackDB.NanosecondTime do
+    import Inspect.Algebra
+
+    def inspect(value, opts) do
+      concat([
+        string("#QuackDB.NanosecondTime<"),
+        to_doc(value.nanoseconds, opts),
+        string(" ns>")
+      ])
+    end
   end
 end

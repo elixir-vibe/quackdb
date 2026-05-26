@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added `QuackDB.insert_columns/4` / `insert_columns!/4` for column-oriented native append batches.
+- Added conversion helpers and compact inspect output for DuckDB-specific scalar structs.
+
+### Fixed
+
+- Expanded real Ecto insert coverage for `on_conflict: :nothing` and insert-from-query SQL paths.
+
 ## 0.2.0 - 2026-05-25
 
 ### Added

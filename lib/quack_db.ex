@@ -11,6 +11,7 @@ defmodule QuackDB do
 
   @type start_option :: {:uri, String.t()} | {:token, String.t()} | {:name, GenServer.name()}
   @type insert_row :: map() | Keyword.t()
+  @type insert_column :: {atom() | String.t(), [term()]}
 
   @spec start_link([start_option]) :: GenServer.on_start()
   def start_link(options) do
@@ -37,6 +38,36 @@ defmodule QuackDB do
           QuackDB.Result.t()
   def insert_rows!(connection, table, rows, options \\ []) do
     case insert_rows(connection, table, rows, options) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc """
+  Appends column-oriented values to a DuckDB table through Quack's native append protocol.
+
+  Column values are provided as `{name, values}` pairs. All columns must have the
+  same row count. Pass `:columns` with type specs when values are empty or contain
+  only nils.
+  """
+  @spec insert_columns(DBConnection.conn(), String.t() | atom(), [insert_column()], Keyword.t()) ::
+          {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
+  def insert_columns(connection, table, columns, options \\ []) when is_list(columns) do
+    query = %Query{
+      statement: "APPEND #{table}",
+      operation: {:insert_columns, table, columns, options}
+    }
+
+    case DBConnection.prepare_execute(connection, query, [], options) do
+      {:ok, _query, result} -> {:ok, result}
+      {:error, _error} = error -> error
+    end
+  end
+
+  @spec insert_columns!(DBConnection.conn(), String.t() | atom(), [insert_column()], Keyword.t()) ::
+          QuackDB.Result.t()
+  def insert_columns!(connection, table, columns, options \\ []) do
+    case insert_columns(connection, table, columns, options) do
       {:ok, result} -> result
       {:error, error} -> raise error
     end

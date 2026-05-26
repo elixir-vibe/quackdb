@@ -33,6 +33,20 @@ defmodule QuackDB.InspectMoreTest do
              "#QuackDB.Cursor<result_uuid: 42, columns: [\"n\"], connection_id: \"1234567890ab…\">"
   end
 
+  test "inspects DuckDB-specific scalar structs compactly" do
+    assert inspect(QuackDB.Interval.new(1, 2, 3)) ==
+             "#QuackDB.Interval<1 months, 2 days, 3 microseconds>"
+
+    assert inspect(QuackDB.NanosecondTime.new(1_234_567_890)) ==
+             "#QuackDB.NanosecondTime<1234567890 ns>"
+
+    assert inspect(QuackDB.NanosecondTimestamp.new(1_234_567_890)) ==
+             "#QuackDB.NanosecondTimestamp<1234567890 ns>"
+
+    assert inspect(QuackDB.TimeWithTimeZone.new(~T[12:34:56.123456], 3600)) ==
+             "#QuackDB.TimeWithTimeZone<12:34:56.123456+01:00>"
+  end
+
   test "inspects data chunks as summaries" do
     chunk = %DataChunk{
       row_count: 2,
