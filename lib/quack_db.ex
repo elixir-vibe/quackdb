@@ -80,6 +80,54 @@ defmodule QuackDB do
     end
   end
 
+  @doc "Appends an enumerable of row maps/keywords in batches through native append."
+  @spec insert_stream(DBConnection.conn(), String.t() | atom(), Enumerable.t(), Keyword.t()) ::
+          {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
+  def insert_stream(connection, table, rows, options \\ []) do
+    chunk_every = Keyword.get(options, :chunk_every, Keyword.get(options, :batch_size, 1000))
+
+    if not (is_integer(chunk_every) and chunk_every > 0) do
+      raise ArgumentError,
+            "expected :chunk_every to be a positive integer, got: #{inspect(chunk_every)}"
+    end
+
+    rows
+    |> Elixir.Stream.chunk_every(chunk_every)
+    |> Enum.reduce_while({:ok, nil}, fn batch, _acc ->
+      case insert_rows(connection, table, batch, options) do
+        {:ok, result} -> {:cont, {:ok, result}}
+        {:error, error} -> {:halt, {:error, error}}
+      end
+    end)
+  end
+
+  @spec insert_stream!(DBConnection.conn(), String.t() | atom(), Enumerable.t(), Keyword.t()) ::
+          QuackDB.Result.t() | nil
+  def insert_stream!(connection, table, rows, options \\ []) do
+    case insert_stream(connection, table, rows, options) do
+      {:ok, result} -> result
+      {:error, error} -> raise error
+    end
+  end
+
+  if Code.ensure_loaded?(Table.Reader) do
+    @doc "Appends any `Table.Reader` compatible tabular data through native append."
+    def insert_table(connection, table, tabular, options \\ []) do
+      columns =
+        Table.to_columns(tabular)
+        |> Enum.map(fn {name, values} -> {name, Enum.to_list(values)} end)
+
+      insert_columns(connection, table, columns, options)
+    end
+
+    def insert_table!(connection, table, tabular, options \\ []) do
+      case insert_table(connection, table, tabular, options) do
+        {:ok, result} -> result
+        {:error, error} -> raise error
+      end
+    end
+  end
+
   @spec query(DBConnection.conn(), iodata(), [term()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
   def query(connection, statement, params \\ [], options \\ []) do

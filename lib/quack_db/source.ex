@@ -72,6 +72,13 @@ defmodule QuackDB.Source do
     |> IO.iodata_to_binary()
   end
 
+  @doc "Wraps a source in a DuckDB `USING SAMPLE` subquery."
+  @spec sample(String.t(), keyword()) :: String.t()
+  def sample(source, options) when is_binary(source) and is_list(options) do
+    ["(SELECT * FROM ", source, " USING SAMPLE ", sample_clause(options), ")"]
+    |> IO.iodata_to_binary()
+  end
+
   @doc "Returns true when a value looks like a QuackDB source table-function fragment."
   @spec source?(term()) :: boolean()
   def source?(value) when is_binary(value) do
@@ -90,6 +97,14 @@ defmodule QuackDB.Source do
       "iceberg_scan" -> true
       "generate_series" -> true
       _other -> false
+    end
+  end
+
+  defp sample_clause(options) do
+    cond do
+      rows = options[:rows] -> [literal!(rows), " ROWS"]
+      percent = options[:percent] -> [literal!(percent), " PERCENT"]
+      true -> raise ArgumentError, "expected :rows or :percent sample option"
     end
   end
 

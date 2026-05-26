@@ -21,8 +21,8 @@ if Code.ensure_loaded?(Ecto.Query.API) do
         )
 
     Helpers only build expressions. DuckDB clauses that are not representable in
-    Ecto's AST, such as `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, and
-    `USING SAMPLE`, should still be sent as raw SQL.
+    Ecto's AST, such as `PIVOT`, `UNPIVOT`, `QUALIFY`, and `GROUPING SETS`,
+    should still be sent as raw SQL.
     """
 
     defmacro median(expression) do
@@ -97,6 +97,36 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     defmacro time_bucket(interval, timestamp) do
       quote do
         fragment("time_bucket(?::INTERVAL, ?)", unquote(interval), unquote(timestamp))
+      end
+    end
+
+    defmacro time_bucket(%Duration{} = interval, timestamp, options) when is_list(options) do
+      origin = Keyword.fetch!(options, :origin)
+
+      quote do
+        fragment(
+          unquote([
+            "time_bucket(",
+            QuackDB.SQL.literal!(interval),
+            ", ?, ",
+            QuackDB.SQL.literal!(origin),
+            ")"
+          ]),
+          unquote(timestamp)
+        )
+      end
+    end
+
+    defmacro time_bucket(interval, timestamp, options) when is_list(options) do
+      origin = Keyword.fetch!(options, :origin)
+
+      quote do
+        fragment(
+          "time_bucket(?::INTERVAL, ?, ?)",
+          unquote(interval),
+          unquote(timestamp),
+          unquote(origin)
+        )
       end
     end
   end

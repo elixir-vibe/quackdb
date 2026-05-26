@@ -296,6 +296,12 @@ frame = DataFrame.new(id: [1, 2], name: ["duck", "goose"])
 QuackExplorer.insert_dataframe!(conn, "events", frame)
 ```
 
+Any `Table.Reader`-compatible data can be appended through the same column append path:
+
+```elixir
+QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
+```
+
 Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. See the [Explorer guide](guides/explorer.md).
 
 ## Results, Livebook, and telemetry

@@ -71,6 +71,15 @@ defmodule QuackDB.Integration.JSONAnalyticsTest do
            ] = QuackDB.IntegrationRepo.all(query)
   end
 
+  test "JSON parameters encode maps" do
+    connection = start_connection!()
+
+    assert %{rows: [["duck"]]} =
+             QuackDB.query!(connection, "SELECT json_extract_string(?, '$.name')", [
+               {:json, %{name: "duck", scores: [10, 20]}}
+             ])
+  end
+
   test "raw SQL JSON extraction functions decode scalar JSON results" do
     connection = start_connection!()
 

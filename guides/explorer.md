@@ -48,6 +48,14 @@ This uses `QuackDB.insert_columns/4` internally, preserving Explorer's columnar 
 
 ## Table.Reader
 
+Any `Table.Reader`-compatible data can also be appended through QuackDB's native column append path:
+
+```elixir
+QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
+```
+
+## Reading results with Table.Reader
+
 When the optional `:table` package is available, `QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`.
 
 ```elixir

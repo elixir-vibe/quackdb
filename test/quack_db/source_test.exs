@@ -51,6 +51,16 @@ defmodule QuackDB.SourceTest do
              "iceberg_scan('s3://bucket/table', allow_moved_paths = TRUE)"
   end
 
+  test "wraps sources with sampling" do
+    source = Source.parquet("events.parquet")
+
+    assert Source.sample(source, rows: 10) ==
+             "(SELECT * FROM read_parquet('events.parquet') USING SAMPLE 10 ROWS)"
+
+    assert Source.sample(source, percent: 12.5) ==
+             "(SELECT * FROM read_parquet('events.parquet') USING SAMPLE 12.5 PERCENT)"
+  end
+
   test "identifies source fragments for Ecto SQL generation" do
     assert Source.source?(Source.csv("events.csv", header: true))
     refute Source.source?("events")

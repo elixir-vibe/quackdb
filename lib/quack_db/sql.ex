@@ -27,6 +27,7 @@ defmodule QuackDB.SQL do
           | QuackDB.Interval.t()
           | Duration.t()
           | {:blob, binary()}
+          | {:json, term()}
           | {:interval, integer(), integer(), integer()}
           | [parameter()]
 
@@ -178,6 +179,23 @@ defmodule QuackDB.SQL do
 
   def literal({:uuid, value}) when is_binary(value) do
     {:ok, ["UUID '", String.replace(value, "'", "''"), "'"]}
+  end
+
+  def literal({:json, value}) when is_binary(value) do
+    {:ok, ["JSON '", String.replace(value, "'", "''"), "'"]}
+  end
+
+  if Code.ensure_loaded?(Jason) do
+    def literal({:json, value}) do
+      literal({:json, Jason.encode!(value)})
+    end
+  else
+    def literal({:json, value}) do
+      error(
+        :unsupported_parameter,
+        "cannot encode JSON SQL parameter without Jason: #{inspect(value)}"
+      )
+    end
   end
 
   def literal(value) when is_binary(value) do

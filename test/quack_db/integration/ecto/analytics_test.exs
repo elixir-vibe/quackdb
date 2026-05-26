@@ -74,6 +74,7 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
     ])
 
     interval = Duration.new!(minute: 15)
+    origin = ~N[2024-01-01 00:00:00]
 
     query =
       from(event in table,
@@ -83,7 +84,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           score: json_extract(event.payload, "$.score"),
           day: date_trunc("day", event.occurred_at),
           bucket: time_bucket("1 day", event.occurred_at),
-          fifteen_minute_bucket: time_bucket(^interval, event.occurred_at)
+          fifteen_minute_bucket: time_bucket(^interval, event.occurred_at),
+          origin_bucket: time_bucket(^interval, event.occurred_at, origin: ^origin)
         }
       )
 
@@ -93,7 +95,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                score: "10",
                day: ~N[2024-01-02 00:00:00.000000],
                bucket: ~N[2024-01-02 00:00:00.000000],
-               fifteen_minute_bucket: ~N[2024-01-02 03:00:00.000000]
+               fifteen_minute_bucket: ~N[2024-01-02 03:00:00.000000],
+               origin_bucket: ~N[2024-01-02 03:00:00.000000]
              }
            ] = QuackDB.IntegrationRepo.all(query)
   end

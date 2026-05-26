@@ -464,6 +464,33 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+Build date spines and timestamp buckets with Elixir-native `Date.Range` and `Duration` values:
+
+```elixir
+use QuackDB.Ecto
+
+MyApp.AnalyticsRepo.all(
+  from day in series(Date.range(~D[2024-01-01], ~D[2024-01-31])),
+    left_join: event in "events",
+    on: event.occurred_on == day.value,
+    group_by: day.value,
+    order_by: day.value,
+    select: %{day: day.value, events: count(event.id)}
+)
+
+interval = Duration.new!(hour: 1)
+origin = ~N[2024-01-01 00:00:00]
+
+MyApp.AnalyticsRepo.all(
+  from event in "events",
+    group_by: selected_as(:bucket),
+    select: %{
+      bucket: selected_as(time_bucket(^interval, event.occurred_at, origin: ^origin), :bucket),
+      events: count()
+    }
+)
+```
+
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir

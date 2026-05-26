@@ -75,6 +75,11 @@ defmodule QuackDB.SQLTest do
     assert sql == "SELECT from_hex('03020100')"
   end
 
+  test "formats JSON values" do
+    assert {:ok, sql} = QuackDB.SQL.format("SELECT ?", [{:json, %{name: "duck", scores: [1, 2]}}])
+    assert sql == ~s|SELECT JSON '{"name":"duck","scores":[1,2]}'|
+  end
+
   test "formats Elixir durations as DuckDB intervals" do
     assert {:ok, sql} =
              QuackDB.SQL.format("SELECT ?", [

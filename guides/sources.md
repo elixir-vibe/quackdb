@@ -22,7 +22,12 @@ Available helpers:
 - `Source.delta/2` → `delta_scan(...)`
 - `Source.iceberg/2` → `iceberg_scan(...)`
 
-Use `Source.table_function/3` for a DuckDB table function that QuackDB does not wrap yet.
+Use `Source.table_function/3` for a DuckDB table function that QuackDB does not wrap yet. Use `Source.sample/2` to wrap any source in a DuckDB `USING SAMPLE` subquery:
+
+```elixir
+Source.parquet("events.parquet")
+|> Source.sample(rows: 1_000)
+```
 
 ## Ecto queries
 

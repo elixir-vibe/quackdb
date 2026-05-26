@@ -36,6 +36,22 @@ defmodule QuackDB.Ecto.AnalyticsTest do
              ~S[SELECT time_bucket(?::INTERVAL, q0."occurred_at") AS "bucket" FROM "events" AS q0]
   end
 
+  test "builds time buckets with origins" do
+    interval = Duration.new!(hour: 1)
+    origin = ~N[2024-01-01 00:00:00]
+
+    query =
+      from(event in "events",
+        select: %{
+          duration_interval: time_bucket(^interval, event.occurred_at, origin: ^origin),
+          string_interval: time_bucket("1 hour", event.occurred_at, origin: ^origin)
+        }
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT time_bucket(?::INTERVAL, q0."occurred_at", ?) AS "duration_interval", time_bucket('1 hour'::INTERVAL, q0."occurred_at", ?) AS "string_interval" FROM "events" AS q0]
+  end
+
   test "builds JSON and time-series expressions" do
     query =
       from(event in "events",
