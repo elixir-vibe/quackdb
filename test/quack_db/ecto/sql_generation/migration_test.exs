@@ -26,13 +26,14 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
          {:add, :amount, :decimal, [default: Decimal.new("12.34")]},
          {:add, :event_date, :date, [default: ~D[2026-05-26]]},
          {:add, :event_time, :time, [default: ~T[12:34:56]]},
-         {:add, :occurred_at, :naive_datetime, [default: ~N[2026-05-26 12:34:56]]}
+         {:add, :occurred_at, :naive_datetime, [default: ~N[2026-05-26 12:34:56]]},
+         {:add, :received_at, :utc_datetime, [default: ~U[2026-05-26 12:34:56Z]]}
        ]}
       |> Connection.execute_ddl()
       |> single_sql()
 
     assert sql ==
-             ~s|CREATE TABLE "events" ("amount" DECIMAL DEFAULT 12.34, "event_date" DATE DEFAULT DATE '2026-05-26', "event_time" TIME DEFAULT TIME '12:34:56', "occurred_at" TIMESTAMP DEFAULT TIMESTAMP '2026-05-26 12:34:56')|
+             ~s|CREATE TABLE "events" ("amount" DECIMAL DEFAULT 12.34, "event_date" DATE DEFAULT DATE '2026-05-26', "event_time" TIME DEFAULT TIME '12:34:56', "occurred_at" TIMESTAMP DEFAULT TIMESTAMP '2026-05-26 12:34:56', "received_at" TIMESTAMPTZ DEFAULT TIMESTAMPTZ '2026-05-26T12:34:56Z')|
   end
 
   test "rejects unsupported default values explicitly" do

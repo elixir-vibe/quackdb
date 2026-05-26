@@ -48,20 +48,22 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
          {:add, :amount, :decimal, [default: Decimal.new("12.34")]},
          {:add, :event_date, :date, [default: ~D[2026-05-26]]},
          {:add, :event_time, :time, [default: ~T[12:34:56]]},
-         {:add, :occurred_at, :naive_datetime, [default: ~N[2026-05-26 12:34:56]]}
+         {:add, :occurred_at, :naive_datetime, [default: ~N[2026-05-26 12:34:56]]},
+         {:add, :received_at, :utc_datetime, [default: ~U[2026-05-26 12:34:56Z]]}
        ]}
     )
 
     assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1]])
 
-    assert %{rows: [[1, amount, ~D[2026-05-26], event_time, occurred_at]]} =
+    assert %{rows: [[1, amount, ~D[2026-05-26], event_time, occurred_at, received_at]]} =
              QuackDB.IntegrationRepo.query!(
-               "SELECT id, amount, event_date, event_time, occurred_at FROM #{table}"
+               "SELECT id, amount, event_date, event_time, occurred_at, received_at FROM #{table}"
              )
 
     assert Decimal.equal?(amount, Decimal.new("12.34"))
     assert Time.compare(event_time, ~T[12:34:56]) == :eq
     assert NaiveDateTime.compare(occurred_at, ~N[2026-05-26 12:34:56]) == :eq
+    assert DateTime.compare(received_at, ~U[2026-05-26 12:34:56Z]) == :eq
 
     execute_ddl!({:drop, %Table{name: table}, :restrict})
   end
