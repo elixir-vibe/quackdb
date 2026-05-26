@@ -49,10 +49,18 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro list(expression, options) when is_list(options) do
+      ordered_aggregate("list", [expression], options)
+    end
+
     defmacro string_agg(expression, separator) do
       quote do
         fragment("string_agg(?, ?)", unquote(expression), unquote(separator))
       end
+    end
+
+    defmacro string_agg(expression, separator, options) when is_list(options) do
+      ordered_aggregate("string_agg", [expression, separator], options)
     end
 
     defmacro arg_max(argument, value) do
@@ -61,9 +69,21 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro arg_max(argument, value, count) do
+      quote do
+        fragment("arg_max(?, ?, ?)", unquote(argument), unquote(value), unquote(count))
+      end
+    end
+
     defmacro arg_min(argument, value) do
       quote do
         fragment("arg_min(?, ?)", unquote(argument), unquote(value))
+      end
+    end
+
+    defmacro arg_min(argument, value, count) do
+      quote do
+        fragment("arg_min(?, ?, ?)", unquote(argument), unquote(value), unquote(count))
       end
     end
 
@@ -214,6 +234,46 @@ if Code.ensure_loaded?(Ecto.Query.API) do
         )
       end
     end
+
+    defp ordered_aggregate(function, arguments, options) do
+      order_by = Keyword.fetch!(options, :order_by)
+      orders = List.wrap(order_by)
+      sql = ordered_aggregate_sql(function, length(arguments), orders)
+      args = arguments ++ Enum.map(orders, &order_expression!/1)
+
+      quote do
+        fragment(unquote(sql), unquote_splicing(args))
+      end
+    end
+
+    defp ordered_aggregate_sql(function, argument_count, orders) do
+      [
+        function,
+        "(",
+        placeholders(argument_count),
+        " ORDER BY ",
+        order_placeholders(orders),
+        ")"
+      ]
+      |> IO.iodata_to_binary()
+    end
+
+    defp placeholders(count), do: Enum.map_join(1..count, ", ", fn _ -> "?" end)
+
+    defp order_placeholders(orders) do
+      orders
+      |> Enum.map(fn order -> ["? ", order_direction!(order)] end)
+      |> Enum.intersperse(", ")
+    end
+
+    defp order_expression!({direction, expression}) when direction in [:asc, :desc],
+      do: expression
+
+    defp order_expression!(expression), do: expression
+
+    defp order_direction!({:asc, _expression}), do: "ASC"
+    defp order_direction!({:desc, _expression}), do: "DESC"
+    defp order_direction!(_expression), do: "ASC"
 
     defp date_part_literal!(part) do
       part

@@ -51,6 +51,11 @@ defmodule QuackDB.SourceTest do
              "iceberg_scan('s3://bucket/table', allow_moved_paths = TRUE)"
   end
 
+  test "builds histogram values sources" do
+    assert Source.histogram_values("events", :score, bin_count: 10) ==
+             "histogram_values(events, score, bin_count := 10)"
+  end
+
   test "wraps sources with sampling" do
     source = Source.parquet("events.parquet")
 

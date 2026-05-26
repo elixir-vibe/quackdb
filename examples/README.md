@@ -29,6 +29,15 @@ cd /tmp
 elixir /path/to/quackdb/examples/dataframe_analytics.exs
 ```
 
+## Ecto analytics
+
+[`ecto_analytics.exs`](ecto_analytics.exs) showcases QuackDB's Ecto analytical DSL with `case_when`, `date_part/2`, aggregate `filter/2`, ordered `list/2`, percentiles, standard deviation, and histograms.
+
+```sh
+cd /tmp
+elixir /path/to/quackdb/examples/ecto_analytics.exs
+```
+
 ## Stream append
 
 [`stream_append.exs`](stream_append.exs) parses newline-delimited JSON as an Elixir stream and appends it with `QuackDB.insert_stream!/4` in small native append batches.

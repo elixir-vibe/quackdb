@@ -473,6 +473,34 @@ if Code.ensure_loaded?(Ecto.Query) do
       [window_function |> Atom.to_string() |> String.upcase(), "()"]
     end
 
+    defp expr({window_function, _meta, [expression]})
+         when window_function in [:lag, :lead, :first_value, :last_value] do
+      [window_function |> Atom.to_string(), "(", expr(expression), ")"]
+    end
+
+    defp expr({window_function, _meta, [expression, offset]})
+         when window_function in [:lag, :lead] do
+      [window_function |> Atom.to_string(), "(", expr(expression), ", ", expr(offset), ")"]
+    end
+
+    defp expr({window_function, _meta, [expression, offset, default]})
+         when window_function in [:lag, :lead] do
+      [
+        window_function |> Atom.to_string(),
+        "(",
+        expr(expression),
+        ", ",
+        expr(offset),
+        ", ",
+        expr(default),
+        ")"
+      ]
+    end
+
+    defp expr({:nth_value, _meta, [expression, nth]}) do
+      ["nth_value(", expr(expression), ", ", expr(nth), ")"]
+    end
+
     defp expr({:over, _meta, [expression, window]}) do
       [expr(expression), " OVER ", over_expr(window)]
     end

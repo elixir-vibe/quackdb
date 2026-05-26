@@ -42,6 +42,23 @@ defmodule QuackDB.Ecto.SQLGeneration.WindowFunctionsTest do
              ~S[SELECT q0."id" AS "id", q0."rank" AS "rank" FROM (SELECT q0."id" AS "id", q0."category_id" AS "category_id", ROW_NUMBER() OVER "by_category" AS "rank" FROM "events" AS q0 WINDOW "by_category" AS (PARTITION BY q0."category_id" ORDER BY q0."score" DESC)) AS q0 WHERE (q0."rank" <= 3) ORDER BY q0."category_id" ASC, q0."rank" ASC]
   end
 
+  test "generates value window functions" do
+    query =
+      from(event in "events",
+        select: %{
+          previous_score: over(lag(event.score), :by_category),
+          next_score: over(lead(event.score, 2, 0), :by_category),
+          first_score: over(first_value(event.score), :by_category),
+          last_score: over(last_value(event.score), :by_category),
+          second_score: over(nth_value(event.score, 2), :by_category)
+        },
+        windows: [by_category: [partition_by: event.category_id, order_by: [asc: event.id]]]
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT lag(q0."score") OVER "by_category" AS "previous_score", lead(q0."score", 2, 0) OVER "by_category" AS "next_score", first_value(q0."score") OVER "by_category" AS "first_score", last_value(q0."score") OVER "by_category" AS "last_score", nth_value(q0."score", 2) OVER "by_category" AS "second_score" FROM "events" AS q0 WINDOW "by_category" AS (PARTITION BY q0."category_id" ORDER BY q0."id" ASC)]
+  end
+
   test "generates inline window definitions" do
     query =
       from(event in "events",

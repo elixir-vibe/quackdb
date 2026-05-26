@@ -62,13 +62,23 @@ defmodule QuackDB.Source do
   def iceberg(path_or_paths, options \\ []),
     do: table_function("iceberg_scan", path_or_paths, options)
 
+  @doc "Builds a `histogram_values(...)` table function fragment."
+  @spec histogram_values(String.t(), String.t() | atom(), keyword(option_value())) :: String.t()
+  def histogram_values(source, column, options \\ [])
+      when is_binary(source) and is_list(options) do
+    column = option_name(column)
+
+    ["histogram_values(", source, ", ", column, options(:duckdb_named, options), ")"]
+    |> IO.iodata_to_binary()
+  end
+
   @doc "Builds a DuckDB table-function fragment for a validated function name."
   @spec table_function(String.t(), path_or_paths(), keyword(option_value())) :: String.t()
   def table_function(function_name, path_or_paths, options \\ [])
       when is_binary(function_name) and is_list(options) do
     validate_identifier!(function_name, :function)
 
-    [function_name, "(", literal!(path_or_paths), options(options), ")"]
+    [function_name, "(", literal!(path_or_paths), options(:equals, options), ")"]
     |> IO.iodata_to_binary()
   end
 
@@ -95,6 +105,7 @@ defmodule QuackDB.Source do
       "read_xlsx" -> true
       "delta_scan" -> true
       "iceberg_scan" -> true
+      "histogram_values" -> true
       "generate_series" -> true
       _other -> false
     end
@@ -108,16 +119,16 @@ defmodule QuackDB.Source do
     end
   end
 
-  defp options([]), do: []
+  defp options(_style, []), do: []
 
-  defp options(options) do
-    options =
-      Enum.map(options, fn {name, value} ->
-        [", ", option_name(name), " = ", literal!(value)]
-      end)
-
-    options
+  defp options(style, options) do
+    Enum.map(options, fn {name, value} ->
+      [", ", option_name(name), option_separator(style), literal!(value)]
+    end)
   end
+
+  defp option_separator(:equals), do: " = "
+  defp option_separator(:duckdb_named), do: " := "
 
   defp option_name(name) when is_atom(name), do: name |> Atom.to_string() |> option_name()
 
@@ -171,6 +182,10 @@ defmodule QuackDB.Source do
       {index, 1} when index > 0 -> binary_part(value, 0, index)
       _not_found -> nil
     end
+  end
+
+  defp validate_identifier!(value, kind) when is_atom(value) do
+    value |> Atom.to_string() |> validate_identifier!(kind)
   end
 
   defp validate_identifier!(<<first, rest::binary>> = value, kind)

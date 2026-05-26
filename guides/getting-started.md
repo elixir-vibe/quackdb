@@ -553,7 +553,8 @@ MyApp.AnalyticsRepo.all(
       score_stddev: stddev(event.score),
       score_variance: variance(event.score),
       score_entropy: entropy(event.score),
-      score_histogram: histogram(event.score)
+      score_histogram: histogram(event.score),
+      ordered_scores: list(event.score, order_by: [desc: event.score])
     }
 )
 ```

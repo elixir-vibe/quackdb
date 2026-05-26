@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added `Duration.t()` SQL parameter support, Ecto `time_bucket/2,3` compatibility for pinned Elixir durations, origins, and offsets, typed Ecto `series/1,3` helpers for DuckDB `generate_series` date/timestamp sources, JSON SQL parameters/path helpers plus Ecto access syntax and `type/2` casts, `case_when` syntax for DuckDB `CASE WHEN`, atom date parts, `list/1`, statistical and histogram helpers, source sampling and metadata examples, enumerable stream append, and Table.Reader input append.
+- Added `Duration.t()` SQL parameter support, Ecto `time_bucket/2,3` compatibility for pinned Elixir durations, origins, and offsets, typed Ecto `series/1,3` helpers for DuckDB `generate_series` date/timestamp sources, JSON SQL parameters/path helpers plus Ecto access syntax and `type/2` casts, `case_when` syntax for DuckDB `CASE WHEN`, atom date parts, ordered `list/2` and `string_agg/3`, `arg_max/3`, `arg_min/3`, statistical and histogram helpers, value window functions, source sampling and metadata examples, enumerable stream append, and Table.Reader input append.
 
 ## 0.3.0 - 2026-05-26
 
