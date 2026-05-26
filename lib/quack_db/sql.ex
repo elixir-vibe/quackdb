@@ -25,6 +25,7 @@ defmodule QuackDB.SQL do
           | NaiveDateTime.t()
           | DateTime.t()
           | QuackDB.Interval.t()
+          | Duration.t()
           | {:blob, binary()}
           | {:interval, integer(), integer(), integer()}
           | [parameter()]
@@ -85,6 +86,15 @@ defmodule QuackDB.SQL do
     ]
   end
 
+  @doc "Builds a DuckDB SQL literal or raises `QuackDB.Error` for unsupported values."
+  @spec literal!(parameter()) :: iodata()
+  def literal!(value) do
+    case literal(value) do
+      {:ok, literal} -> literal
+      {:error, %Error{} = error} -> raise error
+    end
+  end
+
   @spec literal(parameter()) :: {:ok, iodata()} | {:error, Error.t()}
   def literal(nil), do: {:ok, "NULL"}
   def literal(true), do: {:ok, "TRUE"}
@@ -113,6 +123,11 @@ defmodule QuackDB.SQL do
 
   def literal(%QuackDB.Interval{} = interval) do
     literal({:interval, interval.months, interval.days, interval.microseconds})
+  end
+
+  def literal(%Duration{} = duration) do
+    {months, days, micros} = duration_to_interval(duration)
+    literal({:interval, months, days, micros})
   end
 
   if Code.ensure_loaded?(Geo.WKB) do
@@ -194,6 +209,20 @@ defmodule QuackDB.SQL do
 
   def literal(value), do: unsupported_parameter(value)
 
+  defp duration_to_interval(%Duration{} = duration) do
+    months = duration.year * 12 + duration.month
+    days = duration.week * 7 + duration.day
+    {microseconds, _precision} = duration.microsecond
+
+    micros =
+      microseconds +
+        duration.second * 1_000_000 +
+        duration.minute * 60 * 1_000_000 +
+        duration.hour * 60 * 60 * 1_000_000
+
+    {months, days, micros}
+  end
+
   defp call_arguments(positional_args, named_args) do
     positional = Enum.map(positional_args, &literal!/1)
 
@@ -218,13 +247,6 @@ defmodule QuackDB.SQL do
   end
 
   defp binary_literal(value), do: literal({:blob, value})
-
-  defp literal!(value) do
-    case literal(value) do
-      {:ok, literal} -> literal
-      {:error, %Error{} = error} -> raise error
-    end
-  end
 
   defp unsupported_parameter(value) do
     error(:unsupported_parameter, "unsupported SQL parameter #{inspect(value)}")

@@ -85,6 +85,15 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro time_bucket(%Duration{} = interval, timestamp) do
+      quote do
+        fragment(
+          unquote(["time_bucket(", QuackDB.SQL.literal!(interval), ", ?)"]),
+          unquote(timestamp)
+        )
+      end
+    end
+
     defmacro time_bucket(interval, timestamp) do
       quote do
         fragment("time_bucket(?::INTERVAL, ?)", unquote(interval), unquote(timestamp))

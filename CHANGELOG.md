@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added `Duration.t()` SQL parameter support and Ecto `time_bucket/2` compatibility for pinned Elixir durations.
+
 ## 0.3.0 - 2026-05-26
 
 ### Added

@@ -84,6 +84,7 @@ Supported parameter values:
 - `NaiveDateTime.t()`
 - `DateTime.t()`
 - `QuackDB.Interval.t()`
+- `Duration.t()` values, converted to DuckDB interval literals
 - `{:interval, months, days, micros}`
 - lists containing supported parameter values
 

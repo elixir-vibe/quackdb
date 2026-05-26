@@ -75,6 +75,15 @@ defmodule QuackDB.SQLTest do
     assert sql == "SELECT from_hex('03020100')"
   end
 
+  test "formats Elixir durations as DuckDB intervals" do
+    assert {:ok, sql} =
+             QuackDB.SQL.format("SELECT ?", [
+               Duration.new!(year: 1, month: 2, week: 1, day: 3, hour: 4, minute: 5, second: 6)
+             ])
+
+    assert sql == "SELECT INTERVAL '14 months 10 days 14706000000 microseconds'"
+  end
+
   test "formats blobs, intervals, and lists" do
     assert {:ok, sql} =
              QuackDB.SQL.format("SELECT ?, ?, ?", [
