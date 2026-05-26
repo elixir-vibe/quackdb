@@ -25,6 +25,12 @@ defmodule QuackDB.DDL do
 
   @type create_table_option :: {:temporary, boolean()} | {:if_not_exists, boolean()}
 
+  @doc "Builds a `CREATE TABLE` statement from an Ecto schema module."
+  @spec create_table(module(), [create_table_option()]) :: iodata()
+  def create_table(schema, options) when is_atom(schema) and is_list(options) do
+    create_table(schema.__schema__(:source), schema_columns(schema), options)
+  end
+
   @doc "Builds a `CREATE TABLE` statement."
   @spec create_table(String.t() | atom(), [column()], [create_table_option()]) :: iodata()
   def create_table(name, columns, options \\ []) when is_list(columns) and is_list(options) do
@@ -44,6 +50,33 @@ defmodule QuackDB.DDL do
   @spec drop_table(String.t() | atom(), keyword()) :: iodata()
   def drop_table(name, options \\ []) when is_list(options) do
     ["DROP TABLE ", if_exists(options), QuackDB.Type.quote_identifier(name)]
+  end
+
+  defp schema_columns(schema) do
+    Enum.map(schema.__schema__(:fields), fn field ->
+      {field, ecto_type_to_duckdb(schema.__schema__(:type, field))}
+    end)
+  end
+
+  defp ecto_type_to_duckdb(:id), do: :bigint
+  defp ecto_type_to_duckdb(:binary_id), do: :uuid
+  defp ecto_type_to_duckdb(:integer), do: :integer
+  defp ecto_type_to_duckdb(:float), do: :double
+  defp ecto_type_to_duckdb(:boolean), do: :boolean
+  defp ecto_type_to_duckdb(:string), do: :varchar
+  defp ecto_type_to_duckdb(:binary), do: :blob
+  defp ecto_type_to_duckdb(:decimal), do: :decimal
+  defp ecto_type_to_duckdb(:date), do: :date
+  defp ecto_type_to_duckdb(:time), do: :time
+  defp ecto_type_to_duckdb(:time_usec), do: :time
+  defp ecto_type_to_duckdb(:naive_datetime), do: :timestamp
+  defp ecto_type_to_duckdb(:naive_datetime_usec), do: :timestamp
+  defp ecto_type_to_duckdb(:utc_datetime), do: :timestamptz
+  defp ecto_type_to_duckdb(:utc_datetime_usec), do: :timestamptz
+  defp ecto_type_to_duckdb({:array, type}), do: {:list, ecto_type_to_duckdb(type)}
+
+  defp ecto_type_to_duckdb(type) do
+    raise ArgumentError, "unsupported Ecto schema type for DuckDB DDL: #{inspect(type)}"
   end
 
   defp temporary(options) do

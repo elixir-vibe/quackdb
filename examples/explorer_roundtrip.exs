@@ -29,21 +29,6 @@ defmodule ExplorerRoundtrip.Connection do
   end
 end
 
-defmodule ExplorerRoundtrip.SchemaDDL do
-  def create_table(schema, options \\ []) do
-    columns =
-      Enum.map(schema.__schema__(:fields), fn field ->
-        {field, duckdb_type(schema.__schema__(:type, field))}
-      end)
-
-    QuackDB.DDL.create_table(schema.__schema__(:source), columns, options)
-  end
-
-  defp duckdb_type(:integer), do: :integer
-  defp duckdb_type(:string), do: :varchar
-  defp duckdb_type(:float), do: :double
-end
-
 defmodule ExplorerRoundtrip.Queries do
   import Ecto.Query
 
@@ -66,14 +51,13 @@ alias Explorer.DataFrame
 alias ExplorerRoundtrip.Connection
 alias ExplorerRoundtrip.Event
 alias ExplorerRoundtrip.Queries
-alias ExplorerRoundtrip.SchemaDDL
 
 {:ok, conn} = Connection.start()
 
 table = Event.__schema__(:source)
 
 QuackDB.query!(conn, QuackDB.DDL.drop_table(table, if_exists: true))
-QuackDB.query!(conn, SchemaDDL.create_table(Event, temporary: true))
+QuackDB.query!(conn, QuackDB.DDL.create_table(Event, temporary: true))
 
 df =
   DataFrame.new(

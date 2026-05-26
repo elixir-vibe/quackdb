@@ -1,6 +1,6 @@
-defmodule SpatialWms.Places.Place do
+defmodule SpatialWMS.Places.Place do
   use Ash.Resource,
-    domain: SpatialWms.Places,
+    domain: SpatialWMS.Places,
     data_layer: Ash.DataLayer.Ets
 
   attributes do

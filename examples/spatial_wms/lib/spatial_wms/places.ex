@@ -1,12 +1,12 @@
-defmodule SpatialWms.Places do
+defmodule SpatialWMS.Places do
   use Ash.Domain
 
   import Ecto.Query
   import QuackDB.Ecto.Spatial, only: [as_geojson: 1, envelope: 4, intersects: 2]
 
   alias QuackDB.Spatial
-  alias SpatialWms.Places.Place
-  alias SpatialWms.Repo
+  alias SpatialWMS.Places.Place
+  alias SpatialWMS.Repo
 
   @layer "places"
   @table "wms_places"

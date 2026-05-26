@@ -1,6 +1,24 @@
 defmodule QuackDB.DDLTest do
   use ExUnit.Case, async: true
 
+  defmodule EventSchema do
+    use Ecto.Schema
+
+    @primary_key false
+    schema "events" do
+      field(:id, :integer)
+      field(:name, :string)
+      field(:score, :float)
+    end
+  end
+
+  test "create_table builds DDL from an Ecto schema" do
+    assert EventSchema
+           |> QuackDB.DDL.create_table(temporary: true)
+           |> IO.iodata_to_binary() ==
+             ~s|CREATE TEMP TABLE "events" ("id" INTEGER, "name" VARCHAR, "score" DOUBLE)|
+  end
+
   test "create_table builds regular table DDL" do
     assert QuackDB.DDL.create_table("events", id: :integer, name: :varchar)
            |> IO.iodata_to_binary() == ~S[CREATE TABLE "events" ("id" INTEGER, "name" VARCHAR)]

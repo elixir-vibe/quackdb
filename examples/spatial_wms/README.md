@@ -5,7 +5,7 @@ A minimal QuackDB application that serves DuckDB Spatial data through a WMS-like
 It intentionally combines:
 
 - **QuackDB** for remote DuckDB over Quack
-- **Ecto** via `SpatialWms.Repo`
+- **Ecto** via `SpatialWMS.Repo`
 - **QuackDB.Ecto.Spatial** for spatial query expressions
 - **Ash** for the `Place` resource shape used at the boundary
 - **Plug/Bandit** for HTTP

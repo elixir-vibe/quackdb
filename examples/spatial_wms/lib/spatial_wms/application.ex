@@ -1,4 +1,4 @@
-defmodule SpatialWms.Application do
+defmodule SpatialWMS.Application do
   @moduledoc false
 
   use Application
@@ -7,20 +7,20 @@ defmodule SpatialWms.Application do
   def start(_type, _args) do
     {server_children, repo_config} = quackdb_config()
 
-    Application.put_env(:spatial_wms, SpatialWms.Repo, repo_config)
+    Application.put_env(:spatial_wms, SpatialWMS.Repo, repo_config)
 
     port = System.get_env("PORT", "4040") |> String.to_integer()
 
     children =
       server_children ++
         [
-          SpatialWms.Repo,
-          {Bandit, plug: SpatialWmsWeb.Router, port: port}
+          SpatialWMS.Repo,
+          {Bandit, plug: SpatialWMS.Web.Router, port: port}
         ]
 
     with {:ok, supervisor} <-
-           Supervisor.start_link(children, strategy: :one_for_one, name: SpatialWms.Supervisor) do
-      SpatialWms.Places.init!()
+           Supervisor.start_link(children, strategy: :one_for_one, name: SpatialWMS.Supervisor) do
+      SpatialWMS.Places.init!()
       print_routes(port)
       {:ok, supervisor}
     end
@@ -32,7 +32,7 @@ defmodule SpatialWms.Application do
         token = "super_secret"
 
         {
-          [{QuackDB.Server, name: SpatialWms.DuckDB, token: token}],
+          [{QuackDB.Server, name: SpatialWMS.DuckDB, token: token}],
           [uri: "http://[::1]:9494", token: token, pool_size: 1, log: false]
         }
 

@@ -1,7 +1,7 @@
-defmodule SpatialWmsWeb.Router do
+defmodule SpatialWMS.Web.Router do
   use Plug.Router
 
-  alias SpatialWms.Places
+  alias SpatialWMS.Places
 
   @supported_formats ["application/geo+json", "application/json", "geojson"]
 

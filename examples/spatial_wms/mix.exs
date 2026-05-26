@@ -1,4 +1,4 @@
-defmodule SpatialWms.MixProject do
+defmodule SpatialWMS.MixProject do
   use Mix.Project
 
   def project do
@@ -13,7 +13,7 @@ defmodule SpatialWms.MixProject do
 
   def application do
     [
-      mod: {SpatialWms.Application, []},
+      mod: {SpatialWMS.Application, []},
       extra_applications: [:logger]
     ]
   end
