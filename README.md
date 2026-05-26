@@ -108,7 +108,7 @@ For local development, QuackDB can supervise DuckDB's external CLI process for y
 children =
   QuackDB.Server.child_specs(
     server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
-    client: [name: MyApp.QuackDB]
+    client: [name: MyApp.QuackDB, pool_size: System.schedulers_online()]
   )
 ```
 
@@ -230,12 +230,17 @@ For local development, tests, or notebooks, QuackDB can also supervise a local D
 ```elixir
 children =
   QuackDB.Server.child_specs(
-    server: [name: MyApp.DuckDB, endpoint: "quack:localhost:9494"],
-    client: [name: MyApp.QuackDB, pool_size: 5]
+    server: [
+      name: MyApp.DuckDB,
+      endpoint: "quack:localhost:9494",
+      settings: [threads: System.schedulers_online()],
+      global_settings: [quack_fetch_batch_chunks: 4]
+    ],
+    client: [name: MyApp.QuackDB, pool_size: System.schedulers_online()]
   )
 ```
 
-`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers.
+`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers. By default it sets DuckDB `threads` to `System.schedulers_online()` and lowers `quack_fetch_batch_chunks` from DuckDB's default `12` to `4`, which keeps fetch responses smaller while still batching chunks. For heavy analytical scans, use a smaller client `pool_size` such as `1..4`; for many small concurrent queries, use `System.schedulers_online()`.
 
 ## Development
 

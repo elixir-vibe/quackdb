@@ -63,6 +63,15 @@ defmodule QuackDB.SQL do
     ["LOAD ", identifier!(extension, :extension), ";"]
   end
 
+  @doc "Builds a `SET name = value;` statement."
+  @spec set(atom() | String.t(), parameter()) :: iodata()
+  def set(name, value), do: ["SET ", identifier!(name, :setting), " = ", literal!(value), ";"]
+
+  @doc "Builds a `SET GLOBAL name = value;` statement."
+  @spec set_global(atom() | String.t(), parameter()) :: iodata()
+  def set_global(name, value),
+    do: ["SET GLOBAL ", identifier!(name, :setting), " = ", literal!(value), ";"]
+
   @doc "Builds a `CALL function(args..., option = value...);` statement."
   @spec call(atom() | String.t(), [parameter()], keyword(parameter())) :: iodata()
   def call(function, positional_args \\ [], named_args \\ [])

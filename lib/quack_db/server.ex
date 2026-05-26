@@ -55,6 +55,8 @@ defmodule QuackDB.Server do
           | {:token, String.t()}
           | {:load_quack?, boolean()}
           | {:boot_sql, String.t()}
+          | {:settings, keyword(QuackDB.SQL.parameter())}
+          | {:global_settings, keyword(QuackDB.SQL.parameter())}
           | {:wait, boolean()}
           | {:wait_timeout, timeout()}
           | {:poll_interval, pos_integer()}
@@ -284,9 +286,31 @@ defmodule QuackDB.Server do
   defp boot_sql(endpoint, token, options) do
     [
       if(Keyword.get(options, :load_quack?, true), do: [QuackDB.SQL.load(:quack), " "], else: []),
+      server_settings(options),
+      server_global_settings(options),
       QuackDB.SQL.call(:quack_serve, [endpoint], token: token)
     ]
     |> IO.iodata_to_binary()
+  end
+
+  defp server_settings(options) do
+    options
+    |> Keyword.get(:settings, default_settings())
+    |> Enum.map(fn {name, value} -> [QuackDB.SQL.set(name, value), " "] end)
+  end
+
+  defp server_global_settings(options) do
+    options
+    |> Keyword.get(:global_settings, default_global_settings())
+    |> Enum.map(fn {name, value} -> [QuackDB.SQL.set_global(name, value), " "] end)
+  end
+
+  defp default_settings do
+    [threads: System.schedulers_online()]
+  end
+
+  defp default_global_settings do
+    [quack_fetch_batch_chunks: 4]
   end
 
   defp default_uri(endpoint) do

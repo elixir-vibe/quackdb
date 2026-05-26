@@ -6,6 +6,13 @@ defmodule QuackDB.SQLTest do
     assert QuackDB.SQL.load(:quack) |> IO.iodata_to_binary() == "LOAD quack;"
   end
 
+  test "builds SET statements" do
+    assert QuackDB.SQL.set(:threads, 8) |> IO.iodata_to_binary() == "SET threads = 8;"
+
+    assert QuackDB.SQL.set_global(:quack_fetch_batch_chunks, 4) |> IO.iodata_to_binary() ==
+             "SET GLOBAL quack_fetch_batch_chunks = 4;"
+  end
+
   test "builds CALL statements with positional and named arguments" do
     assert QuackDB.SQL.call(:quack_serve, ["quack:localhost"], token: "super_secret")
            |> IO.iodata_to_binary() ==
