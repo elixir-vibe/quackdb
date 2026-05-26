@@ -6,6 +6,24 @@ defmodule QuackDB.Secret do
   cloud filesystems. These helpers build `CREATE SECRET` statements with
   QuackDB's SQL literal formatting so credentials and scopes are escaped
   consistently.
+
+  | Helper | DuckDB secret type |
+  | --- | --- |
+  | `http/1` | `TYPE http` |
+  | `s3/1` | `TYPE s3` |
+  | `r2/1` | `TYPE r2` |
+  | `gcs/1` | `TYPE gcs` |
+  | `azure/1` | `TYPE azure` |
+  | `hugging_face/1` | `TYPE huggingface` |
+
+      alias QuackDB.Secret
+
+      Secret.s3(provider: :credential_chain, scope: "s3://bucket/prefix/")
+      Secret.http(name: :api, bearer_token: token)
+
+  Atom values are emitted as DuckDB identifiers, which is useful for options
+  such as `PROVIDER credential_chain`. String values are emitted as SQL string
+  literals.
   """
 
   alias QuackDB.Error

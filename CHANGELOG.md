@@ -15,6 +15,7 @@
 - Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
 - Added `use QuackDB.Ecto` to import Ecto query, analytical, and spatial helpers together.
 - Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.
+- Added `QuackDB.Extension` helpers for DuckDB `INSTALL` and `LOAD` statements.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

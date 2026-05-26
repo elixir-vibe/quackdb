@@ -2,9 +2,9 @@ defmodule QuackDB.SecretTest do
   use ExUnit.Case, async: true
 
   test "builds credential-chain S3 secrets" do
-    assert QuackDB.Secret.s3(provider: :credential_chain)
+    assert QuackDB.Secret.s3(provider: :credential_chain, scope: "s3://bucket/prefix/")
            |> IO.iodata_to_binary() ==
-             "CREATE OR REPLACE SECRET (TYPE s3, PROVIDER credential_chain);"
+             "CREATE OR REPLACE SECRET (TYPE s3, PROVIDER credential_chain, SCOPE 's3://bucket/prefix/');"
   end
 
   test "builds named HTTP secrets with headers" do
@@ -25,6 +25,10 @@ defmodule QuackDB.SecretTest do
     assert QuackDB.Secret.gcs(key_id: "key", secret: "secret")
            |> IO.iodata_to_binary() ==
              "CREATE OR REPLACE SECRET (TYPE gcs, KEY_ID 'key', SECRET 'secret');"
+
+    assert QuackDB.Secret.s3(key_id: "key", secret: "secret", region: "us-east-1")
+           |> IO.iodata_to_binary() ==
+             "CREATE OR REPLACE SECRET (TYPE s3, KEY_ID 'key', SECRET 'secret', REGION 'us-east-1');"
 
     assert QuackDB.Secret.azure(provider: :credential_chain, account_name: "storage")
            |> IO.iodata_to_binary() ==

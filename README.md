@@ -159,18 +159,18 @@ QuackDB provides a few layers that can be used independently:
 | `QuackDB.Explorer` and `Table.Reader` | DataFrame conversion, dataframe append, and Livebook-friendly tabular output | [`guides/explorer.md`](guides/explorer.md) |
 | `QuackDB.Spatial`, `QuackDB.Ecto.Spatial`, and `QuackDB.Geometry` | DuckDB Spatial SQL, Ecto spatial queries, and optional Geo/WKB conversion | [`guides/spatial.md`](guides/spatial.md) |
 | Telemetry spans | Query, append, and fetch spans | [`guides/telemetry.md`](guides/telemetry.md) |
-| `QuackDB.Secret` and `QuackDB.SQL.install/1` / `load/1` | DuckDB extensions and secrets for HTTP/S3/R2/GCS/Azure/Hugging Face sources | [`guides/sources.md`](guides/sources.md) |
+| `QuackDB.Secret` and `QuackDB.Extension.install/1` / `load/1` | DuckDB extensions and secrets for HTTP/S3/R2/GCS/Azure/Hugging Face sources | [`guides/sources.md`](guides/sources.md) |
 
 A few common snippets:
 
 ```elixir
 import Ecto.Query
 
-alias QuackDB.{Secret, Source, SQL}
+alias QuackDB.{Extension, Secret, Source}
 
 # DuckDB extensions and secrets
-QuackDB.query!(conn, SQL.install(:httpfs))
-QuackDB.query!(conn, SQL.load(:httpfs))
+QuackDB.query!(conn, Extension.install(:httpfs))
+QuackDB.query!(conn, Extension.load(:httpfs))
 QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
 
 # Source helpers with Ecto

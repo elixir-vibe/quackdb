@@ -74,10 +74,10 @@ When QuackDB is connected to a remote DuckDB server, paths are resolved on the s
 DuckDB reads HTTP(S) files through the `httpfs` extension:
 
 ```elixir
-alias QuackDB.{Source, SQL}
+alias QuackDB.{Extension, Source}
 
-QuackDB.query!(conn, SQL.install(:httpfs))
-QuackDB.query!(conn, SQL.load(:httpfs))
+QuackDB.query!(conn, Extension.install(:httpfs))
+QuackDB.query!(conn, Extension.load(:httpfs))
 
 source = Source.parquet("https://example.com/events.parquet")
 ```
@@ -103,10 +103,10 @@ QuackDB.query!(
 DuckDB's `httpfs` extension supports S3 and S3-compatible storage such as MinIO, lakeFS, Cloudflare R2, Tigris, and Google Cloud Storage interoperability endpoints.
 
 ```elixir
-alias QuackDB.{Secret, Source, SQL}
+alias QuackDB.{Extension, Secret, Source}
 
-QuackDB.query!(conn, SQL.install(:httpfs))
-QuackDB.query!(conn, SQL.load(:httpfs))
+QuackDB.query!(conn, Extension.install(:httpfs))
+QuackDB.query!(conn, Extension.load(:httpfs))
 QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
 
 source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
@@ -151,10 +151,10 @@ Source.parquet("gcs://bucket/events/*.parquet")
 DuckDB reads Azure storage through the `azure` extension:
 
 ```elixir
-alias QuackDB.{Secret, Source, SQL}
+alias QuackDB.{Extension, Secret, Source}
 
-QuackDB.query!(conn, SQL.install(:azure))
-QuackDB.query!(conn, SQL.load(:azure))
+QuackDB.query!(conn, Extension.install(:azure))
+QuackDB.query!(conn, Extension.load(:azure))
 
 QuackDB.query!(
   conn,
@@ -170,10 +170,10 @@ Source.parquet("abfss://filesystem/events/*.parquet")
 DuckDB can scan Hugging Face dataset files with `hf://` URLs through `httpfs`:
 
 ```elixir
-alias QuackDB.{Secret, Source, SQL}
+alias QuackDB.{Extension, Secret, Source}
 
-QuackDB.query!(conn, SQL.install(:httpfs))
-QuackDB.query!(conn, SQL.load(:httpfs))
+QuackDB.query!(conn, Extension.install(:httpfs))
+QuackDB.query!(conn, Extension.load(:httpfs))
 
 source =
   Source.parquet(
