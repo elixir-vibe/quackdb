@@ -31,6 +31,28 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert DataChunk.rows(chunk) == [[10], [15], [20], [25]]
   end
 
+  test "reports unsupported FSST vectors explicitly" do
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [QuackDB.ProtocolFixtures.integer_type()],
+        [
+          [
+            QuackDB.Protocol.Writer.field(90, QuackDB.Protocol.Writer.uleb128(1)),
+            QuackDB.Protocol.Writer.field(100, QuackDB.Protocol.Writer.bool(false)),
+            QuackDB.Protocol.Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[QuackDB.Protocol.Writer.field(300, &1), QuackDB.Protocol.Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :unsupported_vector_type, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message =~ "fsst vectors are not implemented yet"
+  end
+
   test "reports dictionary indexes outside the dictionary" do
     binary =
       QuackDB.ProtocolFixtures.data_chunk(
