@@ -23,6 +23,7 @@ defmodule SpatialWMS.MixProject do
       {:quackdb, path: "../.."},
       {:ecto_sql, "~> 3.13"},
       {:ash, "~> 3.0"},
+      {:geo, "~> 4.1"},
       {:bandit, "~> 1.6"},
       {:plug, "~> 1.16"},
       {:jason, "~> 1.4"}

@@ -20,7 +20,7 @@ defmodule SpatialWMS.Application do
 
     with {:ok, supervisor} <-
            Supervisor.start_link(children, strategy: :one_for_one, name: SpatialWMS.Supervisor) do
-      SpatialWMS.Places.init!()
+      SpatialWMS.Places.DuckDB.setup!()
       print_routes(port)
       {:ok, supervisor}
     end

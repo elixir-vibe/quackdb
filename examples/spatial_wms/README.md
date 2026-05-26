@@ -7,7 +7,8 @@ It intentionally combines:
 - **QuackDB** for remote DuckDB over Quack
 - **Ecto** via `SpatialWMS.Repo`
 - **QuackDB.Ecto.Spatial** for spatial query expressions
-- **Ash** for the `Place` resource shape used at the boundary
+- **Ash** for the `Place` resource and code interface at the boundary
+- **Geo** for WKB → GeoJSON conversion
 - **Plug/Bandit** for HTTP
 
 This is a small GeoJSON profile of WMS rather than a complete OGC implementation. It supports:
