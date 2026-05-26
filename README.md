@@ -402,26 +402,13 @@ Native append columns can be declared with scalar `QuackDB.Type` specs and neste
 
 ### Spatial helpers
 
-DuckDB's spatial extension can be loaded with SQL helpers, and spatial expressions can be composed as iodata:
+DuckDB's spatial extension can be loaded with SQL helpers:
 
 ```elixir
-alias QuackDB.Spatial
-
-QuackDB.query!(conn, Spatial.load())
-
-point = Spatial.point(1, 2)
-
-QuackDB.query!(conn, [
-  "SELECT ",
-  point, " AS geom, ",
-  Spatial.as_wkb(point), " AS wkb, ",
-  Spatial.as_text(point), " AS wkt"
-])
+QuackDB.query!(conn, QuackDB.Spatial.load())
 ```
 
-DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`, or pass `%Geo.*{}` structs as raw SQL/Ecto parameters.
-
-Ecto queries can import `QuackDB.Ecto.Spatial` for fragment-backed spatial expressions:
+Prefer Ecto spatial helpers for application queries:
 
 ```elixir
 import Ecto.Query
@@ -431,9 +418,11 @@ point = %Geo.Point{coordinates: {1.0, 2.0}, srid: nil}
 
 from(place in "places",
   where: intersects(place.geom, ^point),
-  select: as_text(place.geom)
+  select: %{id: place.id, wkt: as_text(place.geom), geojson: as_geojson(place.geom)}
 )
 ```
+
+DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`, or pass `%Geo.*{}` structs as SQL/Ecto parameters.
 
 ### Prepare and execute
 

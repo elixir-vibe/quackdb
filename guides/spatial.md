@@ -10,25 +10,37 @@ QuackDB.query!(conn, QuackDB.Spatial.load())
 
 For a supervised local demo server, use `QuackDB.Server` and then load the extension on the client connection.
 
-## Raw SQL helpers
+## Ecto spatial helpers
 
-`QuackDB.Spatial` builds SQL fragments for DuckDB `ST_*` functions:
+Prefer `QuackDB.Ecto.Spatial` when you are already using schemas or Ecto queries. It wraps DuckDB spatial functions in Ecto fragments while keeping the query in normal Ecto DSL:
 
 ```elixir
-alias QuackDB.Spatial
+import Ecto.Query
+import QuackDB.Ecto.Spatial
 
-point = Spatial.point(1, 2)
+query =
+  from place in "places",
+    where: intersects(place.geom, envelope(^min_x, ^min_y, ^max_x, ^max_y)),
+    order_by: place.id,
+    select: %{
+      id: place.id,
+      name: place.name,
+      wkt: as_text(place.geom),
+      geojson: as_geojson(place.geom)
+    }
 
-QuackDB.query!(conn, [
-  "SELECT ",
-  point,
-  " AS geom, ",
-  Spatial.as_text(point),
-  " AS wkt, ",
-  Spatial.as_geojson(point),
-  " AS geojson"
-])
+MyApp.AnalyticsRepo.all(query)
 ```
+
+For creating geometry expressions in Ecto queries:
+
+```elixir
+from place in "places",
+  where: distance(place.geom, point(^lon, ^lat)) < ^meters,
+  select: %{id: place.id, geometry: as_wkb(place.geom)}
+```
+
+Available helpers include `point/2`, `as_wkb/1`, `as_hex_wkb/1`, `as_text/1`, `as_geojson/1`, `geom_from_wkb/1`, `geom_from_text/1`, `envelope/4`, `intersects/2`, `contains/2`, and `distance/2`.
 
 DuckDB `GEOMETRY` values decode as WKB-compatible binaries.
 
@@ -48,23 +60,6 @@ wkb = QuackDB.Geometry.from_geo!(geo)
 ```
 
 `%Geo.*{}` structs can also be passed as SQL/Ecto parameters when `:geo` is available.
-
-## Ecto spatial helpers
-
-`QuackDB.Ecto.Spatial` wraps spatial functions in Ecto fragments:
-
-```elixir
-import Ecto.Query
-import QuackDB.Ecto.Spatial
-
-bbox = envelope(^min_x, ^min_y, ^max_x, ^max_y)
-
-from place in "places",
-  where: intersects(place.geom, bbox),
-  select: %{id: place.id, geometry: as_geojson(place.geom)}
-```
-
-Available helpers include `point/2`, `as_wkb/1`, `as_hex_wkb/1`, `as_text/1`, `as_geojson/1`, `geom_from_wkb/1`, `geom_from_text/1`, `envelope/4`, `intersects/2`, `contains/2`, and `distance/2`.
 
 ## WMS-style example
 
