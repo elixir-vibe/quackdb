@@ -64,7 +64,7 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | Constant | Supported |
 | Dictionary | Supported |
 | Sequence | Supported |
-| FSST | Unsupported pending a public FSST table-from-symbols API |
+| FSST | Unsupported; QuackDB has an optional internal `:fsst` bridge, but current DuckDB Quack serialization flattens FSST vectors rather than exposing a compressed payload |
 
 ## SQL parameter literals
 

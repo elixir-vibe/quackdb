@@ -25,7 +25,7 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | Constant | Supported | Not emitted | Decode expands constants to row values |
 | Dictionary | Supported | Not emitted | Decode validates selection indexes |
 | Sequence | Supported | Not emitted | Decode materializes generated values |
-| FSST | Unsupported | Unsupported | Raises explicit `:unsupported_vector_type`; integration is pending a public FSST table-from-symbols API |
+| FSST | Unsupported | Unsupported | Raises explicit `:unsupported_vector_type`; QuackDB has an internal optional `:fsst` bridge, but DuckDB currently flattens FSST vectors before Quack serialization and the compressed wire payload shape is not exposed by current DuckDB releases |
 | Unknown vector ids | Unsupported | Unsupported | Raises explicit `:unknown_vector_type` |
 
 ## Logical type coverage

@@ -44,6 +44,7 @@ defmodule QuackDB.MixProject do
       {:ecto_sql, "~> 3.13", optional: true},
       {:explorer, "~> 0.11", optional: true},
       {:geo, "~> 4.1", optional: true},
+      {:fsst, "~> 0.1.2", optional: true},
       {:stream_data, "~> 1.2", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},

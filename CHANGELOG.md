@@ -31,6 +31,7 @@
 - Expanded Ecto coverage for primary-key schema updates/deletes, full schema selects, `Repo.explain/3`, upsert increment/replacement expressions, unsafe conflict targets, composite-key/reference/check-constraint migration DDL, and actual `Ecto.Migrator` execution.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 - Added BIGNUM protocol fixture coverage for zero, positive, and negative large values.
+- Added an optional internal `:fsst` bridge for future Quack FSST payload decoding once DuckDB exposes compressed FSST vectors over Quack.
 
 ### Fixed
 
