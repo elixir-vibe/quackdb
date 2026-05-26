@@ -16,7 +16,7 @@ defmodule FTSExample do
   import QuackDB.Ecto.FTS
 
   alias FTSExample.Repo
-  alias QuackDB.{DML, FTS}
+  alias QuackDB.{DDL, FTS, Source}
 
   def run do
     %{conn: conn} = QuackDBDemo.start_connection()
@@ -31,20 +31,16 @@ defmodule FTSExample do
     {:ok, _repo} = Repo.start_link()
 
     table = "search_documents_#{System.unique_integer([:positive])}"
+    csv_path = write_documents_csv!()
+    source = Source.csv(csv_path, header: true)
 
-    QuackDB.query!(
-      conn,
-      QuackDB.DDL.create_table(table, id: :integer, title: :varchar, body: :varchar)
-    )
+    query =
+      from(doc in source,
+        select: %{id: doc.id, title: doc.title, body: doc.body}
+      )
 
-    QuackDB.query!(
-      conn,
-      DML.insert_into(table, [
-        [id: 1, title: "DuckDB analytics", body: "Columnar analytics with DuckDB and Elixir"],
-        [id: 2, title: "Goose field notes", body: "A short note about geese and wetlands"],
-        [id: 3, title: "Quack protocol", body: "Remote DuckDB queries over the Quack protocol"]
-      ])
-    )
+    QuackDB.query!(conn, DDL.drop_table(table, if_exists: true))
+    QuackDB.query!(conn, DDL.create_table(table, as: query))
 
     QuackDB.query!(conn, FTS.install())
     QuackDB.query!(conn, FTS.load())
@@ -83,6 +79,23 @@ defmodule FTSExample do
       |> Repo.all()
 
     IO.inspect(ecto, label: "Ecto search")
+  end
+
+  defp write_documents_csv! do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "quackdb_fts_documents_#{System.unique_integer([:positive])}.csv"
+      )
+
+    File.write!(path, """
+    id,title,body
+    1,DuckDB analytics,Columnar analytics with DuckDB and Elixir
+    2,Goose field notes,A short note about geese and wetlands
+    3,Quack protocol,Remote DuckDB queries over the Quack protocol
+    """)
+
+    path
   end
 
   defp connection_uri, do: System.get_env("QUACKDB_URI", "http://[::1]:9494")

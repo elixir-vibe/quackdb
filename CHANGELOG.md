@@ -12,7 +12,7 @@
 
 #### DuckDB helpers, sources, and setup SQL
 
-- Added schema-driven `QuackDB.DDL.create_table/2`, `CREATE TABLE AS` query support, and `QuackDB.DML.insert_into/2` setup helpers.
+- Added schema-driven `QuackDB.DDL.create_table/2`, `CREATE TABLE AS` query support with explicit parameterized-query rejection, and `QuackDB.DML.insert_into/2` setup helpers.
 - Added `QuackDB.Extension` helpers for DuckDB `INSTALL` and `LOAD` statements.
 - Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
 - Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.

@@ -487,7 +487,7 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` statements:
+For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` and `CREATE TABLE AS` statements:
 
 ```elixir
 MyApp.AnalyticsRepo.query!(
@@ -496,7 +496,19 @@ MyApp.AnalyticsRepo.query!(
     temporary: true
   )
 )
+
+source = QuackDB.Source.parquet("s3://bucket/events/*.parquet")
+
+query =
+  from event in source,
+    select: %{id: event.id, name: event.name}
+
+MyApp.AnalyticsRepo.query!(
+  QuackDB.DDL.create_table("events_from_parquet", as: query, temporary: true)
+)
 ```
+
+`DDL.create_table/2` rejects parameterized Ecto queries in `:as` because DDL helpers return SQL iodata, not `{sql, params}` tuples.
 
 Ecto support covers analytical reads and common write/setup flows. `Repo.query/3`, schema-backed reads, combinations, inserts/upserts, schema update/delete callbacks, `update_all` / `delete_all` mutations, `EXPLAIN`, transactions, and basic migrator-backed DDL work; advanced migration features and DuckDB-specific SQL should still use `Repo.query/3`.
 
