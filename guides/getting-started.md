@@ -492,7 +492,7 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-JSON columns can use Ecto access syntax or explicit DuckDB JSON helpers:
+JSON columns can use Ecto access syntax for string extraction, `type/2` for numeric/boolean casts, or explicit DuckDB JSON helpers:
 
 ```elixir
 use QuackDB.Ecto
@@ -506,6 +506,26 @@ MyApp.AnalyticsRepo.all(
       score: json_extract(event.payload, [:scores, 0]),
       has_name: json_exists(event.payload, [:user, :name])
     }
+)
+```
+
+DuckDB's `QUALIFY` clause is not part of Ecto's query AST. Use an Ecto subquery when filtering window function results:
+
+```elixir
+ranked =
+  from event in "events",
+    windows: [by_category: [partition_by: event.category, order_by: [desc: event.score]]],
+    select: %{
+      id: event.id,
+      category: event.category,
+      score: event.score,
+      rank: over(row_number(), :by_category)
+    }
+
+MyApp.AnalyticsRepo.all(
+  from event in subquery(ranked),
+    where: event.rank <= 3,
+    order_by: [event.category, event.rank]
 )
 ```
 

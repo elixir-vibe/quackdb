@@ -56,6 +56,30 @@ second = from event in Source.parquet("2025/*.parquet"), select: %{id: event.id,
 MyApp.AnalyticsRepo.all(union_all(first, ^second))
 ```
 
+## Source metadata and partition columns
+
+DuckDB scan options such as `filename`, `hive_partitioning`, and `union_by_name` are regular `Source.parquet/2` options and can be queried through Ecto:
+
+```elixir
+source =
+  Source.parquet("s3://bucket/events/**/*.parquet",
+    filename: true,
+    hive_partitioning: true,
+    union_by_name: true
+  )
+
+MyApp.AnalyticsRepo.all(
+  from event in source,
+    group_by: [event.year, event.month],
+    select: %{
+      year: event.year,
+      month: event.month,
+      files: count(event.filename),
+      events: count()
+    }
+)
+```
+
 ## Materialize sources for FTS or repeated queries
 
 DuckDB features such as FTS indexes operate on tables, so source scans are often materialized first:

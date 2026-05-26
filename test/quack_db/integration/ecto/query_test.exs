@@ -73,6 +73,34 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{target} ORDER BY id")
   end
 
+  test "Ecto type/2 casts execute against a real Quack server" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_type_casts")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: :integer,
+      score: :integer,
+      occurred_at: :timestamp
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, 7, ~N[2024-01-02 03:04:05]]])
+
+    query =
+      from(event in table,
+        where: type(event.id, :string) == ^"1" and type(^"10", :integer) > event.score,
+        select: %{
+          id_text: type(event.id, :string),
+          score_decimal: type(event.score, :decimal),
+          occurred_on: type(event.occurred_at, :date)
+        }
+      )
+
+    assert [result] = QuackDB.IntegrationRepo.all(query)
+    assert result.id_text == "1"
+    assert Decimal.equal?(result.score_decimal, Decimal.new("7"))
+    assert result.occurred_on == ~D[2024-01-02]
+  end
+
   test "Ecto Repo.insert_all/3 inserts rows with generated SQL" do
     start_repo!()
     table = unique_table("quackdb_ecto_insert_all")
