@@ -38,6 +38,7 @@ defmodule QuackDB.MixProject do
       {:req, "~> 0.5"},
       {:decimal, "~> 2.0"},
       {:muontrap, "~> 1.5"},
+      {:telemetry, "~> 1.0"},
       {:ecto_sql, "~> 3.13", optional: true},
       {:explorer, "~> 0.11", optional: true},
       {:geo, "~> 4.1", optional: true},

@@ -24,6 +24,7 @@ defmodule QuackDB.DBConnection do
   alias QuackDB.Protocol.Message.PrepareResponse
   alias QuackDB.Query
   alias QuackDB.Result
+  alias QuackDB.Telemetry
 
   defstruct [
     :uri,
@@ -257,17 +258,22 @@ defmodule QuackDB.DBConnection do
   end
 
   defp append_rows(%Query{} = query, table, rows, options, state) do
-    with {:ok, columns} <- DataChunk.columns_from_rows(rows, options),
-         {:ok, batches} <- append_batches(rows, options),
-         options = Keyword.put(options, :columns, columns),
-         :ok <- append_batches(table, batches, options, state) do
-      result = append_result(rows, state)
-      {:ok, query, result, %{state | status: successful_status(state.status)}}
-    else
-      {:error, error} ->
-        {:error, annotate_error(error, query, state),
-         %{state | status: failed_status(state.status)}}
-    end
+    Telemetry.span(:append, append_metadata(query, table, rows, options, state), fn ->
+      result =
+        with {:ok, columns} <- DataChunk.columns_from_rows(rows, options),
+             {:ok, batches} <- append_batches(rows, options),
+             options = Keyword.put(options, :columns, columns),
+             :ok <- append_batches(table, batches, options, state) do
+          result = append_result(rows, state)
+          {:ok, query, result, %{state | status: successful_status(state.status)}}
+        else
+          {:error, error} ->
+            {:error, annotate_error(error, query, state),
+             %{state | status: failed_status(state.status)}}
+        end
+
+      {result, append_stop_metadata(result)}
+    end)
   end
 
   defp append_batches([], options) do
@@ -295,16 +301,21 @@ defmodule QuackDB.DBConnection do
   end
 
   defp append_columns(%Query{} = query, table, columns, options, state) do
-    with {:ok, row_count} <- column_row_count(columns, options),
-         {:ok, batches} <- append_column_batches(columns, row_count, options),
-         :ok <- append_column_batches(table, batches, options, state) do
-      result = append_result(row_count, state)
-      {:ok, query, result, %{state | status: successful_status(state.status)}}
-    else
-      {:error, error} ->
-        {:error, annotate_error(error, query, state),
-         %{state | status: failed_status(state.status)}}
-    end
+    Telemetry.span(:append, append_metadata(query, table, columns, options, state), fn ->
+      result =
+        with {:ok, row_count} <- column_row_count(columns, options),
+             {:ok, batches} <- append_column_batches(columns, row_count, options),
+             :ok <- append_column_batches(table, batches, options, state) do
+          result = append_result(row_count, state)
+          {:ok, query, result, %{state | status: successful_status(state.status)}}
+        else
+          {:error, error} ->
+            {:error, annotate_error(error, query, state),
+             %{state | status: failed_status(state.status)}}
+        end
+
+      {result, append_stop_metadata(result)}
+    end)
   end
 
   defp column_row_count(columns, options) do
@@ -423,19 +434,24 @@ defmodule QuackDB.DBConnection do
   end
 
   defp do_execute_statement(%Query{} = query, options, state) do
-    request =
-      %PrepareRequest{sql_query: query.statement}
-      |> Codec.encode(connection_id: state.connection_id)
+    Telemetry.span(:query, query_metadata(query, state), fn ->
+      request =
+        %PrepareRequest{sql_query: query.statement}
+        |> Codec.encode(connection_id: state.connection_id)
 
-    with {:ok, response} <- state.transport.(state.uri, request, options),
-         {:ok, decoded} <- Codec.decode(response),
-         {:ok, query, result} <- normalize_query_response(decoded, query, state, options) do
-      {:ok, query, result, %{state | status: successful_status(state.status)}}
-    else
-      {:error, error} ->
-        {:error, annotate_error(error, query, state),
-         %{state | status: failed_status(state.status)}}
-    end
+      result =
+        with {:ok, response} <- state.transport.(state.uri, request, options),
+             {:ok, decoded} <- Codec.decode(response),
+             {:ok, query, result} <- normalize_query_response(decoded, query, state, options) do
+          {:ok, query, result, %{state | status: successful_status(state.status)}}
+        else
+          {:error, error} ->
+            {:error, annotate_error(error, query, state),
+             %{state | status: failed_status(state.status)}}
+        end
+
+      {result, result_stop_metadata(result)}
+    end)
   end
 
   defp normalize_query_response(
@@ -492,12 +508,17 @@ defmodule QuackDB.DBConnection do
   end
 
   defp fetch_chunks(result_uuid, state, options, chunks) do
-    request = Codec.encode(%FetchRequest{uuid: result_uuid}, connection_id: state.connection_id)
+    Telemetry.span(:fetch, fetch_metadata(result_uuid, state), fn ->
+      request = Codec.encode(%FetchRequest{uuid: result_uuid}, connection_id: state.connection_id)
 
-    with {:ok, response} <- state.transport.(state.uri, request, options),
-         {:ok, decoded} <- Codec.decode(response) do
-      normalize_fetch_response(decoded, result_uuid, state, options, chunks)
-    end
+      result =
+        with {:ok, response} <- state.transport.(state.uri, request, options),
+             {:ok, decoded} <- Codec.decode(response) do
+          normalize_fetch_response(decoded, result_uuid, state, options, chunks)
+        end
+
+      {result, fetch_stop_metadata(result)}
+    end)
   end
 
   defp normalize_fetch_response(
@@ -661,6 +682,49 @@ defmodule QuackDB.DBConnection do
 
   defp empty_result(command) do
     %Result{command: command, columns: nil, rows: nil, num_rows: 0, messages: []}
+  end
+
+  defp query_metadata(query, state) do
+    %{
+      query: query.statement,
+      connection_id: state.connection_id
+    }
+  end
+
+  defp append_metadata(query, table, values, options, state) do
+    query
+    |> query_metadata(state)
+    |> Map.merge(%{
+      table: to_string(table),
+      schema: Keyword.get(options, :schema, ""),
+      batch_size: Keyword.get(options, :batch_size),
+      rows: length(values)
+    })
+  end
+
+  defp fetch_metadata(result_uuid, state) do
+    %{
+      result_uuid: result_uuid,
+      connection_id: state.connection_id
+    }
+  end
+
+  defp result_stop_metadata({:ok, _query, %Result{} = result, _state}) do
+    %{command: result.command, rows: result.num_rows, result: :ok}
+  end
+
+  defp result_stop_metadata({:error, %Error{} = error, _state}) do
+    %{error: error, result: :error}
+  end
+
+  defp append_stop_metadata(result), do: result_stop_metadata(result)
+
+  defp fetch_stop_metadata({:ok, chunks}) do
+    %{chunks: length(chunks), result: :ok}
+  end
+
+  defp fetch_stop_metadata({:error, %Error{} = error}) do
+    %{error: error, result: :error}
   end
 
   defp command(statement) do

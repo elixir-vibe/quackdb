@@ -24,6 +24,7 @@ QuackDB currently focuses on the remote protocol and `DBConnection` client core.
 - optional Ecto SQL adapter support for raw SQL, analytical reads, `insert/2`, and `insert_all/3`
 - optional Explorer dataframe handoff helpers
 - supervised local DuckDB Quack server processes for development
+- `:telemetry` events for query, append, and fetch operations
 
 Raw SQL can use the full DuckDB surface. Ecto query generation is growing toward analytical DuckDB usage while keeping unsupported features explicit.
 
