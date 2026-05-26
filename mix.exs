@@ -60,6 +60,8 @@ defmodule QuackDB.MixProject do
 
   defp package do
     [
+      files:
+        ~w(.formatter.exs CHANGELOG.md README.md docs/ecto-analytical-coverage.md docs/protocol guides lib mix.exs),
       licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/elixir-vibe/quackdb",
@@ -82,7 +84,6 @@ defmodule QuackDB.MixProject do
         "guides/spatial.md",
         "guides/full-text-search.md",
         "guides/telemetry.md",
-        "examples/livebook_analytics.livemd",
         "docs/protocol/coverage.md",
         "docs/protocol/fixtures.md",
         "docs/ecto-analytical-coverage.md"
@@ -90,7 +91,7 @@ defmodule QuackDB.MixProject do
       groups_for_extras: [
         Guides: ~r/guides\//,
         Examples: ~r/examples\//,
-        Research: ~r/docs\//
+        Reference: ~r/docs\//
       ],
       filter_modules: &public_doc_module?/2
     ]

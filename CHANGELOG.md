@@ -4,35 +4,56 @@
 
 ### Added
 
+#### Append, Explorer, and columnar results
+
 - Added `QuackDB.insert_columns/4` / `insert_columns!/4` for column-oriented native append batches.
 - Added `QuackDB.Explorer.insert_dataframe/4` / `insert_dataframe!/4` for appending Explorer dataframes through native column append.
-- Added conversion helpers and compact inspect output for DuckDB-specific scalar structs.
-- Added `QuackDB.SQL.install/1`, `QuackDB.Spatial`, and `QuackDB.Ecto.Spatial` helpers for DuckDB spatial extension statements and `ST_*` expressions.
-- Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.
-- Added `:telemetry` events for query, append, and fetch operations, including custom prefixes, metadata options, optional params, and append batch counts.
 - Added optional `Table.Reader` implementations for `QuackDB.Result` and `QuackDB.Columns`.
+
+#### DuckDB helpers, sources, and setup SQL
+
 - Added schema-driven `QuackDB.DDL.create_table/2` and `QuackDB.DML.insert_into/2` setup helpers.
-- Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
-- Added `use QuackDB.Ecto` to import Ecto query, analytical, and spatial helpers together.
-- Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.
 - Added `QuackDB.Extension` helpers for DuckDB `INSTALL` and `LOAD` statements.
+- Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
+- Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.
 - Clarified that QuackDB does not automatically upload local source files.
-- Replaced Req-based HTTP transport with a stateful Mint transport owned by each DBConnection process, with explicit connect/receive/shutdown timeout options and closed-connection reopening.
-- Added local server performance defaults and `QuackDB.Server` `:settings` / `:global_settings` boot options.
-- Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`, with built-in checksums for the pinned DuckDB CLI downloads.
-- Added decode-side checks for quack-ts protocol conformance fixtures.
-- Added process-local Quack client query IDs for query, append, and telemetry correlation.
-- Added managed DuckDB binary guide and install-task target prefetching.
-- Added internal Arrow/columnar handoff research notes and a protocol fixture backlog for tricky scalar/spatial types.
-- Documented managed DuckDB Windows limitations and linked the managed binary guide from getting started docs.
+
+#### Ecto
+
+- Added `use QuackDB.Ecto` to import Ecto query, analytical, spatial, and full-text search helpers together.
 - Added Ecto combinations, lock SQL, and broader `update_all` / `delete_all` generation, including joined mutations and rowid-filtered ordered/limited mutations where DuckDB SQL allows it.
-- Added quack-ts decode fixtures for nanosecond temporal, interval, spatial geometry, and null-heavy nested chunks.
 - Added Ecto upsert SQL generation, schema update/delete callbacks, explain query support, and basic migration DDL generation with real-server coverage.
 - Expanded Ecto coverage for primary-key schema updates/deletes, full schema selects, `Repo.explain/3`, upsert increment/replacement expressions, unsafe conflict targets, composite-key/reference/check-constraint migration DDL, and actual `Ecto.Migrator` execution.
-- Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
-- Added BIGNUM protocol fixture coverage for zero, positive, and negative large values.
+- Added Ecto SQL generation for additional analytical query expressions, including `selected_as`, `map`, `type`, and identifier fragments.
+
+#### Protocol and DuckDB types
+
+- Added conversion helpers and compact inspect output for DuckDB-specific scalar structs.
+- Added decode-side checks for quack-ts protocol conformance fixtures.
+- Added quack-ts decode fixtures for nanosecond temporal, interval, spatial geometry, null-heavy nested chunks, and `BIGNUM` values.
+- Added malformed `BIGNUM` protocol coverage.
 - Added an optional internal `:fsst` bridge for future Quack FSST payload decoding once DuckDB exposes compressed FSST vectors over Quack.
+
+#### Server, transport, and managed DuckDB
+
+- Replaced Req-based HTTP transport with a stateful Mint transport owned by each DBConnection process, with explicit connect/receive/shutdown timeout options and closed-connection reopening.
+- Added process-local Quack client query IDs for query, append, and telemetry correlation.
+- Added local server performance defaults and `QuackDB.Server` `:settings` / `:global_settings` boot options.
+- Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`, with built-in checksums for the pinned DuckDB CLI downloads.
+- Added managed DuckDB binary guide and install-task target prefetching.
+- Documented managed DuckDB Windows limitations and linked the managed binary guide from getting started docs.
+
+#### Spatial, FTS, and observability
+
+- Added `QuackDB.SQL.install/1`, `QuackDB.Spatial`, and `QuackDB.Ecto.Spatial` helpers for DuckDB spatial extension statements and `ST_*` expressions.
+- Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.
 - Added `QuackDB.FullTextSearch` and `QuackDB.Ecto.FullTextSearch` helpers for DuckDB FTS indexes, BM25 search ranking, stemming, and Ecto search expressions.
+- Added `:telemetry` events for query, append, and fetch operations, including custom prefixes, metadata options, optional params, and append batch counts.
+
+#### Docs and examples
+
+- Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, full-text search, Livebook analytics, and a WMS-like spatial GeoJSON app.
+- Added internal Arrow/columnar handoff research notes and protocol fixture docs for tricky scalar/spatial types.
 
 ### Fixed
 

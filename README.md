@@ -255,7 +255,7 @@ result = QuackDB.query!(conn, "SELECT * FROM events")
 DataFrame.new(result)
 ```
 
-`QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so they can be consumed by Livebook and other Table-aware tooling. See the [Explorer guide](guides/explorer.md) and `examples/livebook_analytics.livemd`.
+`QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so they can be consumed by Livebook and other Table-aware tooling. See the [Explorer guide](guides/explorer.md) and the [Livebook example](https://github.com/elixir-vibe/quackdb/blob/master/examples/livebook_analytics.livemd).
 
 ## Observability
 

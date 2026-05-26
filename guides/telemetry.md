@@ -111,4 +111,4 @@ QuackDB.query!(conn, "SELECT ?", [1], telemetry_params: true)
 )
 ```
 
-See [`examples/query_observability.exs`](examples/query_observability.exs) for a runnable observer.
+See [`examples/query_observability.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/query_observability.exs) for a runnable observer.

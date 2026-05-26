@@ -64,4 +64,4 @@ Table.Reader.init(columns)
 
 This makes QuackDB friendlier to Livebook, Explorer, and Table-aware Elixir tooling.
 
-See [`examples/dataframe_analytics.exs`](examples/dataframe_analytics.exs) for a runnable dataframe roundtrip.
+See [`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) for a runnable dataframe roundtrip.

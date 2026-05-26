@@ -6,7 +6,7 @@ Examples start a local DuckDB Quack server with `QuackDB.Server` unless `QUACKDB
 
 ## Query observability
 
-[`examples/query_observability.exs`](examples/query_observability.exs) attaches telemetry handlers and prints query, append, and fetch timings.
+[`examples/query_observability.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/query_observability.exs) attaches telemetry handlers and prints query, append, and fetch timings.
 
 ```sh
 cd /tmp
@@ -15,7 +15,7 @@ elixir /path/to/quackdb/examples/query_observability.exs
 
 ## Dataframe analytics
 
-[`examples/dataframe_analytics.exs`](examples/dataframe_analytics.exs) demonstrates:
+[`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) demonstrates:
 
 1. deriving DuckDB DDL from an Ecto schema
 2. appending an `Explorer.DataFrame` through native column append
@@ -29,7 +29,7 @@ elixir /path/to/quackdb/examples/dataframe_analytics.exs
 
 ## Append benchmark
 
-[`examples/append_benchmark.exs`](examples/append_benchmark.exs) compares SQL inserts, native row/column append, Explorer dataframe append, and Ecto insert paths.
+[`examples/append_benchmark.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/append_benchmark.exs) compares SQL inserts, native row/column append, Explorer dataframe append, and Ecto insert paths.
 
 ```sh
 cd /tmp
@@ -40,7 +40,7 @@ Remove `SMOKE=1` and increase `ROWS` for benchmark runs.
 
 ## Full-text search
 
-[`examples/full_text_search.exs`](examples/full_text_search.exs) creates a DuckDB FTS index, runs direct SQL BM25 search, and runs the same search through Ecto fragments.
+[`examples/full_text_search.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/full_text_search.exs) creates a DuckDB FTS index, runs direct SQL BM25 search, and runs the same search through Ecto fragments.
 
 ```sh
 cd /tmp
@@ -49,11 +49,11 @@ elixir /path/to/quackdb/examples/full_text_search.exs
 
 ## Livebook analytics
 
-[`examples/livebook_analytics.livemd`](examples/livebook_analytics.livemd) is an interactive notebook using Explorer, Table.Reader, VegaLite, telemetry, and a local `QuackDB.Server`.
+[`examples/livebook_analytics.livemd`](https://github.com/elixir-vibe/quackdb/blob/master/examples/livebook_analytics.livemd) is an interactive notebook using Explorer, Table.Reader, VegaLite, telemetry, and a local `QuackDB.Server`.
 
 ## Spatial WMS
 
-[`examples/spatial_wms/`](examples/spatial_wms/README.md) is a minimal Ash + Ecto + Plug/Bandit application serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+[`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) is a minimal Ash + Ecto + Plug/Bandit application serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
 
 ```sh
 cd examples/spatial_wms

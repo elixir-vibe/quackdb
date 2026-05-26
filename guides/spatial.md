@@ -66,7 +66,7 @@ wkb = Geometry.from_geo!(geo)
 
 ## WMS-style example
 
-[`examples/spatial_wms/`](examples/spatial_wms/README.md) is a minimal Ash + Ecto + Plug/Bandit app that serves DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+[`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) is a minimal Ash + Ecto + Plug/Bandit app that serves DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
 
 It demonstrates:
 
