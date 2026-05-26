@@ -21,8 +21,11 @@ defmodule QuackDB.Integration.Ecto.MigratorTest do
   test "Ecto.Migrator runs migrations through the adapter" do
     start_repo!()
 
-    QuackDB.IntegrationRepo.query!("DROP TABLE IF EXISTS quackdb_migrator_events")
-    QuackDB.IntegrationRepo.query!("DROP TABLE IF EXISTS schema_migrations")
+    QuackDB.IntegrationRepo.query!(
+      QuackDB.DDL.drop_table("quackdb_migrator_events", if_exists: true)
+    )
+
+    QuackDB.IntegrationRepo.query!(QuackDB.DDL.drop_table("schema_migrations", if_exists: true))
 
     assert :ok =
              Ecto.Migrator.up(QuackDB.IntegrationRepo, 20_260_526_000_001, CreateMigratorEvents)

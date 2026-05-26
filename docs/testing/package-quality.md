@@ -1,6 +1,6 @@
 # Package quality checklist
 
-Run this checklist before preparing a QuackDB release or asking reviewers to inspect release-readiness changes.
+Run this checklist before preparing a QuackDB release or asking reviewers to inspect release-readiness changes. For the full release-candidate workflow, see `docs/testing/release-dry-run.md`.
 
 ## Local checks
 

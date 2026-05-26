@@ -14,7 +14,7 @@ defmodule QuackDB.Integration.FTSTest do
     start_repo!()
     table = "quackdb_fts_options"
 
-    QuackDB.IntegrationRepo.query!("DROP TABLE IF EXISTS #{table}")
+    QuackDB.IntegrationRepo.query!(QuackDB.DDL.drop_table(table, if_exists: true))
 
     TestHelper.create_table!(QuackDB.IntegrationRepo, table,
       id: :integer,
@@ -86,7 +86,7 @@ defmodule QuackDB.Integration.FTSTest do
     start_repo!()
     table = "quackdb_fts_documents"
 
-    QuackDB.IntegrationRepo.query!("DROP TABLE IF EXISTS #{table}")
+    QuackDB.IntegrationRepo.query!(QuackDB.DDL.drop_table(table, if_exists: true))
 
     TestHelper.create_table!(QuackDB.IntegrationRepo, table,
       id: :integer,

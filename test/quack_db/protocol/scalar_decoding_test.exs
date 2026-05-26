@@ -11,6 +11,17 @@ defmodule QuackDB.Protocol.ScalarDecodingTest do
     end
   end
 
+  test "rejects data chunks whose vectors outnumber logical types" do
+    assert {:error,
+            %QuackDB.Error{
+              code: :data_chunk_type_mismatch,
+              message: "data chunk has more vectors than logical types"
+            }} =
+             "data_chunk_extra_vector.bin"
+             |> malformed_fixture!()
+             |> DataChunk.decode_wrapper()
+  end
+
   test "rejects data chunks whose logical types outnumber vectors" do
     assert {:error,
             %QuackDB.Error{
