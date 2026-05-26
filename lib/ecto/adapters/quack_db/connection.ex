@@ -49,14 +49,14 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     def execute(connection, statement, params, options)
         when is_binary(statement) or is_list(statement) do
-      prepare_execute(connection, "", statement, params, options)
+      prepare_execute(connection, "", statement, dump_params(params), options)
     end
 
     @impl true
     def query(connection, statement, params, options) do
       ensure_list_params!(params)
 
-      case prepare_execute(connection, "", statement, params, options) do
+      case prepare_execute(connection, "", statement, dump_params(params), options) do
         {:ok, _query, result} -> {:ok, result}
         {:error, error} -> {:error, error}
       end
@@ -346,6 +346,12 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     def table_exists_query(table) do
       {"SELECT COUNT(*) FROM information_schema.tables WHERE table_name = ?", [table]}
     end
+
+    defp dump_params(params), do: Enum.map(params, &dump_param/1)
+
+    defp dump_param({:binary_id, value}), do: {:uuid, Ecto.UUID.cast!(value)}
+    defp dump_param({:binary, value}), do: {:blob, value}
+    defp dump_param(value), do: value
 
     defp ensure_list_params!(params) do
       unless is_list(params) do

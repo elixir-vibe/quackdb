@@ -662,6 +662,30 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert Decimal.equal?(amount, Decimal.new("12.34"))
   end
 
+  test "Ecto raw query parameters preserve UUID and blob values" do
+    start_repo!()
+    uuid = Ecto.UUID.generate()
+    blob = <<0, 1, 2, 255>>
+
+    assert %{rows: [[^uuid, ^blob]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT ?::UUID::VARCHAR, ?::BLOB",
+               [{:binary_id, uuid}, {:binary, blob}]
+             )
+  end
+
+  test "Ecto raw query parameters preserve interval values" do
+    start_repo!()
+
+    interval = QuackDB.Interval.new(2, 3, 4_000)
+
+    assert %{rows: [[2, 3, 4_000]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT datepart('month', ?), datepart('day', ?), datepart('microsecond', ?)",
+               [interval, interval, interval]
+             )
+  end
+
   test "Ecto Repo.all/2 supports pinned parameters against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_params")

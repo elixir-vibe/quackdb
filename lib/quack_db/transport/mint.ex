@@ -67,6 +67,15 @@ defmodule QuackDB.Transport.Mint do
   end
 
   @impl true
+  def handle_info(message, state) do
+    case stream_message(state, message) do
+      :unknown -> {:noreply, state}
+      {:ok, state, _responses} -> {:noreply, state}
+      {:error, _error, state} -> {:noreply, state}
+    end
+  end
+
+  @impl true
   def terminate(_reason, %{conn: conn, options: options}) do
     if conn do
       _ = Mint.HTTP.close(conn)
@@ -100,13 +109,12 @@ defmodule QuackDB.Transport.Mint do
   defp recv_response(state, request_ref, timeout, status, chunks) do
     receive do
       message ->
-        case Mint.HTTP.stream(state.conn, message) do
-          {:ok, conn, responses} ->
-            state = %{state | conn: conn}
+        case stream_message(state, message) do
+          {:ok, state, responses} ->
             handle_responses(responses, state, request_ref, timeout, status, chunks)
 
-          {:error, conn, reason, _responses} ->
-            {:error, mint_error(reason), close_if_closed(%{state | conn: conn})}
+          {:error, error, state} ->
+            {:error, error, state}
 
           :unknown ->
             recv_response(state, request_ref, timeout, status, chunks)
@@ -177,6 +185,21 @@ defmodule QuackDB.Transport.Mint do
 
   defp handle_responses([_other | rest], state, request_ref, timeout, status, chunks) do
     handle_responses(rest, state, request_ref, timeout, status, chunks)
+  end
+
+  defp stream_message(%{conn: nil}, _message), do: :unknown
+
+  defp stream_message(%{conn: conn} = state, message) do
+    case Mint.HTTP.stream(conn, message) do
+      {:ok, conn, responses} ->
+        {:ok, %{state | conn: conn}, responses}
+
+      {:error, conn, reason, _responses} ->
+        {:error, mint_error(reason), close_if_closed(%{state | conn: conn})}
+
+      :unknown ->
+        :unknown
+    end
   end
 
   defp request_path(%URI{path: nil, query: nil}), do: "/"

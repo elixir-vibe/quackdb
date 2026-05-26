@@ -161,6 +161,10 @@ defmodule QuackDB.SQL do
     {:ok, ["from_hex('", Base.encode16(value, case: :lower), "')"]}
   end
 
+  def literal({:uuid, value}) when is_binary(value) do
+    {:ok, ["UUID '", String.replace(value, "'", "''"), "'"]}
+  end
+
   def literal(value) when is_binary(value),
     do: {:ok, ["'", String.replace(value, "'", "''"), "'"]}
 

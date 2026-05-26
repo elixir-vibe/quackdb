@@ -1,6 +1,15 @@
 defmodule QuackDB.Transport.MintTest do
   use ExUnit.Case, async: false
 
+  test "ignores late TCP close messages" do
+    uri = URI.parse("http://localhost:9494")
+    {:ok, transport} = QuackDB.Transport.Mint.start_link(uri)
+
+    send(transport, {:tcp_closed, Port.open({:spawn, "cat"}, [])})
+
+    assert Process.alive?(transport)
+  end
+
   test "reopens a closed HTTP connection" do
     {:ok, socket} = :gen_tcp.listen(0, [:binary, packet: :raw, active: false, reuseaddr: true])
     {:ok, port} = :inet.port(socket)
