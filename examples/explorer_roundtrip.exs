@@ -12,7 +12,14 @@ token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
 
 table = "explorer_events_#{System.unique_integer([:positive])}"
 
-QuackDB.query!(conn, "CREATE TEMP TABLE #{table}(id INTEGER, category VARCHAR, score DOUBLE)")
+QuackDB.query!(
+  conn,
+  QuackDB.DDL.create_table(
+    table,
+    [id: :integer, category: :varchar, score: :double],
+    temporary: true
+  )
+)
 
 df =
   DataFrame.new(

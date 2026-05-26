@@ -43,7 +43,10 @@ token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
 
 table = "telemetry_events_#{System.unique_integer([:positive])}"
 
-QuackDB.query!(conn, "CREATE TEMP TABLE #{table}(id INTEGER, name VARCHAR)")
+QuackDB.query!(
+  conn,
+  QuackDB.DDL.create_table(table, [id: :integer, name: :varchar], temporary: true)
+)
 
 QuackDB.insert_rows!(conn, table, [
   [id: 1, name: "duck"],
