@@ -13,6 +13,7 @@
 - Added optional `Table.Reader` implementations for `QuackDB.Result` and `QuackDB.Columns`.
 - Added schema-driven `QuackDB.DDL.create_table/2` and `QuackDB.DML.insert_into/2` setup helpers.
 - Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
+- Added `use QuackDB.Ecto` to import Ecto query, analytical, and spatial helpers together.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

@@ -470,7 +470,7 @@ Read-only Ecto queries against table names are also supported, including CTEs, w
 
 ```elixir
 import Ecto.Query
-import QuackDB.Ecto.Analytics
+use QuackDB.Ecto
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
