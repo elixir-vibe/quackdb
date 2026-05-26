@@ -7,19 +7,10 @@ defmodule QuackDB.Secret do
   QuackDB's SQL literal formatting so credentials and scopes are escaped
   consistently.
 
-  | Helper | DuckDB secret type |
-  | --- | --- |
-  | `http/1` | `TYPE http` |
-  | `s3/1` | `TYPE s3` |
-  | `r2/1` | `TYPE r2` |
-  | `gcs/1` | `TYPE gcs` |
-  | `azure/1` | `TYPE azure` |
-  | `hugging_face/1` | `TYPE huggingface` |
-
       alias QuackDB.Secret
 
-      Secret.s3(provider: :credential_chain, scope: "s3://bucket/prefix/")
-      Secret.http(name: :api, bearer_token: token)
+      Secret.create(:s3, provider: :credential_chain, scope: "s3://bucket/prefix/")
+      Secret.create(:http, name: :api, bearer_token: token)
 
   Atom values are emitted as DuckDB identifiers, which is useful for options
   such as `PROVIDER credential_chain`. String values are emitted as SQL string
@@ -50,30 +41,6 @@ defmodule QuackDB.Secret do
       ");"
     ]
   end
-
-  @doc "Builds an HTTP secret statement."
-  @spec http(keyword(option_value())) :: iodata()
-  def http(options \\ []), do: create(:http, options)
-
-  @doc "Builds an S3 secret statement."
-  @spec s3(keyword(option_value())) :: iodata()
-  def s3(options \\ []), do: create(:s3, options)
-
-  @doc "Builds a Cloudflare R2 secret statement."
-  @spec r2(keyword(option_value())) :: iodata()
-  def r2(options \\ []), do: create(:r2, options)
-
-  @doc "Builds a Google Cloud Storage secret statement."
-  @spec gcs(keyword(option_value())) :: iodata()
-  def gcs(options \\ []), do: create(:gcs, options)
-
-  @doc "Builds an Azure secret statement."
-  @spec azure(keyword(option_value())) :: iodata()
-  def azure(options \\ []), do: create(:azure, options)
-
-  @doc "Builds a Hugging Face secret statement."
-  @spec hugging_face(keyword(option_value())) :: iodata()
-  def hugging_face(options \\ []), do: create(:huggingface, options)
 
   defp secret_name(nil), do: []
   defp secret_name(name), do: [identifier!(name, :secret), " "]

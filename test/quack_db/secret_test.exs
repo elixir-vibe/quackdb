@@ -2,13 +2,13 @@ defmodule QuackDB.SecretTest do
   use ExUnit.Case, async: true
 
   test "builds credential-chain S3 secrets" do
-    assert QuackDB.Secret.s3(provider: :credential_chain, scope: "s3://bucket/prefix/")
+    assert QuackDB.Secret.create(:s3, provider: :credential_chain, scope: "s3://bucket/prefix/")
            |> IO.iodata_to_binary() ==
              "CREATE OR REPLACE SECRET (TYPE s3, PROVIDER credential_chain, SCOPE 's3://bucket/prefix/');"
   end
 
   test "builds named HTTP secrets with headers" do
-    assert QuackDB.Secret.http(
+    assert QuackDB.Secret.create(:http,
              name: :http_auth,
              bearer_token: "secret",
              extra_http_headers: %{"Authorization" => "Bearer token"}
@@ -18,25 +18,25 @@ defmodule QuackDB.SecretTest do
   end
 
   test "builds cloud provider secrets" do
-    assert QuackDB.Secret.r2(account_id: "abc", key_id: "key", secret: "secret")
+    assert QuackDB.Secret.create(:r2, account_id: "abc", key_id: "key", secret: "secret")
            |> IO.iodata_to_binary() ==
              "CREATE OR REPLACE SECRET (TYPE r2, ACCOUNT_ID 'abc', KEY_ID 'key', SECRET 'secret');"
 
-    assert QuackDB.Secret.gcs(key_id: "key", secret: "secret")
+    assert QuackDB.Secret.create(:gcs, key_id: "key", secret: "secret")
            |> IO.iodata_to_binary() ==
              "CREATE OR REPLACE SECRET (TYPE gcs, KEY_ID 'key', SECRET 'secret');"
 
-    assert QuackDB.Secret.s3(key_id: "key", secret: "secret", region: "us-east-1")
+    assert QuackDB.Secret.create(:s3, key_id: "key", secret: "secret", region: "us-east-1")
            |> IO.iodata_to_binary() ==
              "CREATE OR REPLACE SECRET (TYPE s3, KEY_ID 'key', SECRET 'secret', REGION 'us-east-1');"
 
-    assert QuackDB.Secret.azure(provider: :credential_chain, account_name: "storage")
+    assert QuackDB.Secret.create(:azure, provider: :credential_chain, account_name: "storage")
            |> IO.iodata_to_binary() ==
              "CREATE OR REPLACE SECRET (TYPE azure, PROVIDER credential_chain, ACCOUNT_NAME 'storage');"
   end
 
   test "builds temporary named secrets without replace" do
-    assert QuackDB.Secret.hugging_face(
+    assert QuackDB.Secret.create(:huggingface,
              name: :hf_token,
              replace: false,
              temporary: true,
@@ -48,11 +48,11 @@ defmodule QuackDB.SecretTest do
 
   test "rejects invalid identifiers" do
     assert_raise ArgumentError, ~r/invalid DuckDB secret secret identifier/, fn ->
-      QuackDB.Secret.s3(name: "bad-name")
+      QuackDB.Secret.create(:s3, name: "bad-name")
     end
 
     assert_raise ArgumentError, ~r/invalid DuckDB secret option identifier/, fn ->
-      QuackDB.Secret.s3([{:"bad-name", "value"}])
+      QuackDB.Secret.create(:s3, [{:"bad-name", "value"}])
     end
   end
 end

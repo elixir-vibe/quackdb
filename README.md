@@ -171,7 +171,7 @@ alias QuackDB.{Extension, Secret, Source}
 # DuckDB extensions and secrets
 QuackDB.query!(conn, Extension.install(:httpfs))
 QuackDB.query!(conn, Extension.load(:httpfs))
-QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
+QuackDB.query!(conn, Secret.create(:s3, provider: :credential_chain))
 
 # Source helpers with Ecto
 source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)

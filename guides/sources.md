@@ -87,11 +87,11 @@ HTTP credentials are configured with DuckDB secrets:
 ```elixir
 alias QuackDB.Secret
 
-QuackDB.query!(conn, Secret.http(name: :api, bearer_token: token))
+QuackDB.query!(conn, Secret.create(:http, name: :api, bearer_token: token))
 
 QuackDB.query!(
   conn,
-  Secret.http(
+  Secret.create(:http, 
     name: :headers,
     extra_http_headers: %{"Authorization" => "Bearer #{token}"}
   )
@@ -107,7 +107,7 @@ alias QuackDB.{Extension, Secret, Source}
 
 QuackDB.query!(conn, Extension.install(:httpfs))
 QuackDB.query!(conn, Extension.load(:httpfs))
-QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
+QuackDB.query!(conn, Secret.create(:s3, provider: :credential_chain))
 
 source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
 ```
@@ -115,7 +115,7 @@ source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
 Explicit S3 credentials:
 
 ```elixir
-Secret.s3(
+Secret.create(:s3, 
   key_id: System.fetch_env!("AWS_ACCESS_KEY_ID"),
   secret: System.fetch_env!("AWS_SECRET_ACCESS_KEY"),
   region: "us-east-1",
@@ -126,7 +126,7 @@ Secret.s3(
 Cloudflare R2:
 
 ```elixir
-Secret.r2(
+Secret.create(:r2, 
   account_id: System.fetch_env!("CLOUDFLARE_ACCOUNT_ID"),
   key_id: System.fetch_env!("R2_ACCESS_KEY_ID"),
   secret: System.fetch_env!("R2_SECRET_ACCESS_KEY")
@@ -138,7 +138,7 @@ Source.parquet("r2://bucket/events/*.parquet")
 Google Cloud Storage via DuckDB's GCS secret type:
 
 ```elixir
-Secret.gcs(
+Secret.create(:gcs, 
   key_id: System.fetch_env!("GCS_HMAC_KEY_ID"),
   secret: System.fetch_env!("GCS_HMAC_SECRET")
 )
@@ -158,7 +158,7 @@ QuackDB.query!(conn, Extension.load(:azure))
 
 QuackDB.query!(
   conn,
-  Secret.azure(provider: :credential_chain, account_name: "storage_account")
+  Secret.create(:azure, provider: :credential_chain, account_name: "storage_account")
 )
 
 Source.parquet("az://container/events/*.parquet")
@@ -184,7 +184,7 @@ source =
 Private or gated datasets can use a Hugging Face secret:
 
 ```elixir
-QuackDB.query!(conn, Secret.hugging_face(name: :hf_token, token: token))
+QuackDB.query!(conn, Secret.create(:huggingface, name: :hf_token, token: token))
 ```
 
 ## Lakehouse formats
