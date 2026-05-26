@@ -164,6 +164,14 @@ QuackDB.Source.csv("events.csv", header: true, columns: %{id: "INTEGER", name: "
 #=> "read_csv('events.csv', header = TRUE, columns = {'id': 'INTEGER', 'name': 'VARCHAR'})"
 ```
 
+Use `QuackDB.SQL.install/1`, `QuackDB.SQL.load/1`, and `QuackDB.Secret` to configure remote filesystems:
+
+```elixir
+QuackDB.query!(conn, QuackDB.SQL.install(:httpfs))
+QuackDB.query!(conn, QuackDB.SQL.load(:httpfs))
+QuackDB.query!(conn, QuackDB.Secret.s3(provider: :credential_chain))
+```
+
 The same fragments can be used as Ecto sources for read-oriented analytical queries:
 
 ```elixir

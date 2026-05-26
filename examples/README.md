@@ -29,15 +29,6 @@ cd /tmp
 elixir /path/to/quackdb/examples/dataframe_analytics.exs
 ```
 
-## Local file analytics
-
-[`local_file_analytics.exs`](local_file_analytics.exs) stages a local CSV file over temporary HTTP with `QuackDB.Stage.with_file/3`, scans it with DuckDB's CSV reader, and returns an Explorer dataframe.
-
-```sh
-cd /tmp
-elixir /path/to/quackdb/examples/local_file_analytics.exs
-```
-
 ## Append benchmark
 
 [`append_benchmark.exs`](append_benchmark.exs) compares SQL inserts, native row append, native column append, Explorer dataframe append, Ecto SQL `insert_all`, and Ecto native append. Tiny row counts mostly measure round-trip overhead; use larger `ROWS` values for meaningful append comparisons.

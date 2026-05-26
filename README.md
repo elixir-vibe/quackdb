@@ -38,7 +38,7 @@ Elixir application
   ├─ Table.Reader support for Livebook and Table-aware tooling
   ├─ Geo bridge for DuckDB GEOMETRY WKB bytes
   ├─ Telemetry spans for query, append, and fetch operations
-  ├─ QuackDB.Stage for temporary local file staging
+  ├─ SQL helpers for extensions, sources, DDL, DML, and DuckDB secrets
   └─ QuackDB.Server for local DuckDB supervision in demos/tests
         │
         ▼
@@ -65,7 +65,6 @@ The `examples/` directory includes runnable scripts and a Livebook notebook:
 - `examples/dataframe_analytics.exs` — derive DDL from an Ecto schema, append an `Explorer.DataFrame`, query with Ecto DSL, and return a dataframe.
 - `examples/livebook_analytics.livemd` — an interactive analytics notebook with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
 - `examples/spatial_wms/` — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
-- `examples/local_file_analytics.exs` — stages a local CSV over temporary HTTP and scans it with DuckDB's CSV reader.
 - `examples/append_benchmark.exs` — compares SQL inserts, native row/column append, Explorer append, and Ecto insert paths.
 - `examples/support/quackdb_demo.exs` — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
 
@@ -205,6 +204,16 @@ QuackDB.query!(conn, ["SELECT category, count(*) FROM ", source, " GROUP BY cate
 ```
 
 Available helpers include `parquet/2`, `csv/2`, `json/2`, `xlsx/2`, `delta/2`, and `iceberg/2`. Options are emitted as DuckDB named parameters, and paths/options are formatted as SQL literals instead of interpolated directly.
+
+DuckDB extensions and secrets can be configured with SQL helpers:
+
+```elixir
+QuackDB.query!(conn, QuackDB.SQL.install(:httpfs))
+QuackDB.query!(conn, QuackDB.SQL.load(:httpfs))
+
+QuackDB.query!(conn, QuackDB.Secret.s3(provider: :credential_chain))
+QuackDB.query!(conn, QuackDB.Secret.http(name: :api, bearer_token: token))
+```
 
 The same fragments can be used as Ecto sources for read-oriented analytical queries:
 
@@ -652,4 +661,4 @@ QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
 
-See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/spatial.md`](guides/spatial.md), [`guides/staging.md`](guides/staging.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/research.md`](docs/research.md) for protocol notes.
+See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/spatial.md`](guides/spatial.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/research.md`](docs/research.md) for protocol notes.

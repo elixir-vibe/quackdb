@@ -12,7 +12,7 @@
 - Added `:telemetry` events for query, append, and fetch operations, including custom prefixes, metadata options, optional params, and append batch counts.
 - Added optional `Table.Reader` implementations for `QuackDB.Result` and `QuackDB.Columns`.
 - Added schema-driven `QuackDB.DDL.create_table/2` and `QuackDB.DML.insert_into/2` setup helpers.
-- Added `QuackDB.Stage.with_file/3` for temporary local file staging and a local CSV analytics example.
+- Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed
