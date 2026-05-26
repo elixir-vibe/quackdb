@@ -49,12 +49,10 @@ The `examples/` directory includes runnable scripts and a Livebook notebook:
 - `examples/livebook_analytics.livemd` — an interactive analytics notebook with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
 - `examples/spatial_wms/` — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
 
-Run scripts from outside the Mix project so `Mix.install/2` can load the local package:
+Run scripts from outside the Mix project so `Mix.install/2` can load the local package. Examples start a local DuckDB Quack server with `QuackDB.Server` unless `QUACKDB_URI` is set:
 
 ```sh
 cd /tmp
-QUACKDB_TEST_URI='http://[::1]:9494' \
-QUACKDB_TEST_TOKEN=super_secret \
 elixir /path/to/quackdb/examples/explorer_roundtrip.exs
 ```
 

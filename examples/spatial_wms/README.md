@@ -17,20 +17,17 @@ This is a small GeoJSON profile of WMS rather than a complete OGC implementation
 
 ## Run
 
-Start DuckDB with Quack:
-
-```sh
-duckdb -interactive -init /dev/null \
-  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
-```
-
-Then run the app:
+Run the app:
 
 ```sh
 cd examples/spatial_wms
-QUACKDB_TEST_URI='http://[::1]:9494' \
-QUACKDB_TEST_TOKEN=super_secret \
 mix run --no-halt
+```
+
+By default it starts a local DuckDB Quack server with `QuackDB.Server`. To use an existing server, pass `QUACKDB_URI` and optional `QUACKDB_TOKEN`:
+
+```sh
+QUACKDB_URI='http://[::1]:9494' QUACKDB_TOKEN=super_secret mix run --no-halt
 ```
 
 Try capabilities:

@@ -1,25 +1,79 @@
 Mix.install([
   {:quackdb, path: Path.expand("..", __DIR__)},
+  {:ecto_sql, "~> 3.13"},
   {:explorer, "~> 0.11"}
 ])
 
+defmodule ExplorerRoundtrip.Event do
+  use Ecto.Schema
+
+  @primary_key false
+  schema "explorer_events" do
+    field(:id, :integer)
+    field(:category, :string)
+    field(:score, :float)
+  end
+end
+
+defmodule ExplorerRoundtrip.Connection do
+  def start do
+    case System.get_env("QUACKDB_URI") do
+      nil ->
+        token = "super_secret"
+        {:ok, server} = QuackDB.Server.start_link(token: token)
+        QuackDB.start_link(uri: QuackDB.Server.uri(server), token: token)
+
+      uri ->
+        QuackDB.start_link(uri: uri, token: System.get_env("QUACKDB_TOKEN", ""))
+    end
+  end
+end
+
+defmodule ExplorerRoundtrip.SchemaDDL do
+  def create_table(schema, options \\ []) do
+    columns =
+      Enum.map(schema.__schema__(:fields), fn field ->
+        {field, duckdb_type(schema.__schema__(:type, field))}
+      end)
+
+    QuackDB.DDL.create_table(schema.__schema__(:source), columns, options)
+  end
+
+  defp duckdb_type(:integer), do: :integer
+  defp duckdb_type(:string), do: :varchar
+  defp duckdb_type(:float), do: :double
+end
+
+defmodule ExplorerRoundtrip.Queries do
+  import Ecto.Query
+
+  alias ExplorerRoundtrip.Event
+
+  def summary do
+    from(event in Event,
+      group_by: event.category,
+      order_by: event.category,
+      select: %{
+        category: event.category,
+        events: count(event.id),
+        avg_score: avg(event.score)
+      }
+    )
+  end
+end
+
 alias Explorer.DataFrame
+alias ExplorerRoundtrip.Connection
+alias ExplorerRoundtrip.Event
+alias ExplorerRoundtrip.Queries
+alias ExplorerRoundtrip.SchemaDDL
 
-uri = System.get_env("QUACKDB_TEST_URI", "http://localhost:9494")
-token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
+{:ok, conn} = Connection.start()
 
-{:ok, conn} = QuackDB.start_link(uri: uri, token: token)
+table = Event.__schema__(:source)
 
-table = "explorer_events_#{System.unique_integer([:positive])}"
-
-QuackDB.query!(
-  conn,
-  QuackDB.DDL.create_table(
-    table,
-    [id: :integer, category: :varchar, score: :double],
-    temporary: true
-  )
-)
+QuackDB.query!(conn, QuackDB.DDL.drop_table(table, if_exists: true))
+QuackDB.query!(conn, SchemaDDL.create_table(Event, temporary: true))
 
 df =
   DataFrame.new(
@@ -30,12 +84,6 @@ df =
 
 QuackDB.Explorer.insert_dataframe!(conn, table, df, batch_size: 2)
 
-summary =
-  QuackDB.Explorer.dataframe!(conn, """
-  SELECT category, count(*) AS events, avg(score) AS avg_score
-  FROM #{table}
-  GROUP BY category
-  ORDER BY category
-  """)
+summary = QuackDB.Explorer.dataframe!(conn, Queries.summary())
 
 IO.inspect(summary, label: "summary dataframe")

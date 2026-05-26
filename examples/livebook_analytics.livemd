@@ -13,19 +13,22 @@ Mix.install([
 ])
 ```
 
-Start DuckDB with Quack locally before running the notebook:
-
-```sh
-duckdb -interactive -init /dev/null \
-  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
-```
+By default the notebook starts a local DuckDB Quack server with `QuackDB.Server`. Set `QUACKDB_URI` and optional `QUACKDB_TOKEN` when you want to connect to an existing server instead.
 
 ```elixir
 alias Explorer.DataFrame
 alias VegaLite, as: Vl
 
-uri = System.get_env("QUACKDB_TEST_URI", "http://localhost:9494")
-token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
+{_server, uri, token} =
+  case System.get_env("QUACKDB_URI") do
+    nil ->
+      token = "super_secret"
+      {:ok, server} = QuackDB.Server.start_link(token: token)
+      {server, "http://localhost:9494", token}
+
+    uri ->
+      {nil, uri, System.get_env("QUACKDB_TOKEN", "")}
+  end
 
 {:ok, conn} = QuackDB.start_link(uri: uri, token: token)
 ```

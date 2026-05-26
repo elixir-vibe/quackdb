@@ -5,25 +5,39 @@ defmodule SpatialWms.Application do
 
   @impl true
   def start(_type, _args) do
-    Application.put_env(:spatial_wms, SpatialWms.Repo,
-      uri: System.get_env("QUACKDB_TEST_URI", "http://localhost:9494"),
-      token: System.get_env("QUACKDB_TEST_TOKEN", "super_secret"),
-      pool_size: 1,
-      log: false
-    )
+    {server_children, repo_config} = quackdb_config()
+
+    Application.put_env(:spatial_wms, SpatialWms.Repo, repo_config)
 
     port = System.get_env("PORT", "4040") |> String.to_integer()
 
-    children = [
-      SpatialWms.Repo,
-      {Bandit, plug: SpatialWmsWeb.Router, port: port}
-    ]
+    children =
+      server_children ++
+        [
+          SpatialWms.Repo,
+          {Bandit, plug: SpatialWmsWeb.Router, port: port}
+        ]
 
     with {:ok, supervisor} <-
            Supervisor.start_link(children, strategy: :one_for_one, name: SpatialWms.Supervisor) do
       SpatialWms.Places.init!()
       print_routes(port)
       {:ok, supervisor}
+    end
+  end
+
+  defp quackdb_config do
+    case System.get_env("QUACKDB_URI") do
+      nil ->
+        token = "super_secret"
+
+        {
+          [{QuackDB.Server, name: SpatialWms.DuckDB, token: token}],
+          [uri: "http://[::1]:9494", token: token, pool_size: 1, log: false]
+        }
+
+      uri ->
+        {[], [uri: uri, token: System.get_env("QUACKDB_TOKEN", ""), pool_size: 1, log: false]}
     end
   end
 

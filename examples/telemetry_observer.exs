@@ -3,6 +3,20 @@ Mix.install([
 ])
 
 defmodule QuackDBTelemetryObserver do
+  def connect do
+    case System.get_env("QUACKDB_URI") do
+      nil ->
+        token = "super_secret"
+        {:ok, server} = QuackDB.Server.start_link(token: token)
+        {:ok, conn} = QuackDB.start_link(uri: QuackDB.Server.uri(server), token: token)
+        conn
+
+      uri ->
+        {:ok, conn} = QuackDB.start_link(uri: uri, token: System.get_env("QUACKDB_TOKEN", ""))
+        conn
+    end
+  end
+
   def handle_event([:quackdb, :query, :stop], measurements, metadata, _config) do
     IO.puts(
       "query #{inspect(metadata.command)} rows=#{metadata.rows} duration=#{format_native(measurements.duration)}ms"
@@ -25,9 +39,6 @@ defmodule QuackDBTelemetryObserver do
   end
 end
 
-uri = System.get_env("QUACKDB_TEST_URI", "http://localhost:9494")
-token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
-
 :telemetry.attach_many(
   "quackdb-example-observer",
   [
@@ -39,7 +50,7 @@ token = System.get_env("QUACKDB_TEST_TOKEN", "super_secret")
   nil
 )
 
-{:ok, conn} = QuackDB.start_link(uri: uri, token: token)
+conn = QuackDBTelemetryObserver.connect()
 
 table = "telemetry_events_#{System.unique_integer([:positive])}"
 
