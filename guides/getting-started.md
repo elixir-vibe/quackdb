@@ -51,10 +51,11 @@ children =
 
 `child_specs/1` generates one shared random token and injects the matching URI/token into both child specs. Pass `:token` on either side when you want to provide it yourself.
 
-`duckdb: :managed` downloads and caches DuckDB's official CLI binary when the local server starts. For explicit setup, run:
+`duckdb: :managed` downloads and caches DuckDB's official CLI binary when the local server starts. Managed downloads are checksum-verified for QuackDB's pinned DuckDB version. For explicit setup, run:
 
 ```sh
 mix quackdb.install
+mix quackdb.install --print-path
 ```
 
 Use `QUACKDB_BINARY_PATH` or pass `duckdb: "/path/to/duckdb"` when you want QuackDB to use a system or custom executable instead.
@@ -511,6 +512,7 @@ children =
   QuackDB.Server.child_specs(
     server: [
       name: MyApp.DuckDB,
+      duckdb: :managed,
       endpoint: "quack:localhost:9494",
       settings: [threads: System.schedulers_online()],
       global_settings: [quack_fetch_batch_chunks: 4]
@@ -519,7 +521,7 @@ children =
   )
 ```
 
-`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers.
+`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers. Use `duckdb: :managed` for local development convenience, or omit it to use `duckdb` from `PATH`.
 
 The local server defaults to `settings: [threads: System.schedulers_online()]` and `global_settings: [quack_fetch_batch_chunks: 4]`. Use a smaller client `pool_size` such as `1..4` for heavy analytical scans, because DuckDB parallelizes each query internally. Use `System.schedulers_online()` for many small concurrent queries.
 

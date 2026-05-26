@@ -23,7 +23,7 @@ alias VegaLite, as: Vl
   case System.get_env("QUACKDB_URI") do
     nil ->
       token = "super_secret"
-      {:ok, server} = QuackDB.Server.start_link(token: token)
+      {:ok, server} = QuackDB.Server.start_link(duckdb: :managed, token: token)
       {server, "http://localhost:9494", token}
 
     uri ->

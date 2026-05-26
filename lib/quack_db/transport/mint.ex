@@ -14,12 +14,19 @@ defmodule QuackDB.Transport.Mint do
   @default_timeout 15_000
   @call_timeout_buffer 1_000
 
+  @type option ::
+          {:timeout, timeout()}
+          | {:connect_timeout, timeout()}
+          | {:receive_timeout, timeout()}
+          | {:shutdown_timeout, timeout()}
+          | {:mint_options, keyword()}
+
   def start_link(uri, options \\ []) do
     GenServer.start_link(__MODULE__, {uri, options})
   end
 
   def post(server, _uri, body, options \\ []) do
-    timeout = Keyword.get(options, :timeout, @default_timeout)
+    timeout = call_timeout(options)
 
     GenServer.call(
       server,
@@ -35,9 +42,9 @@ defmodule QuackDB.Transport.Mint do
 
   @impl true
   def handle_call({:post, body, options}, _from, state) do
-    timeout = Keyword.get(options, :timeout, @default_timeout)
+    timeout = receive_timeout(options)
 
-    case ensure_connection(state, timeout) do
+    case ensure_connection(state, connect_timeout(options, timeout)) do
       {:ok, state} ->
         path = request_path(state.uri)
 
@@ -60,16 +67,24 @@ defmodule QuackDB.Transport.Mint do
   end
 
   @impl true
-  def terminate(_reason, %{conn: conn}) do
+  def terminate(_reason, %{conn: conn, options: options}) do
     if conn do
-      Mint.HTTP.close(conn)
+      _ = Mint.HTTP.close(conn)
+      Process.sleep(Keyword.get(options, :shutdown_timeout, 0))
     end
 
     :ok
   end
 
   defp ensure_connection(%{conn: nil} = state, timeout), do: connect(state, timeout)
-  defp ensure_connection(state, _timeout), do: {:ok, state}
+
+  defp ensure_connection(%{conn: conn} = state, timeout) do
+    if Mint.HTTP.open?(conn) do
+      {:ok, state}
+    else
+      connect(%{state | conn: nil}, timeout)
+    end
+  end
 
   defp connect(%{uri: uri, options: options} = state, timeout) do
     scheme = scheme(uri)
@@ -91,7 +106,7 @@ defmodule QuackDB.Transport.Mint do
             handle_responses(responses, state, request_ref, timeout, status, chunks)
 
           {:error, conn, reason, _responses} ->
-            {:error, mint_error(reason), %{state | conn: conn}}
+            {:error, mint_error(reason), close_if_closed(%{state | conn: conn})}
 
           :unknown ->
             recv_response(state, request_ref, timeout, status, chunks)
@@ -174,6 +189,12 @@ defmodule QuackDB.Transport.Mint do
   defp scheme(%URI{scheme: "http"}), do: :http
   defp scheme(%URI{scheme: "https"}), do: :https
 
+  defp call_timeout(options), do: Keyword.get(options, :timeout, @default_timeout)
+
+  defp connect_timeout(options, fallback), do: Keyword.get(options, :connect_timeout, fallback)
+
+  defp receive_timeout(options), do: Keyword.get(options, :receive_timeout, call_timeout(options))
+
   defp connect_address(%URI{host: host}, options, timeout) do
     mint_options =
       options
@@ -189,6 +210,12 @@ defmodule QuackDB.Transport.Mint do
       {:ok, address} -> {address, Keyword.put_new(mint_options, :hostname, host)}
       {:error, _reason} -> {host, mint_options}
     end
+  end
+
+  defp close_if_closed(%{conn: nil} = state), do: state
+
+  defp close_if_closed(%{conn: conn} = state) do
+    if Mint.HTTP.open?(conn), do: state, else: %{state | conn: nil}
   end
 
   defp default_port(:http), do: 80

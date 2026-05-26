@@ -2,7 +2,7 @@
 
 These examples show QuackDB as an Elixir-native analytics bridge: DuckDB over Quack, DBConnection, Ecto, Explorer, Table.Reader, telemetry, and spatial workflows.
 
-Examples start a local DuckDB Quack server with `QuackDB.Server` unless `QUACKDB_URI` is set. Use `QUACKDB_TOKEN` when your existing server requires a token.
+Examples start a local DuckDB Quack server with `QuackDB.Server` and `duckdb: :managed` unless `QUACKDB_URI` is set. Use `QUACKDB_TOKEN` when your existing server requires a token.
 
 ## Query observability
 

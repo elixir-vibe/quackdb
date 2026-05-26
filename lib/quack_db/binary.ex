@@ -16,6 +16,14 @@ defmodule QuackDB.Binary do
   @default_version "1.5.3"
   @default_base_url "https://install.duckdb.org"
   @probe_sql "SELECT 2*3*7"
+  @checksums %{
+    {"1.5.3", "linux-amd64"} =>
+      "f05f3b448a9a1bc6e7ac27ff14dfe67bf5761b153c2002723365a456618ef35b",
+    {"1.5.3", "linux-arm64"} =>
+      "65b3135fb25d9a46cb4752c0638dd688819e64cb1c96bc71ffb8cca04083509f",
+    {"1.5.3", "osx-amd64"} => "e14bbce5356e5398d67155c4147cb7e85288c0308636d6e034215dcd74302ec3",
+    {"1.5.3", "osx-arm64"} => "fe3dcc3822c72147ca7b5fa56eeedd3b7d30e09cb268f056cf3355289773d8f0"
+  }
 
   @type option ::
           {:path, Path.t()}
@@ -75,7 +83,7 @@ defmodule QuackDB.Binary do
     with {:ok, target} <- target(),
          :ok <- File.mkdir_p(Path.dirname(path)),
          {:ok, compressed} <- fetch(download_url(target, options)),
-         :ok <- verify_checksum(compressed, options),
+         :ok <- verify_checksum(compressed, target, options),
          {:ok, binary} <- gunzip(compressed),
          :ok <- File.write(path, binary),
          :ok <- File.chmod(path, 0o755) do
@@ -111,10 +119,22 @@ defmodule QuackDB.Binary do
     error -> error(:archive_error, "failed to unpack DuckDB binary: #{Exception.message(error)}")
   end
 
-  defp verify_checksum(binary, options) do
-    case Keyword.get(options, :sha256) do
-      nil -> :ok
-      expected -> compare_checksum(binary, expected)
+  defp verify_checksum(binary, target, options) do
+    version = Keyword.get(options, :version, @default_version)
+
+    case Keyword.get(options, :sha256) || Map.get(@checksums, {version, target}) do
+      nil ->
+        error(
+          :missing_checksum,
+          "no checksum is known for DuckDB #{version} #{target}; pass :sha256 explicitly",
+          %{
+            version: version,
+            target: target
+          }
+        )
+
+      expected ->
+        compare_checksum(binary, expected)
     end
   end
 
@@ -192,7 +212,11 @@ defmodule QuackDB.Binary do
         {:ok, "linux-arm64"}
 
       true ->
-        error(:unsupported_target, "unsupported DuckDB target #{inspect(os)} #{arch}")
+        error(
+          :unsupported_target,
+          "unsupported DuckDB binary target for #{inspect(os)} #{arch}; supported targets are linux-amd64, linux-arm64, osx-amd64, and osx-arm64",
+          %{os: os, arch: arch}
+        )
     end
   end
 

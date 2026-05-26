@@ -19,7 +19,7 @@
 - Clarified that QuackDB does not automatically upload local source files.
 - Replaced Req-based HTTP transport with a stateful Mint transport owned by each DBConnection process.
 - Added local server performance defaults and `QuackDB.Server` `:settings` / `:global_settings` boot options.
-- Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`.
+- Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`, with built-in checksums for the pinned DuckDB CLI downloads.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed
