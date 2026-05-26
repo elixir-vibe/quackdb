@@ -29,9 +29,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.FTS`.
     - `QuackDB.Ecto.Series`.
 
-    Pass `conditionals: true` to opt into `QuackDB.Ecto.Conditionals`, which
-    replaces Kernel's `if/2` in the caller so `if ... do ... else ... end` can
-    be used as a DuckDB `CASE WHEN` expression inside Ecto queries.
+    `QuackDB.Ecto.Conditionals.case_when/1` is also imported for multi-branch
+    DuckDB `CASE WHEN` expressions using Elixir clause syntax.
 
     Imports can be disabled individually:
 
@@ -40,7 +39,6 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, analytics: false
         use QuackDB.Ecto, series: false
         use QuackDB.Ecto, query: false
-        use QuackDB.Ecto, conditionals: true
     """
 
     @doc false
@@ -50,7 +48,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       spatial? = Keyword.get(options, :spatial, true)
       full_text_search? = Keyword.get(options, :full_text_search, true)
       series? = Keyword.get(options, :series, true)
-      conditionals? = Keyword.get(options, :conditionals, false)
+      conditionals? = Keyword.get(options, :conditionals, true)
 
       imports = []
       imports = if query?, do: [quote(do: import(Ecto.Query)) | imports], else: imports
@@ -70,7 +68,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
       imports =
         if conditionals?,
-          do: [quote(do: use(QuackDB.Ecto.Conditionals)) | imports],
+          do: [quote(do: import(QuackDB.Ecto.Conditionals)) | imports],
           else: imports
 
       quote do

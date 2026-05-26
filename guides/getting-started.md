@@ -529,10 +529,10 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-Opt into `conditionals: true` when you want Elixir `if ... do ... else ... end` syntax to build DuckDB `CASE WHEN` expressions inside queries:
+Use `case_when` for multi-branch DuckDB `CASE WHEN` expressions inside queries:
 
 ```elixir
-use QuackDB.Ecto, conditionals: true
+use QuackDB.Ecto
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
@@ -540,12 +540,16 @@ MyApp.AnalyticsRepo.all(
     select: %{
       hour: date_part("hour", event.occurred_at),
       tier:
-        if event.score >= 90 do
-          "high"
-        else
-          "normal"
+        case_when do
+          event.score >= 90 -> "high"
+          event.score >= 50 -> "medium"
+          true -> "normal"
         end,
-      safe_score: nullif(event.score, 0),
+      safe_score:
+        case_when do
+          event.score == 0 -> nil
+          true -> event.score
+        end,
       score_stddev: stddev(event.score),
       score_variance: variance(event.score)
     }

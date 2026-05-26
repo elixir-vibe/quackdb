@@ -121,12 +121,6 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
-    defmacro nullif(left, right) do
-      quote do
-        fragment("nullif(?, ?)", unquote(left), unquote(right))
-      end
-    end
-
     defmacro corr(left, right) do
       quote do
         fragment("corr(?, ?)", unquote(left), unquote(right))

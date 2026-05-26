@@ -9,20 +9,24 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
   @moduletag :integration
 
   defmodule ConditionalQueries do
-    use QuackDB.Ecto, conditionals: true
+    use QuackDB.Ecto
 
     def summary(table) do
       from(event in table,
         order_by: event.id,
         select: %{
           tier:
-            if event.score >= 10 do
-              "high"
-            else
-              "normal"
+            case_when do
+              event.score >= 20 -> "very high"
+              event.score >= 10 -> "high"
+              true -> "normal"
             end,
           hour: date_part("hour", event.occurred_at),
-          safe_score: nullif(event.score, 0),
+          safe_score:
+            case_when do
+              event.score == 0 -> nil
+              true -> event.score
+            end,
           score_stddev: over(stddev(event.score), [])
         }
       )

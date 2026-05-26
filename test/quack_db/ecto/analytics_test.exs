@@ -3,13 +3,18 @@ defmodule QuackDB.Ecto.AnalyticsTest do
 
   import Ecto.Query
   import QuackDB.Ecto.Analytics
+  import QuackDB.Ecto.Conditionals
 
   test "builds date, null, and statistical analytical expressions" do
     query =
       from(event in "events",
         select: %{
           hour: date_part("hour", event.occurred_at),
-          normalized_score: nullif(event.score, 0),
+          normalized_score:
+            case_when do
+              event.score == 0 -> nil
+              true -> event.score
+            end,
           score_stddev: stddev(event.score),
           score_variance: variance(event.score),
           score_correlation: corr(event.score, event.duration_ms)
@@ -17,7 +22,7 @@ defmodule QuackDB.Ecto.AnalyticsTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT date_part('hour', q0."occurred_at") AS "hour", nullif(q0."score", 0) AS "normalized_score", stddev(q0."score") AS "score_stddev", variance(q0."score") AS "score_variance", corr(q0."score", q0."duration_ms") AS "score_correlation" FROM "events" AS q0]
+             ~S[SELECT date_part('hour', q0."occurred_at") AS "hour", CASE WHEN (q0."score" = 0) THEN NULL ELSE q0."score" END AS "normalized_score", stddev(q0."score") AS "score_stddev", variance(q0."score") AS "score_variance", corr(q0."score", q0."duration_ms") AS "score_correlation" FROM "events" AS q0]
   end
 
   test "builds aggregate analytical expressions" do
