@@ -83,6 +83,24 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.insert_all/3 supports on_conflict increment" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_insert_upsert_inc")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: "INTEGER PRIMARY KEY", score: :integer)
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1, score: 10]])
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(table, [[id: 1, score: 1]],
+               on_conflict: [inc: [score: 5]],
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, 15]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, score FROM #{table} ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 supports on_conflict nothing" do
     start_repo!()
     table = unique_table("quackdb_ecto_insert_conflict")
@@ -219,6 +237,75 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
                [[id: 1, name: "duck"], [id: 2, name: "goose"]],
                returning: [:id]
              )
+  end
+
+  test "Ecto Repo.update/2 updates a primary-key schema changeset" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
+
+    event =
+      %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10}
+      |> Ecto.put_meta(state: :loaded)
+
+    changeset = Ecto.Changeset.change(event, name: "mallard", score: 15)
+
+    assert {:ok, %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "mallard", score: 15}} =
+             QuackDB.IntegrationRepo.update(changeset)
+
+    assert %{rows: [[1, "mallard", 15]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT id, name, score FROM keyed_events ORDER BY id"
+             )
+  end
+
+  test "Ecto Repo.delete/2 deletes a primary-key schema struct" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
+
+    event =
+      %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10}
+      |> Ecto.put_meta(state: :loaded)
+
+    assert {:ok, %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10}} =
+             QuackDB.IntegrationRepo.delete(event)
+
+    assert %{rows: [[0]]} = QuackDB.IntegrationRepo.query!("SELECT count(*) FROM keyed_events")
+  end
+
+  test "Ecto Repo.explain/3 returns a DuckDB query plan" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_explain")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: :integer, name: :varchar)
+
+    plan =
+      Ecto.Adapters.SQL.explain(
+        QuackDB.IntegrationRepo,
+        :all,
+        from(event in table, where: event.id == ^1, select: event.name),
+        wrap_in_transaction: false
+      )
+
+    assert {:ok, %{rows: [["physical_plan", physical_plan]]}} = plan
+    assert physical_plan =~ "EMPTY_RESULT"
   end
 
   test "Ecto Repo.insert/2 inserts a schema struct" do

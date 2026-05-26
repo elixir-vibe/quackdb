@@ -28,6 +28,7 @@
 - Added Ecto combinations, lock SQL, and broader `update_all` / `delete_all` generation, including joined mutations and rowid-filtered ordered/limited mutations where DuckDB SQL allows it.
 - Added quack-ts decode fixtures for nanosecond temporal, interval, spatial geometry, and null-heavy nested chunks.
 - Added Ecto upsert SQL generation, schema update/delete callbacks, explain query support, and basic migration DDL generation with real-server coverage.
+- Expanded Ecto coverage for primary-key schema updates/deletes, `Repo.explain/3`, upsert increment expressions, unsafe conflict targets, and composite-key/reference migration DDL.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

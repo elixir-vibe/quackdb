@@ -107,7 +107,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         quote_table(prefix, table),
         " SET ",
         fields
-        |> Enum.map(fn {field, _value} -> [quote_identifier(field), " = ?"] end)
+        |> Enum.map(fn
+          {field, _value} -> [quote_identifier(field), " = ?"]
+          field -> [quote_identifier(field), " = ?"]
+        end)
         |> Enum.intersperse(", "),
         " WHERE ",
         filters(filters),
