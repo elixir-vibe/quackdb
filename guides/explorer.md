@@ -11,22 +11,10 @@ The Explorer integration is optional. Add Explorer when you want dataframe helpe
 
 ## Query into a dataframe
 
-```elixir
-alias QuackDB.Explorer, as: QuackExplorer
-
-{:ok, df} =
-  QuackExplorer.dataframe(conn, """
-  SELECT category, avg(score) AS avg_score
-  FROM events
-  GROUP BY category
-  ORDER BY category
-  """)
-```
-
-`QuackDB.Explorer.dataframe/4` also accepts Ecto queries:
+Prefer Ecto queries when you have schemas or source helpers:
 
 ```elixir
-import Ecto.Query
+use QuackDB.Ecto
 
 alias QuackDB.Explorer, as: QuackExplorer
 
@@ -55,6 +43,8 @@ QuackExplorer.insert_dataframe!(conn, "events", df, batch_size: 10_000)
 ```
 
 This uses `QuackDB.insert_columns/4` internally, preserving Explorer's columnar shape instead of converting the dataframe into row maps.
+
+`QuackDB.Explorer.dataframe/4` also accepts raw SQL when needed.
 
 ## Table.Reader
 

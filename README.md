@@ -164,16 +164,23 @@ QuackDB provides a few layers that can be used independently:
 A few common snippets:
 
 ```elixir
-alias QuackDB.{Secret, Source, SQL}
+import Ecto.Query
 
-# Source helpers
-source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
-QuackDB.query!(conn, ["SELECT category, count(*) FROM ", source, " GROUP BY category"])
+alias QuackDB.{Secret, Source, SQL}
 
 # DuckDB extensions and secrets
 QuackDB.query!(conn, SQL.install(:httpfs))
 QuackDB.query!(conn, SQL.load(:httpfs))
 QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
+
+# Source helpers with Ecto
+source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
+
+MyApp.AnalyticsRepo.all(
+  from event in source,
+    group_by: event.category,
+    select: %{category: event.category, events: count()}
+)
 
 # Native append
 QuackDB.insert_rows!(conn, "events", [

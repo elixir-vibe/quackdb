@@ -136,9 +136,11 @@ result.rows
 
 ## Query files and lakehouse sources
 
-DuckDB can scan files, object stores, and lakehouse table formats directly. `QuackDB.Source` builds safe table-function fragments for raw SQL:
+DuckDB can scan files, object stores, and lakehouse table formats directly. `QuackDB.Source` builds safe table-function fragments that can be used from Ecto queries or raw SQL:
 
 ```elixir
+use QuackDB.Ecto
+
 alias QuackDB.Source
 
 source =
@@ -147,7 +149,11 @@ source =
     union_by_name: true
   )
 
-QuackDB.query!(conn, ["SELECT category, count(*) FROM ", source, " GROUP BY category"])
+MyApp.AnalyticsRepo.all(
+  from event in source,
+    group_by: event.category,
+    select: %{category: event.category, events: count()}
+)
 ```
 
 Available helpers include:
@@ -176,19 +182,7 @@ QuackDB.query!(conn, SQL.load(:httpfs))
 QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
 ```
 
-The same fragments can be used as Ecto sources for read-oriented analytical queries:
-
-```elixir
-alias QuackDB.Source
-
-source = Source.csv("events.csv", header: true)
-
-MyApp.AnalyticsRepo.all(
-  from event in source,
-    where: event.id > 1,
-    select: %{id: event.id, name: event.name}
-)
-```
+The same fragments can still be passed to `QuackDB.query/4` when you need direct SQL composition.
 
 ## Stream large result sets
 
@@ -260,14 +254,7 @@ This is not Arrow IPC yet, but it exposes a column-oriented shape that can back 
 
 When `:explorer` is available, QuackDB exposes optional helpers for building `Explorer.DataFrame` values from query results:
 
-```elixir
-alias QuackDB.Explorer, as: QuackExplorer
-
-{:ok, df} =
-  QuackExplorer.dataframe(conn, "SELECT id, name FROM events ORDER BY id")
-```
-
-You can also pass Ecto queries directly, including source helpers:
+Prefer passing Ecto queries when you already have schemas or source helpers:
 
 ```elixir
 import Ecto.Query
@@ -302,9 +289,6 @@ alias QuackDB.Explorer, as: QuackExplorer
 
 {:ok, result} = QuackDB.query(conn, "SELECT 1 AS id, 'duck' AS name")
 {:ok, df} = QuackExplorer.from_result(result)
-
-{:ok, columns} = QuackDB.columnar(conn, "SELECT 1 AS id, 'duck' AS name")
-{:ok, df} = QuackExplorer.from_columns(columns)
 ```
 
 ## Work with command results
@@ -312,8 +296,10 @@ alias QuackDB.Explorer, as: QuackExplorer
 DuckDB returns affected counts as a `Count` result column for DML statements. QuackDB normalizes those into `num_rows`:
 
 ```elixir
-{:ok, _} = QuackDB.query(conn, "CREATE TEMP TABLE events(id INTEGER)")
-{:ok, result} = QuackDB.query(conn, "INSERT INTO events VALUES (1), (2)")
+alias QuackDB.{DDL, DML}
+
+{:ok, _} = QuackDB.query(conn, DDL.create_table("events", [id: :integer], temporary: true))
+{:ok, result} = QuackDB.query(conn, DML.insert_into("events", [[id: 1], [id: 2]]))
 
 result.command
 #=> :insert
@@ -343,7 +329,9 @@ result.metadata[:duckdb_rows]
 `QuackDB.insert_rows/4` uses Quack's append protocol to send a DuckDB `DataChunk` directly to a table:
 
 ```elixir
-QuackDB.query!(conn, "CREATE TEMP TABLE events(id INTEGER, name VARCHAR, active BOOLEAN)")
+alias QuackDB.DDL
+
+QuackDB.query!(conn, DDL.create_table("events", [id: :integer, name: :varchar, active: :boolean], temporary: true))
 
 {:ok, result} =
   QuackDB.insert_rows(conn, "events", [
@@ -364,30 +352,14 @@ Native append columns can be declared with scalar `QuackDB.Type` specs and neste
 
 ## Spatial helpers
 
-DuckDB's spatial extension can be loaded with SQL helpers, and spatial expressions can be composed as iodata:
+DuckDB's spatial extension can be loaded with SQL helpers. Prefer Ecto spatial helpers for application queries:
 
 ```elixir
+use QuackDB.Ecto
+
 alias QuackDB.Spatial
 
 QuackDB.query!(conn, Spatial.load())
-
-point = Spatial.point(1, 2)
-
-QuackDB.query!(conn, [
-  "SELECT ",
-  point, " AS geom, ",
-  Spatial.as_wkb(point), " AS wkb, ",
-  Spatial.as_text(point), " AS wkt"
-])
-```
-
-DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`, or pass `%Geo.*{}` structs as raw SQL/Ecto parameters.
-
-Ecto queries can import `QuackDB.Ecto.Spatial` for fragment-backed spatial expressions:
-
-```elixir
-import Ecto.Query
-import QuackDB.Ecto.Spatial
 
 point = %Geo.Point{coordinates: {1.0, 2.0}, srid: nil}
 
@@ -396,6 +368,8 @@ from(place in "places",
   select: as_text(place.geom)
 )
 ```
+
+DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`, or pass `%Geo.*{}` structs as Ecto parameters.
 
 ## Inspect output in IEx
 
@@ -413,9 +387,11 @@ The actual rows are still available through `result.rows`.
 QuackDB implements `DBConnection` transaction callbacks with SQL statements:
 
 ```elixir
+alias QuackDB.{DDL, DML}
+
 DBConnection.transaction(conn, fn tx ->
-  QuackDB.query!(tx, "CREATE TEMP TABLE tx_events(id INTEGER)")
-  QuackDB.query!(tx, "INSERT INTO tx_events VALUES (1)")
+  QuackDB.query!(tx, DDL.create_table("tx_events", [id: :integer], temporary: true))
+  QuackDB.query!(tx, DML.insert_into("tx_events", id: 1))
 end)
 ```
 
@@ -450,16 +426,7 @@ config :my_app, MyApp.AnalyticsRepo,
   token: "super_secret"
 ```
 
-Then run raw SQL through the repo:
-
-```elixir
-{:ok, result} = MyApp.AnalyticsRepo.query("SELECT 1 AS n")
-
-result.rows
-#=> [[1]]
-```
-
-Raw SQL and generated DDL can participate in Ecto transactions:
+Generated DDL and setup-oriented DML can participate in Ecto transactions:
 
 ```elixir
 {:ok, :committed} =
@@ -468,7 +435,7 @@ Raw SQL and generated DDL can participate in Ecto transactions:
       QuackDB.DDL.create_table("events", [id: :integer], temporary: true)
     )
 
-    MyApp.AnalyticsRepo.query!("INSERT INTO events VALUES (1), (2)")
+    MyApp.AnalyticsRepo.query!(QuackDB.DML.insert_into("events", [[id: 1], [id: 2]]))
     :committed
   end)
 ```
@@ -478,7 +445,7 @@ Use `Repo.rollback/1` to abort transaction work:
 ```elixir
 {:error, :rolled_back} =
   MyApp.AnalyticsRepo.transaction(fn ->
-    MyApp.AnalyticsRepo.query!("INSERT INTO events VALUES (3)")
+    MyApp.AnalyticsRepo.query!(QuackDB.DML.insert_into("events", id: 3))
     MyApp.AnalyticsRepo.rollback(:rolled_back)
   end)
 ```
@@ -486,7 +453,6 @@ Use `Repo.rollback/1` to abort transaction work:
 Read-only Ecto queries against table names are also supported, including CTEs, window functions, joins, grouping, having, distinct, aggregate `FILTER`, arithmetic expressions, `in/2`, predicates, ordering, limits, aggregates, fragments, and DuckDB analytical helpers:
 
 ```elixir
-import Ecto.Query
 use QuackDB.Ecto
 
 MyApp.AnalyticsRepo.all(
