@@ -35,6 +35,20 @@ defmodule QuackDB.Spatial do
   @spec as_text(iodata()) :: iodata()
   def as_text(geometry), do: call("ST_AsText", [geometry])
 
+  @doc "Builds `ST_AsGeoJSON(geometry)`."
+  @spec as_geojson(iodata()) :: iodata()
+  def as_geojson(geometry), do: call("ST_AsGeoJSON", [geometry])
+
+  @doc "Builds `ST_Intersects(left, right)`."
+  @spec intersects(iodata(), iodata()) :: iodata()
+  def intersects(left, right), do: call("ST_Intersects", [left, right])
+
+  @doc "Builds `ST_MakeEnvelope(min_x, min_y, max_x, max_y)`."
+  @spec envelope(number(), number(), number(), number()) :: iodata()
+  def envelope(min_x, min_y, max_x, max_y) do
+    call("ST_MakeEnvelope", [literal!(min_x), literal!(min_y), literal!(max_x), literal!(max_y)])
+  end
+
   @doc "Builds `ST_GeomFromWKB(wkb)`."
   @spec geom_from_wkb(binary() | iodata()) :: iodata()
   def geom_from_wkb(wkb) when is_binary(wkb), do: call("ST_GeomFromWKB", [literal!({:blob, wkb})])

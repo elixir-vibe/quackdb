@@ -33,6 +33,24 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro as_geojson(geometry) do
+      quote do
+        fragment("ST_AsGeoJSON(?)", unquote(geometry))
+      end
+    end
+
+    defmacro envelope(min_x, min_y, max_x, max_y) do
+      quote do
+        fragment(
+          "ST_MakeEnvelope(?, ?, ?, ?)",
+          unquote(min_x),
+          unquote(min_y),
+          unquote(max_x),
+          unquote(max_y)
+        )
+      end
+    end
+
     defmacro geom_from_wkb(wkb) do
       quote do
         fragment("ST_GeomFromWKB(?)", unquote(wkb))

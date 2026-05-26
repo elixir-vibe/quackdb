@@ -15,6 +15,10 @@ defmodule QuackDB.SpatialTest do
     assert Spatial.as_wkb(point) |> IO.iodata_to_binary() == "ST_AsWKB(ST_Point(1, 2))"
     assert Spatial.as_hex_wkb(point) |> IO.iodata_to_binary() == "ST_AsHEXWKB(ST_Point(1, 2))"
     assert Spatial.as_text(point) |> IO.iodata_to_binary() == "ST_AsText(ST_Point(1, 2))"
+    assert Spatial.as_geojson(point) |> IO.iodata_to_binary() == "ST_AsGeoJSON(ST_Point(1, 2))"
+
+    assert Spatial.intersects(point, Spatial.envelope(0, 0, 10, 10)) |> IO.iodata_to_binary() ==
+             "ST_Intersects(ST_Point(1, 2), ST_MakeEnvelope(0, 0, 10, 10))"
   end
 
   test "builds geometry constructors" do
