@@ -27,7 +27,10 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
               event.score == 0 -> nil
               true -> event.score
             end,
-          score_stddev: over(stddev(event.score), [])
+          score_stddev: over(stddev(event.score), []),
+          score_variance: over(variance(event.score), []),
+          score_entropy: over(entropy(event.score), []),
+          score_mad: over(mad(event.score), [])
         }
       )
     end
@@ -48,10 +51,24 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
       [2, 20, ~N[2024-01-02 04:05:06]]
     ])
 
-    assert [%{tier: "high", hour: 3, safe_score: 10, score_stddev: stddev}, _second] =
+    assert [
+             %{
+               tier: "high",
+               hour: 3,
+               safe_score: 10,
+               score_stddev: stddev,
+               score_variance: variance,
+               score_entropy: entropy,
+               score_mad: mad
+             },
+             _second
+           ] =
              QuackDB.IntegrationRepo.all(ConditionalQueries.summary(table))
 
     assert is_float(stddev)
+    assert is_float(variance)
+    assert is_float(entropy)
+    assert is_number(mad)
   end
 
   test "analytical aggregate helpers execute against a real Quack server" do
@@ -79,10 +96,12 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           category: event.category,
           median_score: median(event.score),
           p95_score: quantile_cont(event.score, 0.95),
-          scores: duckdb_list(event.score),
+          scores: list(event.score),
           names: string_agg(event.name, ","),
           best_name: arg_max(event.name, event.score),
-          worst_name: arg_min(event.name, event.score)
+          worst_name: arg_min(event.name, event.score),
+          histogram: histogram(event.score),
+          exact_histogram: histogram_exact(event.score, ^[10, 20, 30])
         }
       )
 
@@ -94,7 +113,9 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                scores: [10, 20, 30],
                names: "duck,goose,swan",
                best_name: "swan",
-               worst_name: "duck"
+               worst_name: "duck",
+               histogram: %{10 => 1, 20 => 1, 30 => 1},
+               exact_histogram: %{10 => 1, 20 => 1, 30 => 1}
              },
              %{
                category: "b",
@@ -103,7 +124,9 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                scores: [5],
                names: "salmon",
                best_name: "salmon",
-               worst_name: "salmon"
+               worst_name: "salmon",
+               histogram: %{5 => 1},
+               exact_histogram: %{10 => 0, 20 => 0, 30 => 0, 2_147_483_647 => 1}
              }
            ] = QuackDB.IntegrationRepo.all(query)
   end

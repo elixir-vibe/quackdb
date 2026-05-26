@@ -19,12 +19,21 @@ defmodule QuackDB.Ecto.AnalyticsTest do
             end,
           score_stddev: stddev(event.score),
           score_variance: variance(event.score),
-          score_correlation: corr(event.score, event.duration_ms)
+          score_correlation: corr(event.score, event.duration_ms),
+          score_covar_pop: covar_pop(event.score, event.duration_ms),
+          score_covar_samp: covar_samp(event.score, event.duration_ms),
+          score_slope: regr_slope(event.duration_ms, event.score),
+          score_intercept: regr_intercept(event.duration_ms, event.score),
+          score_entropy: entropy(event.score),
+          score_mad: mad(event.score),
+          score_histogram: histogram(event.score),
+          exact_histogram: histogram_exact(event.score, ^[1, 2, 3]),
+          bins: equi_width_bins(0, 100, 10)
         }
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT date_part('hour', q0."occurred_at") AS "hour", date_trunc('day', q0."occurred_at") AS "day", CASE WHEN ((q0."score" >= 50) AND (q0."score" <= 90)) THEN 'range' WHEN (q0."score" = 0) THEN NULL ELSE q0."score" END AS "normalized_score", stddev(q0."score") AS "score_stddev", variance(q0."score") AS "score_variance", corr(q0."score", q0."duration_ms") AS "score_correlation" FROM "events" AS q0]
+             ~S[SELECT date_part('hour', q0."occurred_at") AS "hour", date_trunc('day', q0."occurred_at") AS "day", CASE WHEN ((q0."score" >= 50) AND (q0."score" <= 90)) THEN 'range' WHEN (q0."score" = 0) THEN NULL ELSE q0."score" END AS "normalized_score", stddev(q0."score") AS "score_stddev", variance(q0."score") AS "score_variance", corr(q0."score", q0."duration_ms") AS "score_correlation", covar_pop(q0."score", q0."duration_ms") AS "score_covar_pop", covar_samp(q0."score", q0."duration_ms") AS "score_covar_samp", regr_slope(q0."duration_ms", q0."score") AS "score_slope", regr_intercept(q0."duration_ms", q0."score") AS "score_intercept", entropy(q0."score") AS "score_entropy", mad(q0."score") AS "score_mad", histogram(q0."score") AS "score_histogram", histogram_exact(q0."score", ?) AS "exact_histogram", equi_width_bins(0, 100, 10, TRUE) AS "bins" FROM "events" AS q0]
   end
 
   test "builds aggregate analytical expressions" do
@@ -36,7 +45,7 @@ defmodule QuackDB.Ecto.AnalyticsTest do
           median_score: median(event.score),
           p95_score: quantile_cont(event.score, 0.95),
           p50_disc: quantile_disc(event.score, 0.5),
-          scores: duckdb_list(event.score),
+          scores: list(event.score),
           names: string_agg(event.name, ","),
           best_name: arg_max(event.name, event.score),
           worst_name: arg_min(event.name, event.score)

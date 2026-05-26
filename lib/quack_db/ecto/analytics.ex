@@ -16,7 +16,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
             category: event.category,
             median_score: median(event.score),
             p95_score: quantile_cont(event.score, 0.95),
-            scores: duckdb_list(event.score)
+            scores: list(event.score)
           }
         )
 
@@ -43,7 +43,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
-    defmacro duckdb_list(expression) do
+    defmacro list(expression) do
       quote do
         fragment("list(?)", unquote(expression))
       end
@@ -152,6 +152,66 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     defmacro variance(expression) do
       quote do
         fragment("variance(?)", unquote(expression))
+      end
+    end
+
+    defmacro covar_pop(left, right) do
+      quote do
+        fragment("covar_pop(?, ?)", unquote(left), unquote(right))
+      end
+    end
+
+    defmacro covar_samp(left, right) do
+      quote do
+        fragment("covar_samp(?, ?)", unquote(left), unquote(right))
+      end
+    end
+
+    defmacro regr_slope(dependent, independent) do
+      quote do
+        fragment("regr_slope(?, ?)", unquote(dependent), unquote(independent))
+      end
+    end
+
+    defmacro regr_intercept(dependent, independent) do
+      quote do
+        fragment("regr_intercept(?, ?)", unquote(dependent), unquote(independent))
+      end
+    end
+
+    defmacro entropy(expression) do
+      quote do
+        fragment("entropy(?)", unquote(expression))
+      end
+    end
+
+    defmacro mad(expression) do
+      quote do
+        fragment("mad(?)", unquote(expression))
+      end
+    end
+
+    defmacro histogram(expression) do
+      quote do
+        fragment("histogram(?)", unquote(expression))
+      end
+    end
+
+    defmacro histogram_exact(expression, elements) do
+      quote do
+        fragment("histogram_exact(?, ?)", unquote(expression), unquote(elements))
+      end
+    end
+
+    defmacro equi_width_bins(min, max, bin_count, nice \\ true) do
+      quote do
+        fragment(
+          "equi_width_bins(?, ?, ?, ?)",
+          unquote(min),
+          unquote(max),
+          unquote(bin_count),
+          unquote(nice)
+        )
       end
     end
 

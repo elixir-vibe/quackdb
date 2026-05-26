@@ -459,7 +459,7 @@ MyApp.AnalyticsRepo.all(
       category: event.category,
       median_score: median(event.score),
       p95_score: quantile_cont(event.score, 0.95),
-      scores: duckdb_list(event.score),
+      scores: list(event.score),
       high_score_events: filter(count(event.id), event.score > 100)
     }
 )
@@ -551,7 +551,9 @@ MyApp.AnalyticsRepo.all(
           true -> event.score
         end,
       score_stddev: stddev(event.score),
-      score_variance: variance(event.score)
+      score_variance: variance(event.score),
+      score_entropy: entropy(event.score),
+      score_histogram: histogram(event.score)
     }
 )
 ```

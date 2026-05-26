@@ -152,7 +152,7 @@ defmodule MyApp.Analytics do
         category: event.category,
         p95: quantile_cont(event.duration_ms, 0.95),
         median: median(event.duration_ms),
-        values: duckdb_list(event.duration_ms),
+        values: list(event.duration_ms),
         slow_events: filter(count(event.id), event.duration_ms > 1_000),
         events: count()
       }
