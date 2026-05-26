@@ -11,6 +11,17 @@ defmodule QuackDB.Protocol.ScalarDecodingTest do
     end
   end
 
+  test "rejects data chunks whose logical types outnumber vectors" do
+    assert {:error,
+            %QuackDB.Error{
+              code: :data_chunk_type_mismatch,
+              message: "data chunk has 1 types and 0 columns"
+            }} =
+             "data_chunk_missing_vector.bin"
+             |> malformed_fixture!()
+             |> DataChunk.decode_wrapper()
+  end
+
   test "decodes common scalar columns into Elixir values" do
     binary =
       QuackDB.ProtocolFixtures.scalar_chunk_wrapper([

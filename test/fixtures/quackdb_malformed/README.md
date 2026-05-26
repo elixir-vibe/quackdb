@@ -11,3 +11,9 @@ Use them for negative decoder tests: the decoder should return or raise a struct
 Wrapped `DataChunk` with one `BIGNUM` column and one row.
 
 The contained `BIGNUM` value is malformed: its payload header declares a two-byte magnitude, but the payload contains only one magnitude byte. Decoding should fail with `:invalid_bignum` and the message `BIGNUM payload size does not match header`.
+
+### `data_chunk_missing_vector.bin`
+
+Wrapped `DataChunk` declaring one row and one `INTEGER` logical type, but zero vectors in the column list.
+
+The payload is structurally complete but violates the `DataChunk` invariant that the number of vectors must match the number of logical types. Decoding should fail with `:data_chunk_type_mismatch` and the message `data chunk has 1 types and 0 columns`.

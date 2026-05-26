@@ -21,6 +21,8 @@ Malformed fixtures are QuackDB-owned negative-test payloads, not quack-ts confor
 
 `test/fixtures/quackdb_malformed/data_chunk_bignum_bad_size.bin` contains a wrapped `DataChunk` with one `BIGNUM` value. DuckDB encodes `BIGNUM` values in a string-like payload where the first bytes describe how many magnitude bytes follow. This fixture claims a two-byte magnitude but only includes one byte, so decoding must fail with `:invalid_bignum`.
 
+`test/fixtures/quackdb_malformed/data_chunk_missing_vector.bin` contains a structurally complete wrapped `DataChunk` that declares one `INTEGER` logical type but encodes zero vectors. This violates the chunk invariant that the logical type count and vector count match, so decoding must fail with `:data_chunk_type_mismatch`.
+
 ## Backlog
 
 - Additional malformed vector bodies for unsupported compressed vector encodings.
