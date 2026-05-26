@@ -47,6 +47,16 @@ mix compile --warnings-as-errors
 rm -rf quackdb-*.tar quackdb-*/
 mix hex.build --unpack
 find quackdb-* -type f | sort
+
+if find quackdb-* \
+  \( -path '*/examples/*' \
+     -o -path '*docs/research*' \
+     -o -path '*docs/testing*' \
+     -o -path '*deps*' \
+     -o -path '*_build*' \) -print | grep .; then
+  echo "unexpected files in package" >&2
+  exit 1
+fi
 ```
 
 Expected package contents:
