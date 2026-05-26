@@ -311,14 +311,14 @@ The protocol implementation is intentionally explicit about unsupported features
 
 ## Examples
 
-The `examples/` directory includes runnable scripts and a Livebook notebook:
+The repository includes runnable scripts and a Livebook notebook:
 
-- `examples/query_observability.exs` — attach telemetry handlers and print query, append, and fetch timings.
-- `examples/dataframe_analytics.exs` — derive DDL from an Ecto schema, append an Explorer dataframe, query with Ecto DSL, and return a dataframe.
-- `examples/livebook_analytics.livemd` — interactive analytics with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
-- `examples/spatial_wms/` — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
-- `examples/append_benchmark.exs` — compares SQL inserts, native row/column append, Explorer append, and Ecto insert paths.
-- `examples/support/quackdb_demo.exs` — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
+- [`examples/query_observability.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/query_observability.exs) — attach telemetry handlers and print query, append, and fetch timings.
+- [`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) — derive DDL from an Ecto schema, append an Explorer dataframe, query with Ecto DSL, and return a dataframe.
+- [`examples/livebook_analytics.livemd`](https://github.com/elixir-vibe/quackdb/blob/master/examples/livebook_analytics.livemd) — interactive analytics with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
+- [`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
+- [`examples/append_benchmark.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/append_benchmark.exs) — compares SQL inserts, native row/column append, Explorer append, and Ecto insert paths.
+- [`examples/support/quackdb_demo.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/support/quackdb_demo.exs) — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
 
 Run scripts from outside the Mix project so `Mix.install/2` can load the local package:
 
