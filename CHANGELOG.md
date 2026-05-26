@@ -59,6 +59,7 @@
 
 - Expanded real Ecto insert coverage for `on_conflict: :nothing`, single-row insert upserts, and insert-from-query SQL paths.
 - Fixed Mint transport call timeout handling for `timeout: :infinity`, which Ecto migrator uses for migration DDL.
+- Closed Mint transport connections after receive timeouts to avoid reusing sockets with abandoned in-flight responses.
 - Updated user docs to reflect current Ecto migration, write, schema-read, and protocol coverage.
 
 ## 0.2.0 - 2026-05-25

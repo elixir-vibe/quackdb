@@ -122,7 +122,7 @@ defmodule QuackDB.Transport.Mint do
     after
       timeout ->
         {:error, Error.new(:transport_error, "HTTP response timed out", source: :transport),
-         state}
+         close_connection(state)}
     end
   end
 
@@ -236,6 +236,13 @@ defmodule QuackDB.Transport.Mint do
       {:ok, address} -> {address, Keyword.put_new(mint_options, :hostname, host)}
       {:error, _reason} -> {host, mint_options}
     end
+  end
+
+  defp close_connection(%{conn: nil} = state), do: state
+
+  defp close_connection(%{conn: conn} = state) do
+    _ = Mint.HTTP.close(conn)
+    %{state | conn: nil}
   end
 
   defp close_if_closed(%{conn: nil} = state), do: state

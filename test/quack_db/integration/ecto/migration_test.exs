@@ -33,6 +33,38 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
     execute_ddl!({:drop, %Table{name: table}, :restrict})
   end
 
+  test "generated rename and modify DDL runs against DuckDB" do
+    start_repo!()
+    table = "quackdb_ecto_migration_rename_#{System.unique_integer([:positive, :monotonic])}"
+    renamed = "#{table}_renamed"
+
+    execute_ddl!(
+      {:create, %Table{name: table},
+       [
+         {:add, :id, :integer, []},
+         {:add, :name, :string, []},
+         {:add, :score, :integer, []}
+       ]}
+    )
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1, name: "duck", score: 7]])
+
+    execute_ddl!({:rename, %Table{name: table}, %Table{name: renamed}})
+    execute_ddl!({:rename, %Table{name: renamed}, :name, :title})
+    execute_ddl!({:alter, %Table{name: renamed}, [{:modify, :score, :bigint, []}]})
+
+    assert %{rows: [[1, "duck", 7]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, title, score FROM #{renamed}")
+
+    assert %{rows: [["BIGINT"]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT data_type FROM information_schema.columns WHERE table_name = ? AND column_name = 'score'",
+               [renamed]
+             )
+
+    execute_ddl!({:drop, %Table{name: renamed}, :restrict})
+  end
+
   test "generated reference and composite primary key DDL runs against DuckDB" do
     start_repo!()
 
