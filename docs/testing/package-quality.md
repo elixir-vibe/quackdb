@@ -26,6 +26,21 @@ duckdb -interactive -init /dev/null \
   -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
 ```
 
+## Example smoke checks
+
+```sh
+cd /tmp
+MIX_INSTALL_DIR=/tmp/quackdb-example-query elixir /path/to/quackdb/examples/query_observability.exs
+MIX_INSTALL_DIR=/tmp/quackdb-example-dataframe elixir /path/to/quackdb/examples/dataframe_analytics.exs
+MIX_INSTALL_DIR=/tmp/quackdb-example-fts elixir /path/to/quackdb/examples/full_text_search.exs
+SMOKE=1 ROWS=10 BATCH_SIZE=5 MIX_INSTALL_DIR=/tmp/quackdb-example-append \
+  elixir /path/to/quackdb/examples/append_benchmark.exs
+
+cd /path/to/quackdb/examples/spatial_wms
+mix deps.get
+mix compile --warnings-as-errors
+```
+
 ## Hex package audit
 
 ```sh

@@ -4,13 +4,10 @@ defmodule QuackDB.Protocol.ScalarDecodingTest do
   alias QuackDB.Protocol.DataChunk
 
   test "rejects malformed BIGNUM payloads" do
-    binary =
-      [{:bignum, :varchar, [<<128, 0, 2, 1>>]}]
-      |> QuackDB.ProtocolFixtures.scalar_chunk_wrapper()
-      |> IO.iodata_to_binary()
-
     assert_raise QuackDB.Error, ~r/BIGNUM payload size does not match header/, fn ->
-      DataChunk.decode_wrapper(binary)
+      "test/fixtures/quackdb_malformed/data_chunk_bignum_bad_size.bin"
+      |> File.read!()
+      |> DataChunk.decode_wrapper()
     end
   end
 

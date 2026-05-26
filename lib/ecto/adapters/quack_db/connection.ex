@@ -568,8 +568,34 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp default_option({:ok, value}) when is_binary(value),
       do: [" DEFAULT '", String.replace(value, "'", "''"), "'"]
 
+    defp default_option({:ok, %Decimal{} = value}),
+      do: [" DEFAULT ", Decimal.to_string(value, :normal)]
+
+    defp default_option({:ok, %Date{} = value}),
+      do: [" DEFAULT DATE '", Date.to_iso8601(value), "'"]
+
+    defp default_option({:ok, %Time{} = value}),
+      do: [" DEFAULT TIME '", Time.to_iso8601(value), "'"]
+
+    defp default_option({:ok, %NaiveDateTime{} = value}),
+      do: [
+        " DEFAULT TIMESTAMP '",
+        value |> NaiveDateTime.to_iso8601() |> String.replace("T", " "),
+        "'"
+      ]
+
+    defp default_option({:ok, %DateTime{} = value}),
+      do: [" DEFAULT TIMESTAMPTZ '", DateTime.to_iso8601(value), "'"]
+
     defp default_option({:ok, value}) when is_number(value) or is_boolean(value),
       do: [" DEFAULT ", to_string(value)]
+
+    defp default_option({:ok, value}) do
+      unsupported_iodata!(
+        :migration_default,
+        "unsupported migration default value: #{inspect(value)}"
+      )
+    end
 
     defp primary_key_option(true), do: " PRIMARY KEY"
     defp primary_key_option(false), do: []

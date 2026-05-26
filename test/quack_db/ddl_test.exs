@@ -60,6 +60,19 @@ defmodule QuackDB.DDLTest do
              ~s|CREATE TEMP TABLE IF NOT EXISTS "docs" AS SELECT * FROM read_parquet('docs.parquet')|
   end
 
+  test "create_table builds CTAS with selected aliases" do
+    import Ecto.Query
+
+    query =
+      from(doc in "docs",
+        select: %{document_id: doc.id, heading: selected_as(doc.title, :heading)}
+      )
+
+    assert QuackDB.DDL.create_table("docs_copy", as: query)
+           |> IO.iodata_to_binary() ==
+             ~s|CREATE TABLE "docs_copy" AS SELECT q0."id" AS "document_id", q0."title" AS "heading" FROM "docs" AS q0|
+  end
+
   test "create_table rejects CTAS from parameterized Ecto queries" do
     import Ecto.Query
 

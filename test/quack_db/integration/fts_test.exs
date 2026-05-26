@@ -62,6 +62,10 @@ defmodule QuackDB.Integration.FTSTest do
     QuackDB.IntegrationRepo.query!(FTS.drop_index(table))
   end
 
+  test "FTS schema names support non-main schemas" do
+    assert FTS.schema_name("analytics.documents") == "fts_analytics_documents"
+  end
+
   test "FTS aliases and stemming run against DuckDB" do
     start_repo!()
 

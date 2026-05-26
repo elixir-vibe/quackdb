@@ -19,6 +19,30 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
              ~s|CREATE TABLE "events" ("id" BIGINT PRIMARY KEY, "name" VARCHAR NOT NULL, "score" INTEGER DEFAULT 0)|
   end
 
+  test "generates temporal and decimal defaults" do
+    sql =
+      {:create, %Table{name: "events"},
+       [
+         {:add, :amount, :decimal, [default: Decimal.new("12.34")]},
+         {:add, :event_date, :date, [default: ~D[2026-05-26]]},
+         {:add, :event_time, :time, [default: ~T[12:34:56]]},
+         {:add, :occurred_at, :naive_datetime, [default: ~N[2026-05-26 12:34:56]]}
+       ]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql ==
+             ~s|CREATE TABLE "events" ("amount" DECIMAL DEFAULT 12.34, "event_date" DATE DEFAULT DATE '2026-05-26', "event_time" TIME DEFAULT TIME '12:34:56', "occurred_at" TIMESTAMP DEFAULT TIMESTAMP '2026-05-26 12:34:56')|
+  end
+
+  test "rejects unsupported default values explicitly" do
+    assert_raise QuackDB.Error, ~r/unsupported migration default value/, fn ->
+      {:create, %Table{name: "events"}, [{:add, :payload, :string, [default: %{kind: "duck"}]}]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
+  end
+
   test "generates composite primary key and references" do
     sql =
       {:create, %Table{name: "events", primary_key: :composite},
