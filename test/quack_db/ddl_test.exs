@@ -50,6 +50,31 @@ defmodule QuackDB.DDLTest do
              ~S[CREATE TEMP TABLE IF NOT EXISTS "events" ("payload" JSON, "occurred_at" TIMESTAMP)]
   end
 
+  test "create_table builds CTAS statements" do
+    assert QuackDB.DDL.create_table("docs",
+             as: ["SELECT * FROM ", QuackDB.Source.parquet("docs.parquet")],
+             temporary: true,
+             if_not_exists: true
+           )
+           |> IO.iodata_to_binary() ==
+             ~s|CREATE TEMP TABLE IF NOT EXISTS "docs" AS SELECT * FROM read_parquet('docs.parquet')|
+  end
+
+  test "create_table builds CTAS statements from Ecto queries" do
+    import Ecto.Query
+
+    source = QuackDB.Source.parquet("docs.parquet")
+
+    query =
+      from(doc in source,
+        select: %{id: doc.id, title: doc.title, body: doc.body}
+      )
+
+    assert QuackDB.DDL.create_table("docs", as: query, temporary: true)
+           |> IO.iodata_to_binary() ==
+             ~s|CREATE TEMP TABLE "docs" AS SELECT q0."id" AS "id", q0."title" AS "title", q0."body" AS "body" FROM read_parquet('docs.parquet') AS q0|
+  end
+
   test "create_table supports richer DuckDB types and column options" do
     assert QuackDB.DDL.create_table("metrics", [
              {:id, :integer, primary_key: true},

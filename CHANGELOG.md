@@ -12,7 +12,7 @@
 
 #### DuckDB helpers, sources, and setup SQL
 
-- Added schema-driven `QuackDB.DDL.create_table/2` and `QuackDB.DML.insert_into/2` setup helpers.
+- Added schema-driven `QuackDB.DDL.create_table/2`, `CREATE TABLE AS` query support, and `QuackDB.DML.insert_into/2` setup helpers.
 - Added `QuackDB.Extension` helpers for DuckDB `INSTALL` and `LOAD` statements.
 - Added `QuackDB.Secret` helpers for DuckDB HTTP, object-storage, Azure, and Hugging Face secrets.
 - Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.
@@ -48,7 +48,7 @@
 
 - Added `QuackDB.SQL.install/1`, `QuackDB.Spatial`, and `QuackDB.Ecto.Spatial` helpers for DuckDB spatial extension statements and `ST_*` expressions.
 - Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.
-- Added `QuackDB.FullTextSearch` and `QuackDB.Ecto.FullTextSearch` helpers for DuckDB FTS indexes, BM25 search ranking, stemming, and Ecto search expressions.
+- Added `QuackDB.FTS`, `QuackDB.FTS`, and `QuackDB.Ecto.FTS` helpers for DuckDB FTS indexes, BM25 search ranking, stemming, and Ecto search expressions.
 - Added `:telemetry` events for query, append, and fetch operations, including custom prefixes, metadata options, optional params, and append batch counts.
 
 #### Docs and examples

@@ -1,8 +1,8 @@
-defmodule QuackDB.Ecto.SQLGeneration.FullTextSearchTest do
+defmodule QuackDB.Ecto.SQLGeneration.FTSTest do
   use ExUnit.Case, async: true
 
   import Ecto.Query
-  import QuackDB.Ecto.FullTextSearch
+  import QuackDB.Ecto.FTS
 
   alias Ecto.Adapters.QuackDB.Query
 

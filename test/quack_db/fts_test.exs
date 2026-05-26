@@ -1,7 +1,7 @@
-defmodule QuackDB.FullTextSearchTest do
+defmodule QuackDB.FTSTest do
   use ExUnit.Case, async: true
 
-  alias QuackDB.FullTextSearch, as: FTS
+  alias QuackDB.FTS
 
   test "builds extension statements" do
     assert FTS.install() |> IO.iodata_to_binary() == "INSTALL fts;"

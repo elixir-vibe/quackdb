@@ -16,3 +16,4 @@ Scope: this file applies to the whole `quackdb` repository.
 - Do not publish, tag, or create GitHub releases unless explicitly requested.
 - Use `mix ci` before considering work complete once the CI alias exists.
 - Before release-readiness/package changes, follow `docs/testing/package-quality.md` and keep Hex package contents intentional: no `examples/`, `docs/research/`, `docs/testing/`, `test/`, `deps/`, `_build/`, or local `tmp/` artifacts.
+- Keep helper module names intentional and consistent: SQL-family helpers use established acronyms (`QuackDB.SQL`, `QuackDB.DDL`, `QuackDB.DML`, `QuackDB.FTS`), while domain helpers use clear nouns (`Source`, `Secret`, `Extension`, `Geometry`). Do not add long-name compatibility aliases for unreleased APIs.

@@ -26,7 +26,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `Ecto.Query`.
     - `QuackDB.Ecto.Analytics`.
     - `QuackDB.Ecto.Spatial`.
-    - `QuackDB.Ecto.FullTextSearch`.
+    - `QuackDB.Ecto.FTS`.
 
     Imports can be disabled individually:
 
@@ -54,7 +54,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
       imports =
         if full_text_search?,
-          do: [quote(do: import(QuackDB.Ecto.FullTextSearch)) | imports],
+          do: [quote(do: import(QuackDB.Ecto.FTS)) | imports],
           else: imports
 
       quote do

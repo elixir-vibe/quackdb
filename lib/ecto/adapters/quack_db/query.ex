@@ -140,12 +140,12 @@ if Code.ensure_loaded?(Ecto.Query) do
       schema.__schema__(:fields)
       |> Enum.map(fn field ->
         source = schema.__schema__(:field_source, field)
-        expression = ["q", to_string(binding), ".", quote_identifier(source)]
+        field = schema_field(schema, field, binding, source)
 
-        if source == field do
-          expression
+        if field.alias? do
+          [field.expression, " AS ", quote_identifier(field.name)]
         else
-          [expression, " AS ", quote_identifier(field)]
+          field.expression
         end
       end)
       |> Enum.intersperse(", ")
@@ -153,6 +153,22 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp schema_fields(_from, _binding),
       do: unsupported!(:select, "full-source Ecto selects require a schema-backed source")
+
+    defp schema_field(schema, field, binding, source) do
+      expression = ["q", to_string(binding), ".", quote_identifier(source)]
+
+      case schema.__schema__(:type, field) do
+        :binary_id ->
+          %{
+            name: field,
+            expression: ["from_hex(replace(CAST(", expression, " AS VARCHAR), '-', ''))"],
+            alias?: true
+          }
+
+        _type ->
+          %{name: field, expression: expression, alias?: source != field}
+      end
+    end
 
     defp select_expr({:%{}, _meta, fields}) do
       fields

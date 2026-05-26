@@ -23,15 +23,30 @@ defmodule QuackDB.DDL do
   @type column ::
           {atom() | String.t(), column_type()} | {atom() | String.t(), column_type(), keyword()}
 
-  @type create_table_option :: {:temporary, boolean()} | {:if_not_exists, boolean()}
+  @type create_table_option ::
+          {:temporary, boolean()} | {:if_not_exists, boolean()} | {:as, iodata()}
 
   @doc "Builds a `CREATE TABLE` statement from an Ecto schema module."
   @spec create_table(module()) :: iodata()
   def create_table(schema) when is_atom(schema), do: create_table(schema, [])
 
-  @spec create_table(module(), [create_table_option()]) :: iodata()
-  def create_table(schema, options) when is_atom(schema) and is_list(options) do
-    create_table(schema.__schema__(:source), schema_columns(schema), options)
+  @spec create_table(module() | String.t() | atom(), [create_table_option()] | [column()]) ::
+          iodata()
+  def create_table(schema_or_name, options_or_columns) when is_list(options_or_columns) do
+    cond do
+      Keyword.has_key?(options_or_columns, :as) ->
+        create_table_as_options(schema_or_name, options_or_columns)
+
+      is_atom(schema_or_name) and function_exported?(schema_or_name, :__schema__, 1) ->
+        create_table(
+          schema_or_name.__schema__(:source),
+          schema_columns(schema_or_name),
+          options_or_columns
+        )
+
+      true ->
+        create_table(schema_or_name, options_or_columns, [])
+    end
   end
 
   @doc "Builds a `CREATE TABLE` statement."
@@ -49,11 +64,36 @@ defmodule QuackDB.DDL do
     ]
   end
 
+  @doc "Builds a `CREATE TABLE AS` statement."
+  @spec create_table_as(String.t() | atom(), iodata(), [create_table_option()]) :: iodata()
+  def create_table_as(name, query, options \\ []) when is_list(options) do
+    [
+      "CREATE ",
+      temporary(options),
+      "TABLE ",
+      if_not_exists(options),
+      QuackDB.Type.quote_identifier(name),
+      " AS ",
+      table_query(query)
+    ]
+  end
+
+  defp create_table_as_options(name, options) do
+    {query, options} = Keyword.pop!(options, :as)
+    create_table_as(name, query, options)
+  end
+
   @doc "Builds a `DROP TABLE` statement."
   @spec drop_table(String.t() | atom(), keyword()) :: iodata()
   def drop_table(name, options \\ []) when is_list(options) do
     ["DROP TABLE ", if_exists(options), QuackDB.Type.quote_identifier(name)]
   end
+
+  if Code.ensure_loaded?(Ecto.Query) do
+    defp table_query(%Ecto.Query{} = query), do: Ecto.Adapters.QuackDB.Query.all(query)
+  end
+
+  defp table_query(query), do: query
 
   defp schema_columns(schema) do
     Enum.map(schema.__schema__(:fields), fn field ->

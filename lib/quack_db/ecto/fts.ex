@@ -1,9 +1,9 @@
 if Code.ensure_loaded?(Ecto.Query.API) do
-  defmodule QuackDB.Ecto.FullTextSearch do
+  defmodule QuackDB.Ecto.FTS do
     @moduledoc """
     DuckDB full-text search expression helpers for Ecto queries.
 
-    Create/drop indexes with `QuackDB.FullTextSearch`, then use these macros in
+    Create/drop indexes with `QuackDB.FTS`, then use these macros in
     normal Ecto queries.
     """
 
@@ -51,7 +51,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
 
         k || b || !is_nil(conjunctive) ->
           raise ArgumentError,
-                "QuackDB.Ecto.FullTextSearch.match_bm25/3 requires :fields when passing BM25 options"
+                "QuackDB.Ecto.FTS.match_bm25/3 requires :fields when passing BM25 options"
 
         true ->
           quote do

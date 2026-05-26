@@ -56,6 +56,26 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
     assert sql == ~s|ALTER TABLE "events" ADD CONSTRAINT "positive_score" CHECK (score >= 0)|
   end
 
+  test "rejects unsupported table options explicitly" do
+    assert_raise QuackDB.Error, ~r/table comments/, fn ->
+      {:create, %Table{name: "events", comment: "analytics events"}, []}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
+
+    assert_raise QuackDB.Error, ~r/table engine options/, fn ->
+      {:create, %Table{name: "events", engine: "MergeTree"}, []}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
+
+    assert_raise QuackDB.Error, ~r/raw Ecto table :options/, fn ->
+      {:create, %Table{name: "events", options: "WITHOUT ROWID"}, []}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
+  end
+
   test "rejects unsupported constraint options explicitly" do
     assert_raise QuackDB.Error, ~r/exclude constraints/, fn ->
       {:create, %Constraint{table: "events", name: "no_overlap", exclude: "gist (id WITH = )"}}

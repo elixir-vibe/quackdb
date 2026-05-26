@@ -228,7 +228,7 @@ QuackDB.query!(conn, [
 DuckDB's FTS extension can index text columns and rank matches with BM25. QuackDB wraps the setup pragmas and search expressions:
 
 ```elixir
-alias QuackDB.FullTextSearch, as: FTS
+alias QuackDB.FTS
 
 QuackDB.query!(conn, FTS.install())
 QuackDB.query!(conn, FTS.load())
@@ -238,7 +238,7 @@ score = FTS.match_bm25(~s|"id"|, "duckdb analytics", schema: FTS.schema_name("ma
 QuackDB.query!(conn, ["SELECT id, title, ", score, " AS score FROM documents ORDER BY score DESC"])
 ```
 
-Use `QuackDB.Ecto.FullTextSearch` or `use QuackDB.Ecto` for Ecto query expressions. See the [full-text search guide](guides/full-text-search.md).
+Use `QuackDB.Ecto.FTS` or `use QuackDB.Ecto` for Ecto query expressions. See the [full-text search guide](guides/full-text-search.md).
 
 ## Explorer, Table.Reader, and Livebook
 

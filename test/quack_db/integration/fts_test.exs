@@ -1,11 +1,11 @@
-defmodule QuackDB.Integration.FullTextSearchTest do
+defmodule QuackDB.Integration.FTSTest do
   use ExUnit.Case, async: false
 
   import Ecto.Query
   import QuackDB.QuackServerCase
-  import QuackDB.Ecto.FullTextSearch
+  import QuackDB.Ecto.FTS
 
-  alias QuackDB.FullTextSearch, as: FTS
+  alias QuackDB.FTS
   alias QuackDB.TestHelper
 
   @moduletag :integration
@@ -60,6 +60,22 @@ defmodule QuackDB.Integration.FullTextSearchTest do
     assert conjunctive.rows == [[1], [2], [3]]
 
     QuackDB.IntegrationRepo.query!(FTS.drop_index(table))
+  end
+
+  test "FTS aliases and stemming run against DuckDB" do
+    start_repo!()
+
+    QuackDB.IntegrationRepo.query!(FTS.install())
+    QuackDB.IntegrationRepo.query!(FTS.load())
+
+    assert %{rows: [["run"]]} =
+             QuackDB.IntegrationRepo.query!(["SELECT ", FTS.stem("'running'", :porter)])
+
+    assert FTS.bm25(~s|"id"|, "duck", schema: "fts_main_documents") ==
+             FTS.match_bm25(~s|"id"|, "duck", schema: "fts_main_documents")
+
+    assert FTS.search_score(~s|"id"|, "duck", schema: "fts_main_documents") ==
+             FTS.match_bm25(~s|"id"|, "duck", schema: "fts_main_documents")
   end
 
   test "full-text search helpers build and query an FTS index" do

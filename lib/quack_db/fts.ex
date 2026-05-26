@@ -1,4 +1,4 @@
-defmodule QuackDB.FullTextSearch do
+defmodule QuackDB.FTS do
   @moduledoc """
   SQL helpers for DuckDB's full-text search extension.
 
@@ -6,7 +6,7 @@ defmodule QuackDB.FullTextSearch do
   autoloads the `fts` extension on first use in many configurations, but you can
   install/load it explicitly:
 
-      QuackDB.query!(conn, QuackDB.FullTextSearch.load())
+      QuackDB.query!(conn, QuackDB.FTS.load())
 
   Create an index with `create_index/4`, then use `match_bm25/3` in a `SELECT`,
   `WHERE`, or `ORDER BY` expression.

@@ -49,6 +49,26 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert ["POINT (1 2)"] = QuackDB.IntegrationRepo.all(query)
   end
 
+  test "DDL create_table supports CTAS from Ecto queries" do
+    start_repo!()
+    source = unique_table("quackdb_ecto_ctas_source")
+    target = unique_table("quackdb_ecto_ctas_target")
+
+    create_table!(QuackDB.IntegrationRepo, source, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, source, [[1, "duck"], [2, "goose"]])
+
+    query =
+      from(event in source,
+        where: event.id == 1,
+        select: %{id: event.id, name: event.name}
+      )
+
+    QuackDB.IntegrationRepo.query!(QuackDB.DDL.create_table(target, as: query, temporary: true))
+
+    assert %{rows: [[1, "duck"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{target} ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 inserts rows with generated SQL" do
     start_repo!()
     table = unique_table("quackdb_ecto_insert_all")
@@ -683,13 +703,11 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     query =
       from(event in QuackDB.TestSchemas.BinaryEvent,
         where: event.id == ^uuid and event.payload == ^payload,
-        select: count()
+        select: event
       )
 
-    assert [1] = QuackDB.IntegrationRepo.all(query)
-
-    assert %{rows: [[^uuid, ^payload]]} =
-             QuackDB.IntegrationRepo.query!("SELECT id::VARCHAR, payload FROM binary_events")
+    assert [%QuackDB.TestSchemas.BinaryEvent{id: ^uuid, payload: ^payload}] =
+             QuackDB.IntegrationRepo.all(query)
   end
 
   test "Ecto raw query parameters preserve UUID and blob values" do

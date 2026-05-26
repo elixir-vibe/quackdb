@@ -329,7 +329,7 @@ Native append columns can be declared with scalar `QuackDB.Type` specs and neste
 DuckDB's `fts` extension can index text columns and expose BM25 ranking.
 
 ```elixir
-alias QuackDB.FullTextSearch, as: FTS
+alias QuackDB.FTS
 
 MyApp.AnalyticsRepo.query!(FTS.install())
 MyApp.AnalyticsRepo.query!(FTS.load())

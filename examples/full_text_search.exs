@@ -5,18 +5,18 @@ Mix.install([
 
 Code.require_file("support/quackdb_demo.exs", __DIR__)
 
-defmodule FullTextSearchExample.Repo do
+defmodule FTSExample.Repo do
   use Ecto.Repo,
     otp_app: :full_text_search_example,
     adapter: Ecto.Adapters.QuackDB
 end
 
-defmodule FullTextSearchExample do
+defmodule FTSExample do
   import Ecto.Query
-  import QuackDB.Ecto.FullTextSearch
+  import QuackDB.Ecto.FTS
 
-  alias FullTextSearchExample.Repo
-  alias QuackDB.{DML, FullTextSearch}
+  alias FTSExample.Repo
+  alias QuackDB.{DML, FTS}
 
   def run do
     %{conn: conn} = QuackDBDemo.start_connection()
@@ -46,20 +46,20 @@ defmodule FullTextSearchExample do
       ])
     )
 
-    QuackDB.query!(conn, FullTextSearch.install())
-    QuackDB.query!(conn, FullTextSearch.load())
+    QuackDB.query!(conn, FTS.install())
+    QuackDB.query!(conn, FTS.load())
 
     QuackDB.query!(
       conn,
-      FullTextSearch.create_index(table, :id, [:title, :body],
+      FTS.create_index(table, :id, [:title, :body],
         stemmer: :none,
         stopwords: :none,
         overwrite: true
       )
     )
 
-    schema = FullTextSearch.schema_name("main.#{table}")
-    score = FullTextSearch.match_bm25(~s|"id"|, "DuckDB", schema: schema)
+    schema = FTS.schema_name("main.#{table}")
+    score = FTS.match_bm25(~s|"id"|, "DuckDB", schema: schema)
 
     direct =
       QuackDB.query!(conn, [
@@ -89,4 +89,4 @@ defmodule FullTextSearchExample do
   defp connection_token, do: System.get_env("QUACKDB_TOKEN", "super_secret")
 end
 
-FullTextSearchExample.run()
+FTSExample.run()

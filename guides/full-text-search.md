@@ -5,7 +5,7 @@ DuckDB's `fts` extension adds full-text indexes and BM25 ranking. QuackDB provid
 ## Load the extension
 
 ```elixir
-alias QuackDB.FullTextSearch, as: FTS
+alias QuackDB.FTS
 
 QuackDB.query!(conn, FTS.install())
 QuackDB.query!(conn, FTS.load())
@@ -45,16 +45,17 @@ DuckDB creates a schema for each index. For `main.documents`, the generated sche
 DuckDB's FTS indexes are created over tables, so source files are usually materialized first. This keeps the source workflow explicit and works with local files visible to the DuckDB server, HTTP(S), object stores, and lakehouse table functions.
 
 ```elixir
-alias QuackDB.{FullTextSearch, Source}
-alias QuackDB.FullTextSearch, as: FTS
+use QuackDB.Ecto
+
+alias QuackDB.{DDL, FTS, Source}
 
 source = Source.parquet("s3://analytics/documents/*.parquet")
 
-QuackDB.query!(conn, [
-  "CREATE TEMP TABLE docs AS ",
-  "SELECT id, title, body FROM ",
-  source
-])
+query =
+  from doc in source,
+    select: %{id: doc.id, title: doc.title, body: doc.body}
+
+QuackDB.query!(conn, DDL.create_table("docs", as: query, temporary: true))
 
 QuackDB.query!(conn, FTS.create_index("docs", :id, [:title, :body], overwrite: true))
 ```
@@ -88,11 +89,11 @@ FTS.match_bm25(~s|"id"|, "duckdb analytics",
 
 ## Search from Ecto
 
-Import `QuackDB.Ecto.FullTextSearch` or `use QuackDB.Ecto`:
+Import `QuackDB.Ecto.FTS` or `use QuackDB.Ecto`:
 
 ```elixir
 import Ecto.Query
-import QuackDB.Ecto.FullTextSearch
+import QuackDB.Ecto.FTS
 
 query =
   from doc in "documents",
@@ -110,7 +111,7 @@ MyApp.AnalyticsRepo.all(query)
 For static query modules, pass the generated FTS schema as a literal string. For runtime table names, pin the schema name and the helper will emit an Ecto `identifier(^schema)` fragment:
 
 ```elixir
-schema = QuackDB.FullTextSearch.schema_name("main.documents")
+schema = QuackDB.FTS.schema_name("main.documents")
 
 from doc in "documents",
   where: match_bm25(^schema, doc.id, ^"duckdb analytics") > 0,

@@ -140,6 +140,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     @impl true
     def execute_ddl({command, %Table{} = table, columns})
         when command in [:create, :create_if_not_exists] do
+      assert_table_options!(table)
+
       [
         [
           "CREATE TABLE ",
@@ -270,6 +272,25 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     def execute_ddl(statement) when is_binary(statement), do: [statement]
+
+    defp assert_table_options!(%Table{} = table) do
+      cond do
+        table.comment ->
+          unsupported_iodata!(:migration_table, "DuckDB does not support table comments")
+
+        table.engine ->
+          unsupported_iodata!(
+            :migration_table,
+            "DuckDB does not support Ecto table engine options"
+          )
+
+        table.options ->
+          unsupported_iodata!(:migration_table, "DuckDB does not support raw Ecto table :options")
+
+        true ->
+          :ok
+      end
+    end
 
     defp assert_constraint_options!(%Constraint{} = constraint) do
       cond do
@@ -605,7 +626,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp ecto_type_to_duckdb(type), do: type
 
     defp table_options(nil), do: []
-    defp table_options(options), do: [" ", to_string(options)]
 
     defp index_expr(expression) when is_binary(expression), do: expression
     defp index_expr(expression), do: quote_identifier(expression)
