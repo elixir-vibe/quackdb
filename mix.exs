@@ -75,6 +75,7 @@ defmodule QuackDB.MixProject do
         "guides/getting-started.md",
         "guides/type-support.md",
         "guides/examples.md",
+        "guides/managed-duckdb.md",
         "guides/explorer.md",
         "guides/sources.md",
         "guides/spatial.md",

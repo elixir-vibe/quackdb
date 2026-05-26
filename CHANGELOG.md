@@ -22,6 +22,8 @@
 - Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`, with built-in checksums for the pinned DuckDB CLI downloads.
 - Added decode-side checks for quack-ts protocol conformance fixtures.
 - Added process-local Quack client query IDs for query, append, and telemetry correlation.
+- Added managed DuckDB binary guide and install-task target prefetching.
+- Added internal Arrow/columnar handoff research notes.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

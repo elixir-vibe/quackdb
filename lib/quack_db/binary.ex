@@ -28,6 +28,7 @@ defmodule QuackDB.Binary do
   @type option ::
           {:path, Path.t()}
           | {:version, String.t()}
+          | {:target, String.t()}
           | {:base_url, String.t()}
           | {:cache_dir, Path.t()}
           | {:sha256, String.t()}
@@ -64,10 +65,10 @@ defmodule QuackDB.Binary do
   @doc "Downloads DuckDB CLI for the current OS/architecture unless already cached."
   @spec install([option()]) :: {:ok, Path.t()} | {:error, Error.t()}
   def install(options \\ []) do
-    with {:ok, target} <- target(),
+    with {:ok, target} <- target(options),
          {:ok, path} <- cached_path(target, options),
          :ok <- maybe_download(path, target, options),
-         :ok <- validate_binary(path) |> result_to_ok() do
+         :ok <- maybe_validate_binary(path, target) do
       {:ok, path}
     end
   end
@@ -90,7 +91,7 @@ defmodule QuackDB.Binary do
   end
 
   defp download(path, options) do
-    with {:ok, target} <- target(),
+    with {:ok, target} <- target(options),
          :ok <- File.mkdir_p(Path.dirname(path)),
          {:ok, compressed} <- fetch(download_url(target, options)),
          :ok <- verify_checksum(compressed, target, options),
@@ -204,7 +205,24 @@ defmodule QuackDB.Binary do
       :filename.basedir(:user_cache, "quackdb/duckdb")
   end
 
-  defp target do
+  defp maybe_validate_binary(path, target) do
+    with {:ok, current_target} <- current_target() do
+      if target == current_target do
+        path |> validate_binary() |> result_to_ok()
+      else
+        :ok
+      end
+    end
+  end
+
+  defp target(options) do
+    case Keyword.get(options, :target) do
+      nil -> current_target()
+      target when is_binary(target) -> validate_target(target)
+    end
+  end
+
+  defp current_target do
     os = :os.type()
     arch = :erlang.system_info(:system_architecture) |> List.to_string()
 
@@ -227,6 +245,16 @@ defmodule QuackDB.Binary do
           "unsupported DuckDB binary target for #{inspect(os)} #{arch}; supported targets are linux-amd64, linux-arm64, osx-amd64, and osx-arm64",
           %{os: os, arch: arch}
         )
+    end
+  end
+
+  defp validate_target(target) do
+    targets = @checksums |> Map.keys() |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+
+    if target in targets do
+      {:ok, target}
+    else
+      error(:unsupported_target, "unsupported DuckDB binary target #{inspect(target)}")
     end
   end
 

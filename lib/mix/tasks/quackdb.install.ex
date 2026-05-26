@@ -4,7 +4,7 @@ defmodule Mix.Tasks.Quackdb.Install do
 
       mix quackdb.install
       mix quackdb.install --version 1.5.3 --force
-      mix quackdb.install --print-path
+      mix quackdb.install --target linux-amd64 --print-path
 
   The binary is cached under the user's cache directory by default. Set
   `QUACKDB_BINARY_CACHE_DIR` or pass `--cache-dir` to choose another location.
@@ -20,6 +20,7 @@ defmodule Mix.Tasks.Quackdb.Install do
       OptionParser.parse(args,
         strict: [
           version: :string,
+          target: :string,
           base_url: :string,
           cache_dir: :string,
           sha256: :string,

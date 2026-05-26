@@ -23,31 +23,30 @@ defmodule QuackDB.Integration.ServerTest do
 
   @tag :managed_duckdb
   test "starts a managed DuckDB binary server" do
-    token = "quackdb_managed_server_test_#{System.unique_integer([:positive])}"
-    port = 20_000 + System.unique_integer([:positive, :monotonic])
-    endpoint = "quack:localhost:#{port}"
-    uri = "http://[::1]:#{port}"
+    duckdb = System.find_executable("duckdb")
 
-    cache_dir =
-      Path.join(System.tmp_dir!(), "quackdb-managed-test-#{System.unique_integer([:positive])}")
+    if duckdb do
+      token = "quackdb_managed_server_test_#{System.unique_integer([:positive])}"
+      port = 20_000 + System.unique_integer([:positive, :monotonic])
+      endpoint = "quack:localhost:#{port}"
+      uri = "http://[::1]:#{port}"
 
-    server =
-      start_supervised!(
-        {QuackDB.Server,
-         duckdb: :managed,
-         duckdb_options: [cache_dir: cache_dir],
-         token: token,
-         endpoint: endpoint,
-         uri: uri,
-         wait: true,
-         wait_timeout: 20_000}
-      )
+      server =
+        start_supervised!(
+          {QuackDB.Server,
+           duckdb: :managed,
+           duckdb_options: [path: duckdb],
+           token: token,
+           endpoint: endpoint,
+           uri: uri,
+           wait: true,
+           wait_timeout: 20_000}
+        )
 
-    connection = start_supervised!({QuackDB, uri: QuackDB.Server.uri(server), token: token})
+      connection = start_supervised!({QuackDB, uri: QuackDB.Server.uri(server), token: token})
 
-    assert {:ok, %QuackDB.Result{rows: [[42]]}} = QuackDB.query(connection, "SELECT 42 AS n")
-    assert File.exists?(QuackDB.Server.info(server).duckdb)
-
-    File.rm_rf!(cache_dir)
+      assert {:ok, %QuackDB.Result{rows: [[42]]}} = QuackDB.query(connection, "SELECT 42 AS n")
+      assert QuackDB.Server.info(server).duckdb == duckdb
+    end
   end
 end
