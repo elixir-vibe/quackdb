@@ -65,6 +65,24 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.insert_all/3 supports on_conflict update" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_insert_upsert")
+
+    create_table!(QuackDB.IntegrationRepo, table, id: "INTEGER PRIMARY KEY", name: :varchar)
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1, name: "duck"]])
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(table, [[id: 1, name: "mallard"]],
+               on_conflict: [set: [name: "mallard"]],
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, "mallard"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 supports on_conflict nothing" do
     start_repo!()
     table = unique_table("quackdb_ecto_insert_conflict")

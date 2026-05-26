@@ -51,9 +51,12 @@ defmodule QuackDB.Ecto.SQLGeneration.InsertTest do
     assert sql == ~s|INSERT INTO "events" ("id") VALUES (?) ON CONFLICT ("id") DO NOTHING|
   end
 
-  test "rejects unsupported upserts" do
-    assert_raise QuackDB.Error, ~r/Ecto upserts are unsupported/, fn ->
-      Connection.insert(nil, "events", [:id], [[:id]], {[:name], [], [:id]}, [], [])
-    end
+  test "generates on conflict update" do
+    sql =
+      Connection.insert(nil, "events", [:id, :name], [[:id, :name]], {[:name], [], [:id]}, [], [])
+      |> IO.iodata_to_binary()
+
+    assert sql ==
+             ~s|INSERT INTO "events" ("id", "name") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name"|
   end
 end

@@ -476,7 +476,7 @@ MyApp.AnalyticsRepo.query!(
 )
 ```
 
-Ecto support is analytical rather than CRUD-shaped, but still early. `Repo.query/3`, read-only `Repo.all/2` table queries, combinations, straightforward `Repo.insert_all/3` row inserts, and `update_all` / `delete_all` mutations work, while migrations and richer upserts raise explicit unsupported-feature errors.
+Ecto support is analytical rather than CRUD-shaped, but still early. `Repo.query/3`, read-only `Repo.all/2` table queries, combinations, straightforward inserts/upserts, `update_all` / `delete_all` mutations, and basic migration DDL work; advanced migration features and adapter-specific upsert expressions may still require `Repo.query/3`.
 
 ## Current limitations
 

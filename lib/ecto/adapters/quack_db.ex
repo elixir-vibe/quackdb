@@ -3,10 +3,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     @moduledoc """
     Minimal Ecto SQL adapter for QuackDB.
 
-    The first Ecto milestone intentionally supports raw SQL through
-    `Ecto.Adapters.SQL.query/4` and repository `query/3` helpers only. Schema
-    query generation, migrations, storage callbacks, and write planning are not
-    implemented yet.
+    Ecto SQL adapter for DuckDB over QuackDB. Supports raw SQL, analytical query
+    generation, insert paths, common mutations, and basic migration DDL.
 
     ## Configuration
 
@@ -24,12 +22,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     def supports_ddl_transaction?, do: true
 
     @impl Ecto.Adapter.Migration
-    def lock_for_migrations(_meta, _options, _fun) do
-      unsupported!(
-        :migrations,
-        "Ecto migrations are unsupported; use QuackDB.DDL or Repo.query/3 for raw SQL"
-      )
-    end
+    def lock_for_migrations(_meta, _options, fun), do: fun.()
 
     @impl Ecto.Adapter.Schema
     def autogenerate(:id), do: nil

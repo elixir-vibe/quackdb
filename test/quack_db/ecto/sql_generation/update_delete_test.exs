@@ -47,6 +47,22 @@ defmodule QuackDB.Ecto.SQLGeneration.UpdateDeleteTest do
              ~s|UPDATE "events" AS q0 SET "name" = ? WHERE q0.rowid IN (SELECT q0.rowid FROM "events" AS q0 ORDER BY q0."id" ASC LIMIT 1)|
   end
 
+  test "generates schema update SQL" do
+    sql =
+      Connection.update(nil, "events", [name: "duck"], [id: 1], [:id])
+      |> IO.iodata_to_binary()
+
+    assert sql == ~s|UPDATE "events" SET "name" = ? WHERE "id" = ? RETURNING "id"|
+  end
+
+  test "generates schema delete SQL" do
+    sql =
+      Connection.delete(nil, "events", [id: 1], [])
+      |> IO.iodata_to_binary()
+
+    assert sql == ~s|DELETE FROM "events" WHERE "id" = ?|
+  end
+
   test "generates delete_all SQL" do
     query = from(event in "events", where: event.id in ^[1, 2])
 
