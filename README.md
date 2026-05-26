@@ -22,7 +22,7 @@ QuackDB currently focuses on the remote protocol and `DBConnection` client core.
 - source helpers for Parquet, CSV, JSON, XLSX, Delta, and Iceberg table functions
 - column-oriented result helpers for analytical/vector-style workflows
 - optional Ecto SQL adapter support for raw SQL, analytical reads, `insert/2`, and `insert_all/3`
-- optional Explorer dataframe handoff helpers
+- optional Explorer dataframe handoff helpers and `Table.Reader` support for Livebook-friendly tabular data
 - supervised local DuckDB Quack server processes for development
 - `:telemetry` events for query, append, and fetch operations
 
@@ -287,6 +287,8 @@ You can also convert existing results:
 {:ok, columns} = QuackDB.columnar(conn, "SELECT 1 AS id, 'duck' AS name")
 {:ok, df} = QuackDB.Explorer.from_columns(columns)
 ```
+
+When the optional `:table` package is available, `QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so Livebook and Table-aware libraries can consume query results directly.
 
 ### Command results
 

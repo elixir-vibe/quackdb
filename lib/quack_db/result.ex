@@ -151,9 +151,7 @@ end
 
 if Code.ensure_loaded?(Table.Reader) do
   defimpl Table.Reader, for: QuackDB.Result do
-    def init(%{columns: columns}) when columns in [nil, []] do
-      {:rows, %{columns: [], count: 0}, []}
-    end
+    def init(%{columns: columns}) when columns in [nil, []], do: :none
 
     def init(%{rows: rows} = result) do
       {columns, _counts} =

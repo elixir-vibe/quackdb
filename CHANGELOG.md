@@ -10,6 +10,7 @@
 - Added `QuackDB.SQL.install/1`, `QuackDB.Spatial`, and `QuackDB.Ecto.Spatial` helpers for DuckDB spatial extension statements and `ST_*` expressions.
 - Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.
 - Added `:telemetry` events for query, append, and fetch operations.
+- Added optional `Table.Reader` implementations for `QuackDB.Result` and `QuackDB.Columns`.
 
 ### Fixed
 
