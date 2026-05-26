@@ -14,7 +14,7 @@ For a supervised local demo server, use `QuackDB.Server` and then load the exten
 
 ## Ecto spatial helpers
 
-Prefer `QuackDB.Ecto.Spatial` when you are already using schemas or Ecto queries. It wraps DuckDB spatial functions in Ecto fragments while keeping the query in normal Ecto DSL:
+`QuackDB.Ecto.Spatial` wraps DuckDB spatial functions in Ecto fragments so spatial expressions can stay in normal Ecto queries:
 
 ```elixir
 use QuackDB.Ecto

@@ -11,7 +11,7 @@ The Explorer integration is optional. Add Explorer when you want dataframe helpe
 
 ## Query into a dataframe
 
-Prefer Ecto queries when you have schemas or source helpers:
+Ecto queries can be passed directly when you have schemas or source helpers:
 
 ```elixir
 use QuackDB.Ecto

@@ -254,7 +254,7 @@ This is not Arrow IPC yet, but it exposes a column-oriented shape that can back 
 
 When `:explorer` is available, QuackDB exposes optional helpers for building `Explorer.DataFrame` values from query results:
 
-Prefer passing Ecto queries when you already have schemas or source helpers:
+Ecto queries can be passed directly when you already have schemas or source helpers:
 
 ```elixir
 import Ecto.Query
@@ -352,7 +352,7 @@ Native append columns can be declared with scalar `QuackDB.Type` specs and neste
 
 ## Spatial helpers
 
-DuckDB's spatial extension can be loaded with SQL helpers. Prefer Ecto spatial helpers for application queries:
+DuckDB's spatial extension can be loaded with SQL helpers. Use Ecto spatial helpers when you want to keep spatial expressions inside Ecto queries:
 
 ```elixir
 use QuackDB.Ecto
