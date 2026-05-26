@@ -18,6 +18,35 @@ defmodule QuackDB.Ecto.SQLGeneration.UpdateDeleteTest do
              ~s|UPDATE "events" AS q0 SET "score" = "score" + 1, "name" = ? WHERE (q0."id" = ?)|
   end
 
+  test "generates joined update_all SQL" do
+    query =
+      from(event in "events",
+        join: category in "categories",
+        on: category.id == event.category_id,
+        where: category.name == ^"birds",
+        update: [set: [name: category.name]]
+      )
+
+    sql = query |> Connection.update_all() |> IO.iodata_to_binary()
+
+    assert sql ==
+             ~s|UPDATE "events" AS q0 SET "name" = q1."name" FROM "categories" AS q1 WHERE (q1."id" = q0."category_id") AND (q1."name" = ?)|
+  end
+
+  test "generates ordered limited update_all SQL through rowid filter" do
+    query =
+      from(event in "events",
+        order_by: [asc: event.id],
+        limit: 1,
+        update: [set: [name: ^"duck"]]
+      )
+
+    sql = query |> Connection.update_all() |> IO.iodata_to_binary()
+
+    assert sql ==
+             ~s|UPDATE "events" AS q0 SET "name" = ? WHERE q0.rowid IN (SELECT q0.rowid FROM "events" AS q0 ORDER BY q0."id" ASC LIMIT 1)|
+  end
+
   test "generates delete_all SQL" do
     query = from(event in "events", where: event.id in ^[1, 2])
 
@@ -26,16 +55,17 @@ defmodule QuackDB.Ecto.SQLGeneration.UpdateDeleteTest do
     assert sql == ~s|DELETE FROM "events" AS q0 WHERE (q0."id" IN ?)|
   end
 
-  test "rejects joined update_all" do
+  test "generates joined delete_all SQL" do
     query =
       from(event in "events",
         join: category in "categories",
         on: category.id == event.category_id,
-        update: [set: [name: ^"duck"]]
+        where: category.name == ^"birds"
       )
 
-    assert_raise QuackDB.Error, ~r/update_all\/delete_all with joins is unsupported/, fn ->
-      Connection.update_all(query)
-    end
+    sql = query |> Connection.delete_all() |> IO.iodata_to_binary()
+
+    assert sql ==
+             ~s|DELETE FROM "events" AS q0 USING "categories" AS q1 WHERE (q1."id" = q0."category_id") AND (q1."name" = ?)|
   end
 end

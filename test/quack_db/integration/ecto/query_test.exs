@@ -98,6 +98,34 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.update_all/3 updates rows with joins" do
+    start_repo!()
+    events = unique_table("quackdb_ecto_update_join_events")
+    categories = unique_table("quackdb_ecto_update_join_categories")
+
+    create_table!(QuackDB.IntegrationRepo, events,
+      id: :integer,
+      category_id: :integer,
+      name: :varchar
+    )
+
+    create_table!(QuackDB.IntegrationRepo, categories, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, events, [[1, 1, "old"], [2, 2, "old"]])
+    insert_rows!(QuackDB.IntegrationRepo, categories, [[1, "duck"], [2, "goose"]])
+
+    query =
+      from(event in events,
+        join: category in ^categories,
+        on: category.id == event.category_id,
+        where: category.name == ^"duck"
+      )
+
+    assert {1, nil} = QuackDB.IntegrationRepo.update_all(query, set: [name: "mallard"])
+
+    assert %{rows: [[1, "mallard"], [2, "old"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{events} ORDER BY id")
+  end
+
   test "Ecto Repo.delete_all/2 deletes rows" do
     start_repo!()
     table = unique_table("quackdb_ecto_delete_all")
@@ -111,6 +139,34 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
 
     assert %{rows: [[1, "duck"]]} =
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
+  end
+
+  test "Ecto Repo.delete_all/2 deletes rows with joins" do
+    start_repo!()
+    events = unique_table("quackdb_ecto_delete_join_events")
+    categories = unique_table("quackdb_ecto_delete_join_categories")
+
+    create_table!(QuackDB.IntegrationRepo, events,
+      id: :integer,
+      category_id: :integer,
+      name: :varchar
+    )
+
+    create_table!(QuackDB.IntegrationRepo, categories, id: :integer, name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, events, [[1, 1, "duck"], [2, 2, "goose"]])
+    insert_rows!(QuackDB.IntegrationRepo, categories, [[1, "birds"], [2, "mammals"]])
+
+    query =
+      from(event in events,
+        join: category in ^categories,
+        on: category.id == event.category_id,
+        where: category.name == ^"mammals"
+      )
+
+    assert {1, nil} = QuackDB.IntegrationRepo.delete_all(query)
+
+    assert %{rows: [[1, "duck"]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{events} ORDER BY id")
   end
 
   test "Ecto Repo.insert_all/3 supports insert from query" do

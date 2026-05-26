@@ -25,7 +25,7 @@
 - Added managed DuckDB binary guide and install-task target prefetching.
 - Added internal Arrow/columnar handoff research notes and a protocol fixture backlog for tricky scalar/spatial types.
 - Documented managed DuckDB Windows limitations and linked the managed binary guide from getting started docs.
-- Added Ecto `update_all` and `delete_all` SQL generation and real-server coverage for simple mutations.
+- Added Ecto combinations, lock SQL, and broader `update_all` / `delete_all` generation, including joined mutations and rowid-filtered ordered/limited mutations where DuckDB SQL allows it.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

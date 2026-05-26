@@ -24,7 +24,9 @@ if Code.ensure_loaded?(Ecto.Query) do
         windows(query.windows),
         order_bys(query.order_bys),
         limit(query.limit),
-        offset(query.offset)
+        offset(query.offset),
+        combinations(query.combinations),
+        lock(query.lock)
       ]
     end
 
@@ -38,7 +40,9 @@ if Code.ensure_loaded?(Ecto.Query) do
         source(query.from, 0),
         " SET ",
         updates(query.updates),
-        wheres(query.wheres)
+        update_from(query.joins),
+        mutation_wheres(query),
+        mutation_rowid_filter(query)
       ]
     end
 
@@ -50,48 +54,27 @@ if Code.ensure_loaded?(Ecto.Query) do
         with_ctes(query.with_ctes),
         "DELETE FROM ",
         source(query.from, 0),
-        wheres(query.wheres)
+        delete_using(query.joins),
+        mutation_wheres(query),
+        mutation_rowid_filter(query)
       ]
     end
 
-    defp assert_read_only_query!(%Ecto.Query{} = query) do
-      cond do
-        query.combinations != [] ->
-          unsupported!(:combinations, "Ecto combinations are unsupported; use Repo.query/3")
-
-        query.lock != nil ->
-          unsupported!(:locks, "Ecto locks are unsupported; use Repo.query/3")
-
-        true ->
-          :ok
-      end
-    end
+    defp assert_read_only_query!(%Ecto.Query{}), do: :ok
 
     defp assert_mutation_query!(%Ecto.Query{} = query) do
       cond do
-        query.joins != [] ->
-          unsupported!(
-            :joins,
-            "Ecto update_all/delete_all with joins is unsupported; use Repo.query/3"
-          )
-
-        query.group_bys != [] or query.havings != [] or query.windows != [] ->
+        query.windows != [] ->
           unsupported!(
             :mutation_query,
-            "grouped Ecto update_all/delete_all is unsupported; use Repo.query/3"
-          )
-
-        query.order_bys != [] or query.limit != nil or query.offset != nil ->
-          unsupported!(
-            :mutation_query,
-            "ordered or limited Ecto update_all/delete_all is unsupported; use Repo.query/3"
+            "windowed Ecto update_all/delete_all is unsupported; use Repo.query/3"
           )
 
         query.combinations != [] ->
-          unsupported!(:combinations, "Ecto combinations are unsupported; use Repo.query/3")
-
-        query.lock != nil ->
-          unsupported!(:locks, "Ecto locks are unsupported; use Repo.query/3")
+          unsupported!(
+            :combinations,
+            "Ecto combinations are unsupported for update_all/delete_all; use Repo.query/3"
+          )
 
         true ->
           :ok
@@ -187,7 +170,29 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
-    defp joins([]), do: []
+    defp update_from([]), do: []
+
+    defp update_from(joins) do
+      [
+        " FROM ",
+        joins
+        |> Enum.with_index(1)
+        |> Enum.map(fn {join, index} -> source(join, index) end)
+        |> Enum.intersperse(", ")
+      ]
+    end
+
+    defp delete_using([]), do: []
+
+    defp delete_using(joins) do
+      [
+        " USING ",
+        joins
+        |> Enum.with_index(1)
+        |> Enum.map(fn {join, index} -> source(join, index) end)
+        |> Enum.intersperse(", ")
+      ]
+    end
 
     defp joins(joins) do
       joins
@@ -235,6 +240,57 @@ if Code.ensure_loaded?(Ecto.Query) do
             "Ecto update operation #{inspect(operation)} is unsupported"
           )
       end)
+    end
+
+    defp mutation_wheres(%Ecto.Query{} = query) do
+      predicates = Enum.map(query.joins, & &1.on.expr) ++ Enum.map(query.wheres, & &1.expr)
+
+      case predicates do
+        [] -> []
+        expressions -> [" WHERE ", expressions |> Enum.map(&expr/1) |> Enum.intersperse(" AND ")]
+      end
+    end
+
+    defp mutation_rowid_filter(%Ecto.Query{
+           order_bys: [],
+           limit: nil,
+           offset: nil,
+           group_bys: [],
+           havings: []
+         }),
+         do: []
+
+    defp mutation_rowid_filter(%Ecto.Query{} = query) do
+      [
+        if(query.wheres == [] and query.joins == [], do: " WHERE ", else: " AND "),
+        "q0.rowid IN (",
+        mutation_rowid_subquery(query),
+        ")"
+      ]
+    end
+
+    defp mutation_rowid_subquery(%Ecto.Query{group_bys: [], havings: []} = query) do
+      [
+        "SELECT q0.rowid FROM ",
+        source(query.from, 0),
+        joins(query.joins),
+        wheres(query.wheres),
+        order_bys(query.order_bys),
+        limit(query.limit),
+        offset(query.offset)
+      ]
+    end
+
+    defp mutation_rowid_subquery(%Ecto.Query{} = query) do
+      [
+        "SELECT rowid FROM (SELECT q0.rowid AS rowid FROM ",
+        source(query.from, 0),
+        joins(query.joins),
+        wheres(query.wheres),
+        group_bys(query.group_bys),
+        havings(query.havings),
+        ") AS quackdb_mutation_rows"
+      ]
     end
 
     defp wheres([]), do: []
@@ -305,6 +361,24 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp offset(nil), do: []
     defp offset(%{expr: expression}), do: [" OFFSET ", expr(expression)]
+
+    defp combinations([]), do: []
+
+    defp combinations(combinations) do
+      Enum.map(combinations, fn {operation, query} ->
+        [" ", combination_operator(operation), " ", all(query)]
+      end)
+    end
+
+    defp combination_operator(:union), do: "UNION"
+    defp combination_operator(:union_all), do: "UNION ALL"
+    defp combination_operator(:except), do: "EXCEPT"
+    defp combination_operator(:except_all), do: "EXCEPT ALL"
+    defp combination_operator(:intersect), do: "INTERSECT"
+    defp combination_operator(:intersect_all), do: "INTERSECT ALL"
+
+    defp lock(nil), do: []
+    defp lock(lock) when is_binary(lock), do: [" ", lock]
 
     defp expr({{:., _meta, [{:&, _binding_meta, [binding]}, field]}, _call_meta, []})
          when is_integer(binding) and is_atom(field) do
