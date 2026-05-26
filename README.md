@@ -362,7 +362,7 @@ QuackDB.query!(conn, [
 ])
 ```
 
-DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geo.decode_wkb!/1`.
+DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geometry.decode_wkb!/1`.
 
 ### Prepare and execute
 
