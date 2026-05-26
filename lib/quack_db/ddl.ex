@@ -54,8 +54,17 @@ defmodule QuackDB.DDL do
 
   defp schema_columns(schema) do
     Enum.map(schema.__schema__(:fields), fn field ->
-      {field, ecto_type_to_duckdb(schema.__schema__(:type, field))}
+      {field, schema_field_type!(schema, field)}
     end)
+  end
+
+  defp schema_field_type!(schema, field) do
+    schema.__schema__(:type, field)
+    |> ecto_type_to_duckdb()
+  rescue
+    error in ArgumentError ->
+      raise ArgumentError,
+            "unsupported Ecto schema type for #{inspect(schema)}.#{field}: #{Exception.message(error)}"
   end
 
   defp ecto_type_to_duckdb(:id), do: :bigint
@@ -76,7 +85,7 @@ defmodule QuackDB.DDL do
   defp ecto_type_to_duckdb({:array, type}), do: {:list, ecto_type_to_duckdb(type)}
 
   defp ecto_type_to_duckdb(type) do
-    raise ArgumentError, "unsupported Ecto schema type for DuckDB DDL: #{inspect(type)}"
+    raise ArgumentError, inspect(type)
   end
 
   defp temporary(options) do

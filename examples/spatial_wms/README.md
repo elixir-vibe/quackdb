@@ -42,3 +42,19 @@ Try GeoJSON GetMap. `FORMAT` contains reserved URL characters, so build the quer
 elixir -e 'IO.puts("http://localhost:4040/?" <> URI.encode_query(service: "WMS", request: "GetMap", layers: "places", crs: "EPSG:4326", bbox: "-180,-90,180,90", width: 800, height: 400, format: "application/geo+json"))' \
   | xargs curl
 ```
+
+Example response:
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": 2,
+      "properties": {"name": "London"},
+      "geometry": {"type": "Point", "coordinates": [-0.1276, 51.5072]}
+    }
+  ]
+}
+```

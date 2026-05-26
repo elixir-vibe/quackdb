@@ -44,8 +44,8 @@ That gives you:
 
 The `examples/` directory includes runnable scripts and a Livebook notebook:
 
-- `examples/telemetry_observer.exs` — attach telemetry handlers and print query, append, and fetch timings.
-- `examples/explorer_roundtrip.exs` — append an `Explorer.DataFrame` through native column append and query it back as a dataframe.
+- `examples/query_observability.exs` — attach telemetry handlers and print query, append, and fetch timings.
+- `examples/dataframe_analytics.exs` — derive DDL from an Ecto schema, append an `Explorer.DataFrame`, query with Ecto DSL, and return a dataframe.
 - `examples/livebook_analytics.livemd` — an interactive analytics notebook with DuckDB SQL, Explorer, Table.Reader, VegaLite, and telemetry.
 - `examples/spatial_wms/` — a minimal Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
 - `examples/support/quackdb_demo.exs` — shared demo boot helper that starts `QuackDB.Server` unless `QUACKDB_URI` is set.
@@ -54,7 +54,7 @@ Run scripts from outside the Mix project so `Mix.install/2` can load the local p
 
 ```sh
 cd /tmp
-elixir /path/to/quackdb/examples/explorer_roundtrip.exs
+elixir /path/to/quackdb/examples/dataframe_analytics.exs
 ```
 
 ## Installation

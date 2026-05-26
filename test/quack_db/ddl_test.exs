@@ -19,6 +19,21 @@ defmodule QuackDB.DDLTest do
              ~s|CREATE TEMP TABLE "events" ("id" INTEGER, "name" VARCHAR, "score" DOUBLE)|
   end
 
+  defmodule UnsupportedSchema do
+    use Ecto.Schema
+
+    @primary_key false
+    schema "events" do
+      field(:payload, :map)
+    end
+  end
+
+  test "create_table reports unsupported Ecto schema fields" do
+    assert_raise ArgumentError,
+                 ~r/unsupported Ecto schema type for QuackDB.DDLTest.UnsupportedSchema.payload: :map/,
+                 fn -> QuackDB.DDL.create_table(UnsupportedSchema, temporary: true) end
+  end
+
   test "create_table builds regular table DDL" do
     assert QuackDB.DDL.create_table("events", id: :integer, name: :varchar)
            |> IO.iodata_to_binary() == ~S[CREATE TABLE "events" ("id" INTEGER, "name" VARCHAR)]
