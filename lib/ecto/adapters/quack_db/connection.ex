@@ -140,7 +140,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
           if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
           quote_table(table.prefix, table.name),
           " (",
-          columns |> Enum.map(&column_definition/1) |> Enum.intersperse(", "),
+          column_definitions(table, columns),
           ")",
           table_options(table.options)
         ]
@@ -338,18 +338,40 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       unsupported_iodata!(:placeholders, ":placeholders with RETURNING are unsupported")
     end
 
-    defp column_definition({:add, name, %Reference{} = reference, options}) do
+    defp column_definitions(table, columns) do
+      definitions = Enum.map(columns, &column_definition(&1, table))
+      pks = columns |> Enum.filter(&composite_pk?/1) |> Enum.map(&elem(&1, 1))
+
+      case {table.primary_key, pks} do
+        {:composite, [_ | _]} ->
+          pk = [
+            "PRIMARY KEY (",
+            pks |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "),
+            ")"
+          ]
+
+          [pk | Enum.reverse(definitions)] |> Enum.reverse() |> Enum.intersperse(", ")
+
+        _ ->
+          Enum.intersperse(definitions, ", ")
+      end
+    end
+
+    defp composite_pk?({:add, _name, _type, options}),
+      do: Keyword.get(options, :primary_key, false)
+
+    defp column_definition({:add, name, %Reference{} = reference, options}, table) do
       [
         quote_identifier(name),
         " ",
         column_type(reference.type),
-        column_options(options),
+        column_options(options, table),
         reference_expr(reference)
       ]
     end
 
-    defp column_definition({:add, name, type, options}) do
-      [quote_identifier(name), " ", column_type(type), column_options(options)]
+    defp column_definition({:add, name, type, options}, table) do
+      [quote_identifier(name), " ", column_type(type), column_options(options, table)]
     end
 
     defp column_change({:add, name, %Reference{} = reference, options}) do
@@ -380,11 +402,13 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp column_change({:remove, name}), do: ["DROP COLUMN ", quote_identifier(name)]
     defp column_change({:remove, name, _type, _options}), do: column_change({:remove, name})
 
-    defp column_options(options) do
+    defp column_options(options, table \\ %Table{}) do
       [
         null_option(Keyword.get(options, :null)),
         default_option(Keyword.fetch(options, :default)),
-        primary_key_option(Keyword.get(options, :primary_key, false))
+        primary_key_option(
+          table.primary_key != :composite and Keyword.get(options, :primary_key, false)
+        )
       ]
     end
 

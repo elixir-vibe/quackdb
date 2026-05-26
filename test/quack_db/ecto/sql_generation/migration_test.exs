@@ -2,7 +2,7 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
   use ExUnit.Case, async: true
 
   alias Ecto.Adapters.QuackDB.Connection
-  alias Ecto.Migration.{Index, Table}
+  alias Ecto.Migration.{Index, Reference, Table}
 
   test "generates create table DDL" do
     sql =
@@ -17,6 +17,22 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
 
     assert sql ==
              ~s|CREATE TABLE "events" ("id" BIGINT PRIMARY KEY, "name" VARCHAR NOT NULL, "score" INTEGER DEFAULT 0)|
+  end
+
+  test "generates composite primary key and references" do
+    sql =
+      {:create, %Table{name: "events", primary_key: :composite},
+       [
+         {:add, :account_id, :integer, [primary_key: true]},
+         {:add, :id, :integer, [primary_key: true]},
+         {:add, :category_id,
+          %Reference{table: "categories", type: :integer, on_delete: :delete_all}, []}
+       ]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql ==
+             ~s|CREATE TABLE "events" ("account_id" INTEGER, "id" INTEGER, "category_id" INTEGER REFERENCES "categories"("id") ON DELETE CASCADE, PRIMARY KEY ("account_id", "id"))|
   end
 
   test "generates alter table DDL" do

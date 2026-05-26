@@ -3,13 +3,13 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
   import QuackDB.QuackServerCase
 
   alias Ecto.Adapters.QuackDB.Connection
-  alias Ecto.Migration.{Index, Table}
+  alias Ecto.Migration.{Index, Reference, Table}
 
   @moduletag :integration
 
   test "generated migration DDL runs against DuckDB" do
     start_repo!()
-    table = "quackdb_ecto_migration_#{System.unique_integer([:positive])}"
+    table = "quackdb_ecto_migration_#{System.unique_integer([:positive, :monotonic])}"
     index = "#{table}_name_index"
 
     execute_ddl!(
@@ -31,6 +31,38 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
 
     execute_ddl!({:drop, %Index{name: index}})
     execute_ddl!({:drop, %Table{name: table}, :restrict})
+  end
+
+  test "generated reference and composite primary key DDL runs against DuckDB" do
+    start_repo!()
+
+    categories =
+      "quackdb_ecto_migration_categories_#{System.unique_integer([:positive, :monotonic])}"
+
+    events = "quackdb_ecto_migration_events_#{System.unique_integer([:positive, :monotonic])}"
+
+    execute_ddl!(
+      {:create_if_not_exists, %Table{name: categories},
+       [{:add, :id, :integer, [primary_key: true]}]}
+    )
+
+    execute_ddl!(
+      {:create_if_not_exists, %Table{name: events, primary_key: :composite},
+       [
+         {:add, :account_id, :integer, [primary_key: true]},
+         {:add, :id, :integer, [primary_key: true]},
+         {:add, :category_id, %Reference{table: categories, type: :integer}, []}
+       ]}
+    )
+
+    assert %{rows: [[events]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT table_name FROM information_schema.tables WHERE table_name = ?",
+               [events]
+             )
+
+    execute_ddl!({:drop_if_exists, %Table{name: events}, :restrict})
+    execute_ddl!({:drop_if_exists, %Table{name: categories}, :restrict})
   end
 
   defp execute_ddl!(command) do
