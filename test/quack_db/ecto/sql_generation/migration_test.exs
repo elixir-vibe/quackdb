@@ -2,7 +2,7 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
   use ExUnit.Case, async: true
 
   alias Ecto.Adapters.QuackDB.Connection
-  alias Ecto.Migration.{Index, Reference, Table}
+  alias Ecto.Migration.{Constraint, Index, Reference, Table}
 
   test "generates create table DDL" do
     sql =
@@ -45,6 +45,23 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
              ~s|ALTER TABLE "events" ADD COLUMN "name" VARCHAR|,
              ~s|ALTER TABLE "events" DROP COLUMN "old_name"|
            ]
+  end
+
+  test "generates constraint DDL" do
+    sql =
+      {:create, %Constraint{table: "events", name: "positive_score", check: "score >= 0"}}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql == ~s|ALTER TABLE "events" ADD CONSTRAINT "positive_score" CHECK (score >= 0)|
+  end
+
+  test "rejects unsupported constraint options explicitly" do
+    assert_raise QuackDB.Error, ~r/exclude constraints/, fn ->
+      {:create, %Constraint{table: "events", name: "no_overlap", exclude: "gist (id WITH = )"}}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
   end
 
   test "rejects unsupported index options explicitly" do

@@ -28,12 +28,13 @@
 - Added Ecto combinations, lock SQL, and broader `update_all` / `delete_all` generation, including joined mutations and rowid-filtered ordered/limited mutations where DuckDB SQL allows it.
 - Added quack-ts decode fixtures for nanosecond temporal, interval, spatial geometry, and null-heavy nested chunks.
 - Added Ecto upsert SQL generation, schema update/delete callbacks, explain query support, and basic migration DDL generation with real-server coverage.
-- Expanded Ecto coverage for primary-key schema updates/deletes, `Repo.explain/3`, upsert increment expressions, unsafe conflict targets, and composite-key/reference migration DDL.
+- Expanded Ecto coverage for primary-key schema updates/deletes, full schema selects, `Repo.explain/3`, upsert increment/replacement expressions, unsafe conflict targets, composite-key/reference/check-constraint migration DDL, and actual `Ecto.Migrator` execution.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed
 
-- Expanded real Ecto insert coverage for `on_conflict: :nothing` and insert-from-query SQL paths.
+- Expanded real Ecto insert coverage for `on_conflict: :nothing`, single-row insert upserts, and insert-from-query SQL paths.
+- Fixed Mint transport call timeout handling for `timeout: :infinity`, which Ecto migrator uses for migration DDL.
 
 ## 0.2.0 - 2026-05-25
 

@@ -343,6 +343,56 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert plan =~ "EMPTY_RESULT"
   end
 
+  test "Ecto Repo.insert/2 supports on_conflict nothing" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
+
+    event = %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "goose", score: 20}
+
+    assert {:ok, %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "goose", score: 20}} =
+             QuackDB.IntegrationRepo.insert(event,
+               on_conflict: :nothing,
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, "duck", 10]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM keyed_events")
+  end
+
+  test "Ecto Repo.insert/2 supports on_conflict update" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
+
+    event = %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "goose", score: 20}
+
+    assert {:ok, %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "goose", score: 20}} =
+             QuackDB.IntegrationRepo.insert(event,
+               on_conflict: [set: [name: "mallard"]],
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, "mallard", 10]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM keyed_events")
+  end
+
   test "Ecto Repo.insert/2 inserts a schema struct" do
     start_repo!()
 
@@ -356,6 +406,48 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
 
     assert %{rows: [[1, "duck"]]} =
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM events ORDER BY id")
+  end
+
+  test "Ecto writes work inside transactions" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_transaction_writes")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    assert {:ok, :done} =
+             QuackDB.IntegrationRepo.transaction(fn ->
+               assert {1, nil} =
+                        QuackDB.IntegrationRepo.insert_all(table, [
+                          [id: 1, name: "duck", score: 10]
+                        ])
+
+               assert {1, nil} =
+                        QuackDB.IntegrationRepo.insert_all(
+                          table,
+                          [[id: 1, name: "mallard", score: 0]],
+                          on_conflict: [set: [name: "mallard"]],
+                          conflict_target: [:id]
+                        )
+
+               query = from(event in table, where: event.id == ^1)
+               assert {1, nil} = QuackDB.IntegrationRepo.update_all(query, inc: [score: 5])
+
+               assert {1, nil} =
+                        QuackDB.IntegrationRepo.insert_all(
+                          table,
+                          [[id: 2, name: "goose", score: 20]],
+                          insert_method: :append
+                        )
+
+               :done
+             end)
+
+    assert %{rows: [[1, "mallard", 15], [2, "goose", 20]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM #{table} ORDER BY id")
   end
 
   test "Ecto Repo.insert_all/3 can use Quack append explicitly" do
@@ -390,6 +482,17 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
       )
 
     assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
+  end
+
+  test "Ecto Repo.get!/2 loads schema structs with renamed field sources" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "renamed_events")
+    create_table!(QuackDB.IntegrationRepo, "renamed_events", id: :integer, event_name: :varchar)
+    insert_rows!(QuackDB.IntegrationRepo, "renamed_events", [[1, "duck"]])
+
+    assert %QuackDB.TestSchemas.RenamedEvent{id: 1, name: "duck"} =
+             QuackDB.IntegrationRepo.get_by!(QuackDB.TestSchemas.RenamedEvent, id: 1)
   end
 
   test "Ecto Repo.get!/2 loads full schema structs" do

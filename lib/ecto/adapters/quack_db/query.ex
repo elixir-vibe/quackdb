@@ -129,7 +129,16 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp schema_fields(%{source: {_table, schema}}, binding) when is_atom(schema) do
       schema.__schema__(:fields)
-      |> Enum.map(fn field -> ["q", to_string(binding), ".", quote_identifier(field)] end)
+      |> Enum.map(fn field ->
+        source = schema.__schema__(:field_source, field)
+        expression = ["q", to_string(binding), ".", quote_identifier(source)]
+
+        if source == field do
+          expression
+        else
+          [expression, " AS ", quote_identifier(field)]
+        end
+      end)
       |> Enum.intersperse(", ")
     end
 

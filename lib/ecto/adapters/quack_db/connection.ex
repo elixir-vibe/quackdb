@@ -11,7 +11,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     @behaviour Ecto.Adapters.SQL.Connection
 
-    alias Ecto.Migration.{Index, Reference, Table}
+    alias Ecto.Migration.{Constraint, Index, Reference, Table}
 
     @impl true
     def child_spec(options) do
@@ -191,6 +191,43 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       ]
     end
 
+    def execute_ddl({command, %Constraint{} = constraint})
+        when command in [:create, :create_if_not_exists] do
+      assert_constraint_options!(constraint)
+
+      if is_binary(constraint.check) do
+        [
+          [
+            "ALTER TABLE ",
+            quote_table(constraint.prefix, constraint.table),
+            " ADD CONSTRAINT ",
+            quote_identifier(constraint.name),
+            " CHECK (",
+            constraint.check,
+            ")"
+          ]
+        ]
+      else
+        unsupported_iodata!(
+          :migration_constraint,
+          "DuckDB constraint DDL only supports check constraints"
+        )
+      end
+    end
+
+    def execute_ddl({command, %Constraint{} = constraint, _mode})
+        when command in [:drop, :drop_if_exists] do
+      [
+        [
+          "ALTER TABLE ",
+          quote_table(constraint.prefix, constraint.table),
+          " DROP CONSTRAINT ",
+          if_do(command == :drop_if_exists, "IF EXISTS "),
+          quote_identifier(constraint.name)
+        ]
+      ]
+    end
+
     def execute_ddl({command, %Index{} = index}) when command in [:drop, :drop_if_exists] do
       assert_index_drop_options!(index)
 
@@ -233,6 +270,31 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     def execute_ddl(statement) when is_binary(statement), do: [statement]
+
+    defp assert_constraint_options!(%Constraint{} = constraint) do
+      cond do
+        constraint.exclude ->
+          unsupported_iodata!(
+            :migration_constraint,
+            "DuckDB does not support exclude constraints"
+          )
+
+        constraint.comment ->
+          unsupported_iodata!(
+            :migration_constraint,
+            "DuckDB does not support constraint comments"
+          )
+
+        constraint.validate == false ->
+          unsupported_iodata!(
+            :migration_constraint,
+            "DuckDB does not support NOT VALID constraints"
+          )
+
+        true ->
+          :ok
+      end
+    end
 
     defp assert_index_options!(%Index{} = index) do
       cond do

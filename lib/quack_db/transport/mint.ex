@@ -31,7 +31,7 @@ defmodule QuackDB.Transport.Mint do
     GenServer.call(
       server,
       {:post, IO.iodata_to_binary(body), options},
-      timeout + @call_timeout_buffer
+      call_timeout_with_buffer(timeout)
     )
   end
 
@@ -190,6 +190,9 @@ defmodule QuackDB.Transport.Mint do
   defp scheme(%URI{scheme: "https"}), do: :https
 
   defp call_timeout(options), do: Keyword.get(options, :timeout, @default_timeout)
+
+  defp call_timeout_with_buffer(:infinity), do: :infinity
+  defp call_timeout_with_buffer(timeout), do: timeout + @call_timeout_buffer
 
   defp connect_timeout(options, fallback), do: Keyword.get(options, :connect_timeout, fallback)
 
