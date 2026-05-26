@@ -83,6 +83,46 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto Repo.insert_all/3 supports replacement upsert variants" do
+    start_repo!()
+    table = "keyed_events"
+
+    drop_table!(QuackDB.IntegrationRepo, table)
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.KeyedEvent, [
+               [id: 1, name: "duck", score: 10]
+             ])
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(
+               QuackDB.TestSchemas.KeyedEvent,
+               [[id: 1, name: "mallard", score: 20]],
+               on_conflict: {:replace, [:name]},
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, "mallard", 10]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM #{table} ORDER BY id")
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(
+               QuackDB.TestSchemas.KeyedEvent,
+               [[id: 1, name: "goose", score: 30]],
+               on_conflict: {:replace_all_except, [:id]},
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, "goose", 30]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, name, score FROM #{table} ORDER BY id")
+  end
+
   test "Ecto Repo.insert_all/3 supports on_conflict increment" do
     start_repo!()
     table = unique_table("quackdb_ecto_insert_upsert_inc")
@@ -252,10 +292,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
 
     insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
 
-    event =
-      %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10}
-      |> Ecto.put_meta(state: :loaded)
-
+    event = QuackDB.IntegrationRepo.get!(QuackDB.TestSchemas.KeyedEvent, 1)
     changeset = Ecto.Changeset.change(event, name: "mallard", score: 15)
 
     assert {:ok, %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "mallard", score: 15}} =
@@ -280,9 +317,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
 
     insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
 
-    event =
-      %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10}
-      |> Ecto.put_meta(state: :loaded)
+    event = QuackDB.IntegrationRepo.get!(QuackDB.TestSchemas.KeyedEvent, 1)
 
     assert {:ok, %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10}} =
              QuackDB.IntegrationRepo.delete(event)
@@ -304,8 +339,8 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
         wrap_in_transaction: false
       )
 
-    assert {:ok, %{rows: [["physical_plan", physical_plan]]}} = plan
-    assert physical_plan =~ "EMPTY_RESULT"
+    assert {:ok, plan} = plan
+    assert plan =~ "EMPTY_RESULT"
   end
 
   test "Ecto Repo.insert/2 inserts a schema struct" do
@@ -355,6 +390,23 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
       )
 
     assert [%{id: 2, name: "goose"}] = QuackDB.IntegrationRepo.all(query)
+  end
+
+  test "Ecto Repo.get!/2 loads full schema structs" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, "keyed_events", [[1, "duck", 10]])
+
+    assert %QuackDB.TestSchemas.KeyedEvent{id: 1, name: "duck", score: 10} =
+             QuackDB.IntegrationRepo.get!(QuackDB.TestSchemas.KeyedEvent, 1)
   end
 
   test "Ecto Repo.one/2 executes singleton read queries against a real Quack server" do

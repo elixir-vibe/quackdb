@@ -47,6 +47,22 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
            ]
   end
 
+  test "rejects unsupported index options explicitly" do
+    assert_raise QuackDB.Error, ~r/concurrent index creation/, fn ->
+      {:create,
+       %Index{table: "events", name: "events_name_index", columns: [:name], concurrently: true}}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
+
+    assert_raise QuackDB.Error, ~r/covering index/, fn ->
+      {:create,
+       %Index{table: "events", name: "events_name_index", columns: [:name], include: [:score]}}
+      |> Connection.execute_ddl()
+      |> single_sql()
+    end
+  end
+
   test "generates index DDL" do
     sql =
       {:create,

@@ -14,7 +14,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
       [
         with_ctes(query.with_ctes),
-        select(query.select, query.distinct),
+        select(query.select, query.distinct, query.from),
         " FROM ",
         source(query.from, 0),
         joins(query.joins),
@@ -102,9 +102,14 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp recursive(true), do: "RECURSIVE "
     defp recursive(false), do: []
 
-    defp select(nil, distinct), do: ["SELECT ", distinct(distinct), "*"]
+    defp select(nil, distinct, _from), do: ["SELECT ", distinct(distinct), "*"]
 
-    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct) do
+    defp select(%Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}}, distinct, from)
+         when is_integer(binding) do
+      ["SELECT ", distinct(distinct), schema_fields(from, binding)]
+    end
+
+    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, _from) do
       ["SELECT ", distinct(distinct), select_expr(expr)]
     end
 
@@ -121,6 +126,15 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp distinct(%{expr: expression}), do: ["DISTINCT ON (", expr(expression), ") "]
+
+    defp schema_fields(%{source: {_table, schema}}, binding) when is_atom(schema) do
+      schema.__schema__(:fields)
+      |> Enum.map(fn field -> ["q", to_string(binding), ".", quote_identifier(field)] end)
+      |> Enum.intersperse(", ")
+    end
+
+    defp schema_fields(_from, _binding),
+      do: unsupported!(:select, "full-source Ecto selects require a schema-backed source")
 
     defp select_expr({:%{}, _meta, fields}) do
       fields

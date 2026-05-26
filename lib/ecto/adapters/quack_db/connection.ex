@@ -131,7 +131,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     @impl true
     def explain_query(connection, query, params, options) do
-      query(connection, ["EXPLAIN ", query], params, options)
+      case query(connection, ["EXPLAIN ", query], params, options) do
+        {:ok, %{rows: rows}} -> {:ok, Enum.map_join(rows, "\n", &explain_row/1)}
+        result -> result
+      end
     end
 
     @impl true
@@ -169,6 +172,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     def execute_ddl({command, %Index{} = index})
         when command in [:create, :create_if_not_exists] do
+      assert_index_options!(index)
+
       [
         [
           "CREATE ",
@@ -187,6 +192,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     def execute_ddl({command, %Index{} = index}) when command in [:drop, :drop_if_exists] do
+      assert_index_drop_options!(index)
+
       [
         [
           "DROP INDEX ",
@@ -227,6 +234,49 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     def execute_ddl(statement) when is_binary(statement), do: [statement]
 
+    defp assert_index_options!(%Index{} = index) do
+      cond do
+        index.concurrently ->
+          unsupported_iodata!(
+            :migration_index,
+            "DuckDB does not support concurrent index creation"
+          )
+
+        index.using ->
+          unsupported_iodata!(
+            :migration_index,
+            "DuckDB does not support Ecto index :using options"
+          )
+
+        index.include != [] ->
+          unsupported_iodata!(
+            :migration_index,
+            "DuckDB does not support covering index :include columns"
+          )
+
+        not is_nil(index.nulls_distinct) ->
+          unsupported_iodata!(
+            :migration_index,
+            "DuckDB does not support Ecto index :nulls_distinct options"
+          )
+
+        index.comment ->
+          unsupported_iodata!(:migration_index, "DuckDB does not support index comments")
+
+        index.options ->
+          unsupported_iodata!(:migration_index, "DuckDB does not support raw Ecto index :options")
+
+        true ->
+          :ok
+      end
+    end
+
+    defp assert_index_drop_options!(%Index{} = index) do
+      if index.concurrently do
+        unsupported_iodata!(:migration_index, "DuckDB does not support concurrent index drops")
+      end
+    end
+
     @impl true
     def ddl_logs(_result), do: []
 
@@ -260,6 +310,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         |> Enum.intersperse(", ")
       ]
     end
+
+    defp explain_row([_key, value]) when is_binary(value), do: value
+    defp explain_row(row), do: Enum.map_join(row, "\t", &to_string/1)
 
     defp filters(filters) do
       filters
