@@ -109,8 +109,8 @@ if Code.ensure_loaded?(Ecto.Query) do
       ["SELECT ", distinct(distinct), source_fields(from, binding, Map.get(take, binding))]
     end
 
-    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, _from) do
-      ["SELECT ", distinct(distinct), select_expr(expr)]
+    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, from) do
+      ["SELECT ", distinct(distinct), select_expr(expr, from)]
     end
 
     defp distinct(nil), do: []
@@ -170,27 +170,35 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
-    defp select_expr({:%{}, _meta, fields}) do
+    defp select_expr({:%{}, _meta, fields}, from) do
       fields
       |> Enum.map(fn
         {_alias_name, {:selected_as, _meta, [expression, name]}} ->
-          [expr(expression), " AS ", quote_identifier(name)]
+          [select_value_expr(expression, from), " AS ", quote_identifier(name)]
 
         {alias_name, expression} ->
-          [expr(expression), " AS ", quote_identifier(alias_name)]
+          [select_value_expr(expression, from), " AS ", quote_identifier(alias_name)]
       end)
       |> Enum.intersperse(", ")
     end
 
-    defp select_expr({:{}, _meta, fields}) do
-      fields |> Enum.map(&expr/1) |> Enum.intersperse(", ")
+    defp select_expr({:{}, _meta, fields}, from) do
+      fields |> Enum.map(&select_value_expr(&1, from)) |> Enum.intersperse(", ")
     end
 
-    defp select_expr(fields) when is_list(fields) do
-      fields |> Enum.map(&expr/1) |> Enum.intersperse(", ")
+    defp select_expr(fields, from) when is_list(fields) do
+      fields |> Enum.map(&select_value_expr(&1, from)) |> Enum.intersperse(", ")
     end
 
-    defp select_expr(expr), do: expr(expr)
+    defp select_expr(expression, from), do: select_value_expr(expression, from)
+
+    defp select_value_expr({{:., _, [{:&, _, [0]}, field]}, _, []}, %{source: {_table, schema}})
+         when is_atom(schema) and not is_nil(schema) do
+      source = schema.__schema__(:field_source, field)
+      schema_field(schema, field, 0, source).expression
+    end
+
+    defp select_value_expr(expression, _from), do: expr(expression)
 
     defp source(%{source: {table, nil}}, index) when is_binary(table) do
       [source_name(table), " AS q", to_string(index)]

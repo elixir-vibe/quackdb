@@ -708,6 +708,12 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
 
     assert [%QuackDB.TestSchemas.BinaryEvent{id: ^uuid, payload: ^payload}] =
              QuackDB.IntegrationRepo.all(query)
+
+    id_query = from(event in QuackDB.TestSchemas.BinaryEvent, select: event.id)
+    map_query = from(event in QuackDB.TestSchemas.BinaryEvent, select: %{id: event.id})
+
+    assert [^uuid] = QuackDB.IntegrationRepo.all(id_query)
+    assert [%{id: ^uuid}] = QuackDB.IntegrationRepo.all(map_query)
   end
 
   test "Ecto raw query parameters preserve UUID and blob values" do
