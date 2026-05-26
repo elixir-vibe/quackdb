@@ -17,7 +17,9 @@ defmodule QuackDB.TelemetryTest do
         [:quackdb, :append, :start],
         [:quackdb, :append, :stop],
         [:quackdb, :fetch, :start],
-        [:quackdb, :fetch, :stop]
+        [:quackdb, :fetch, :stop],
+        [:custom, :quackdb, :query, :start],
+        [:custom, :quackdb, :query, :stop]
       ],
       &__MODULE__.handle_event/4,
       parent
@@ -32,10 +34,16 @@ defmodule QuackDB.TelemetryTest do
     connection =
       start_supervised!({QuackDB, uri: "http://localhost:9494", transport: transport()})
 
-    assert %QuackDB.Result{rows: [[1]]} = QuackDB.query!(connection, "SELECT 1")
+    assert %QuackDB.Result{rows: [[1]]} =
+             QuackDB.query!(connection, "SELECT ?", [1],
+               telemetry_options: [request_id: "req-1"],
+               telemetry_params: true
+             )
 
     assert_received {:telemetry, [:quackdb, :query, :start], %{system_time: _}, metadata}
     assert metadata.query == "SELECT 1"
+    assert metadata.params == [1]
+    assert metadata.options == [request_id: "req-1"]
     assert metadata.connection_id == "conn-1"
 
     assert_received {:telemetry, [:quackdb, :fetch, :start], %{system_time: _}, metadata}
@@ -65,6 +73,7 @@ defmodule QuackDB.TelemetryTest do
     assert metadata.query == "APPEND events"
     assert metadata.table == "events"
     assert metadata.rows == 2
+    assert metadata.batches == 1
     assert metadata.connection_id == "conn-1"
 
     assert_received {:telemetry, [:quackdb, :append, :stop], %{duration: duration}, metadata}
@@ -72,6 +81,27 @@ defmodule QuackDB.TelemetryTest do
     assert metadata.command == :insert
     assert metadata.rows == 2
     assert metadata.result == :ok
+  end
+
+  test "supports custom telemetry prefixes" do
+    connection =
+      start_supervised!(
+        {QuackDB,
+         uri: "http://localhost:9494",
+         transport: transport(),
+         telemetry_prefix: [:custom, :quackdb]}
+      )
+
+    assert %QuackDB.Result{rows: [[1]]} = QuackDB.query!(connection, "SELECT 1")
+
+    assert_received {:telemetry, [:custom, :quackdb, :query, :start], %{system_time: _}, metadata}
+    assert metadata.query == "SELECT 1"
+
+    assert_received {:telemetry, [:custom, :quackdb, :query, :stop], %{duration: duration},
+                     metadata}
+
+    assert is_integer(duration)
+    assert metadata.command == :select
   end
 
   def handle_event(event, measurements, metadata, parent) do

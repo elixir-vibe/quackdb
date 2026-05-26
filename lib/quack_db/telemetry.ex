@@ -1,17 +1,23 @@
 defmodule QuackDB.Telemetry do
   @moduledoc false
 
-  @events %{
-    query: [:quackdb, :query],
-    append: [:quackdb, :append],
-    fetch: [:quackdb, :fetch]
-  }
+  @default_prefix [:quackdb]
+  @operations [:query, :append, :fetch]
 
-  @spec span(atom(), map(), (-> term())) :: term()
-  def span(operation, metadata, fun) when is_function(fun, 0) do
-    :telemetry.span(event(operation), metadata, fun)
+  @spec default_prefix() :: [atom()]
+  def default_prefix, do: @default_prefix
+
+  @spec span([atom()], atom(), map(), (-> term())) :: term()
+  def span(prefix, operation, metadata, fun)
+      when operation in @operations and is_function(fun, 0) do
+    :telemetry.span(event(prefix, operation), metadata, fun)
   end
 
-  @spec event(atom()) :: [atom()]
-  def event(operation), do: Map.fetch!(@events, operation)
+  @spec event([atom()], atom()) :: [atom()]
+  def event(prefix, operation) when operation in @operations do
+    append_operation(prefix, operation)
+  end
+
+  defp append_operation([], operation), do: [operation]
+  defp append_operation([head | tail], operation), do: [head | append_operation(tail, operation)]
 end

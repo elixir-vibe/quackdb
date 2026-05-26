@@ -290,6 +290,36 @@ You can also convert existing results:
 
 When the optional `:table` package is available, `QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so Livebook and Table-aware libraries can consume query results directly.
 
+### Telemetry
+
+QuackDB emits `:telemetry` spans for direct query, append, and fetch operations:
+
+```elixir
+[:quackdb, :query, :start]
+[:quackdb, :query, :stop]
+[:quackdb, :append, :start]
+[:quackdb, :append, :stop]
+[:quackdb, :fetch, :start]
+[:quackdb, :fetch, :stop]
+```
+
+Use `:telemetry_prefix` on the connection to customize event names:
+
+```elixir
+{QuackDB, uri: "http://localhost:9494", telemetry_prefix: [:my_app, :quackdb]}
+```
+
+Then query events are emitted as `[:my_app, :quackdb, :query, :stop]`. Per-operation `:telemetry_options` are copied into metadata, and params are included only when `telemetry_params: true` is passed:
+
+```elixir
+QuackDB.query!(conn, "SELECT ?", [1],
+  telemetry_options: [request_id: "req-1"],
+  telemetry_params: true
+)
+```
+
+Append metadata includes the target table, row count, batch count, and batch size.
+
 ### Command results
 
 DuckDB returns affected-row counts through a `Count` column. QuackDB normalizes those into `num_rows` for command results:
