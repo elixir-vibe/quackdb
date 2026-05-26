@@ -509,7 +509,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp expr({:in, _meta, [left, right]}) do
-      ["(", expr(left), " IN ", in_expr(right), ")"]
+      in_expr(left, right)
     end
 
     defp expr({:not, _meta, [{:is_nil, _is_nil_meta, [expression]}]}) do
@@ -574,13 +574,14 @@ if Code.ensure_loaded?(Ecto.Query) do
       unsupported!(:expression, "unsupported JSON path segment: #{inspect(segment)}")
     end
 
-    defp in_expr(%Ecto.Query.Tagged{value: values}) when is_list(values), do: in_expr(values)
+    defp in_expr(left, %Ecto.Query.Tagged{value: values}) when is_list(values),
+      do: in_expr(left, values)
 
-    defp in_expr(values) when is_list(values) do
-      ["(", values |> Enum.map(&expr/1) |> Enum.intersperse(", "), ")"]
+    defp in_expr(left, values) when is_list(values) do
+      ["(", expr(left), " IN (", values |> Enum.map(&expr/1) |> Enum.intersperse(", "), "))"]
     end
 
-    defp in_expr(expression), do: expr(expression)
+    defp in_expr(left, expression), do: ["(", expr(left), " IN ", expr(expression), ")"]
 
     defp typed_expr(value, {_source_index, _field}), do: expr(value)
     defp typed_expr({:^, _meta, [_index]}, type), do: ["CAST(? AS ", ecto_cast_type!(type), ")"]

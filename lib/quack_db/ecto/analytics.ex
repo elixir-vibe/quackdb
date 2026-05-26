@@ -109,9 +109,25 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro date_trunc(part, timestamp) when is_atom(part) do
+      sql = IO.iodata_to_binary(["date_trunc(", date_part_literal!(part), ", ?)"])
+
+      quote do
+        fragment(unquote(sql), unquote(timestamp))
+      end
+    end
+
     defmacro date_trunc(part, timestamp) do
       quote do
         fragment("date_trunc(?, ?)", unquote(part), unquote(timestamp))
+      end
+    end
+
+    defmacro date_part(part, timestamp) when is_atom(part) do
+      sql = IO.iodata_to_binary(["date_part(", date_part_literal!(part), ", ?)"])
+
+      quote do
+        fragment(unquote(sql), unquote(timestamp))
       end
     end
 
@@ -137,6 +153,38 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       quote do
         fragment("variance(?)", unquote(expression))
       end
+    end
+
+    defp date_part_literal!(part) do
+      part
+      |> date_part_name!()
+      |> QuackDB.SQL.literal!()
+    end
+
+    defp date_part_name!(part)
+         when part in [
+                :year,
+                :quarter,
+                :month,
+                :week,
+                :day,
+                :dayofweek,
+                :dow,
+                :isodow,
+                :dayofyear,
+                :doy,
+                :hour,
+                :minute,
+                :second,
+                :millisecond,
+                :microsecond,
+                :epoch
+              ] do
+      Atom.to_string(part)
+    end
+
+    defp date_part_name!(part) do
+      raise ArgumentError, "unsupported date part: #{inspect(part)}"
     end
 
     defp json_path!(path) do

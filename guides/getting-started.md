@@ -536,13 +536,13 @@ use QuackDB.Ecto
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
-    group_by: [date_part("hour", event.occurred_at)],
+    group_by: [date_part(:hour, event.occurred_at)],
     select: %{
-      hour: date_part("hour", event.occurred_at),
+      hour: date_part(:hour, event.occurred_at),
       tier:
         case_when do
           event.score >= 90 -> "high"
-          event.score >= 50 -> "medium"
+          event.score >= 50 and event.score <= 89 -> "medium"
           true -> "normal"
         end,
       safe_score:

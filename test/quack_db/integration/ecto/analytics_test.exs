@@ -18,10 +18,10 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           tier:
             case_when do
               event.score >= 20 -> "very high"
-              event.score >= 10 -> "high"
+              event.score >= 10 and event.score <= 19 -> "high"
               true -> "normal"
             end,
-          hour: date_part("hour", event.occurred_at),
+          hour: date_part(:hour, event.occurred_at),
           safe_score:
             case_when do
               event.score == 0 -> nil
