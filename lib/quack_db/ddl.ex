@@ -98,11 +98,9 @@ defmodule QuackDB.DDL do
     ["DROP TABLE ", if_exists(options), QuackDB.Type.quote_identifier(name)]
   end
 
-  if Code.ensure_loaded?(Ecto.Query) do
-    defp table_query(%Ecto.Query{} = query) do
-      assert_unparameterized_query!(query)
-      Ecto.Adapters.QuackDB.Query.all(query)
-    end
+  defp table_query(%{__struct__: Ecto.Query} = query) do
+    assert_unparameterized_query!(query)
+    apply(Ecto.Adapters.QuackDB.Query, :all, [query])
   end
 
   defp table_query(query), do: query
@@ -114,7 +112,7 @@ defmodule QuackDB.DDL do
     end
   end
 
-  defp parameterized_query?(%Ecto.Query{} = query) do
+  defp parameterized_query?(%{__struct__: Ecto.Query} = query) do
     query
     |> Map.take([
       :wheres,

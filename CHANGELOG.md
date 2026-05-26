@@ -4,7 +4,16 @@
 
 ### Added
 
-#### Append, Explorer, and columnar results
+#### Local DuckDB and transport
+
+- Replaced Req-based HTTP calls with a stateful Mint transport owned by each DBConnection process, with explicit connect/receive/shutdown timeouts, closed-connection reopening, and safer timeout cleanup.
+- Added process-local Quack client query IDs for query, append, and telemetry correlation.
+- Added local server performance defaults and `QuackDB.Server` `:settings` / `:global_settings` boot options.
+- Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`, with built-in checksums for the pinned DuckDB CLI downloads.
+- Added managed DuckDB binary guide and install-task target prefetching.
+- Documented managed DuckDB Windows limitations and linked the managed binary guide from getting started docs.
+
+#### Native writes, Explorer, and columnar results
 
 - Added `QuackDB.insert_columns/4` / `insert_columns!/4` for column-oriented native append batches.
 - Added `QuackDB.Explorer.insert_dataframe/4` / `insert_dataframe!/4` for appending Explorer dataframes through native column append.
@@ -18,16 +27,15 @@
 - Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.
 - Clarified that QuackDB does not automatically upload local source files.
 
-#### Ecto
+#### Expanded Ecto adapter
 
-- Added `use QuackDB.Ecto` to import Ecto query, analytical, spatial, and full-text search helpers together.
-- Added Ecto combinations, lock SQL, and broader `update_all` / `delete_all` generation, including joined mutations and rowid-filtered ordered/limited mutations where DuckDB SQL allows it.
-- Added Ecto upsert SQL generation, schema update/delete callbacks, explain query support, and basic migration DDL generation with real-server coverage.
-- Expanded Ecto coverage for primary-key schema updates/deletes, full schema selects, `Repo.explain/3`, upsert increment/replacement expressions, unsafe conflict targets, composite-key/reference/check-constraint migration DDL, and actual `Ecto.Migrator` execution.
-- Added Ecto SQL generation for additional analytical query expressions, including `selected_as`, `map`, `type`, and identifier fragments.
-- Expanded Ecto schema parameter coverage for `:binary_id` and `:binary` fields.
+- Added `use QuackDB.Ecto` to import Ecto query, analytical, spatial, and FTS helpers together.
+- Added Ecto combinations, lock SQL, schema full selects, `Repo.get!/2`, `Repo.explain/3`, and additional analytical query expressions including `selected_as`, `map`, `type`, and identifier fragments.
+- Added Ecto upsert SQL generation, schema update/delete callbacks, `update_all` / `delete_all`, joined mutations, and rowid-filtered ordered/limited mutations where DuckDB SQL allows it.
+- Added basic migration DDL generation with real-server coverage for create/drop/alter tables, table/column renames, references, indexes, primary keys, composite primary keys, check constraints, and `Ecto.Migrator` execution.
+- Expanded Ecto parameter and schema coverage for `:binary_id`, `:binary`, UUID/blob raw params, intervals, temporal values, decimals, arrays, and Geo spatial params.
 
-#### Protocol and DuckDB types
+#### Protocol and DuckDB type fidelity
 
 - Added conversion helpers and compact inspect output for DuckDB-specific scalar structs.
 - Added decode-side checks for quack-ts protocol conformance fixtures.
@@ -35,20 +43,11 @@
 - Added malformed `BIGNUM` protocol coverage.
 - Added an optional internal `:fsst` bridge for future Quack FSST payload decoding once DuckDB exposes compressed FSST vectors over Quack.
 
-#### Server, transport, and managed DuckDB
-
-- Replaced Req-based HTTP transport with a stateful Mint transport owned by each DBConnection process, with explicit connect/receive/shutdown timeout options and closed-connection reopening.
-- Added process-local Quack client query IDs for query, append, and telemetry correlation.
-- Added local server performance defaults and `QuackDB.Server` `:settings` / `:global_settings` boot options.
-- Added explicit DuckDB binary management through `QuackDB.Binary`, `mix quackdb.install`, and `QuackDB.Server` `duckdb: :managed`, with built-in checksums for the pinned DuckDB CLI downloads.
-- Added managed DuckDB binary guide and install-task target prefetching.
-- Documented managed DuckDB Windows limitations and linked the managed binary guide from getting started docs.
-
 #### Spatial, FTS, and observability
 
 - Added `QuackDB.SQL.install/1`, `QuackDB.Spatial`, and `QuackDB.Ecto.Spatial` helpers for DuckDB spatial extension statements and `ST_*` expressions.
 - Added optional `QuackDB.Geometry` WKB conversion helpers and `%Geo.*{}` SQL/Ecto parameter support when the `:geo` package is available.
-- Added `QuackDB.FTS`, `QuackDB.FTS`, and `QuackDB.Ecto.FTS` helpers for DuckDB FTS indexes, BM25 search ranking, stemming, and Ecto search expressions.
+- Added `QuackDB.FTS` and `QuackDB.Ecto.FTS` helpers for DuckDB FTS indexes, BM25 search ranking, stemming, and Ecto search expressions.
 - Added `:telemetry` events for query, append, and fetch operations, including custom prefixes, metadata options, optional params, and append batch counts.
 
 #### Docs and examples

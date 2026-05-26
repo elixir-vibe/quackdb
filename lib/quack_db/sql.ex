@@ -171,10 +171,7 @@ defmodule QuackDB.SQL do
         {:ok, ["'", String.replace(value, "'", "''"), "'"]}
 
       byte_size(value) == 16 ->
-        case Ecto.UUID.load(value) do
-          {:ok, uuid} -> literal({:uuid, uuid})
-          :error -> binary_literal(value)
-        end
+        uuid_binary_literal(value)
 
       true ->
         binary_literal(value)
@@ -207,6 +204,17 @@ defmodule QuackDB.SQL do
 
     (positional ++ named)
     |> Enum.intersperse(", ")
+  end
+
+  if Code.ensure_loaded?(Ecto.UUID) do
+    defp uuid_binary_literal(value) do
+      case Ecto.UUID.load(value) do
+        {:ok, uuid} -> literal({:uuid, uuid})
+        :error -> binary_literal(value)
+      end
+    end
+  else
+    defp uuid_binary_literal(value), do: binary_literal(value)
   end
 
   defp binary_literal(value), do: literal({:blob, value})
