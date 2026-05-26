@@ -26,7 +26,7 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `ENUM` | `String.t()` | Supported | Returned as the enum label. |
 | `BIT` | `String.t()` | Supported | Returned as a string of `0` and `1` characters. |
 | `BIGNUM` | `integer()` | Supported | Decodes DuckDB's variable-length integer payload into an Elixir integer. |
-| `GEOMETRY` | `binary()` | Partial | Treated as raw bytes; semantic geometry decoding is not implemented. |
+| `GEOMETRY` | `binary()` | Partial | Decoded as WKB-compatible bytes when DuckDB's spatial extension returns geometry values; semantic geometry structs are not implemented. |
 
 ## Temporal types
 

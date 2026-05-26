@@ -57,7 +57,7 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | ANY/TEMPLATE/LAMBDA/POINTER | Unsupported | Unsupported | Protocol metadata reserved/unsupported |
 | AGGREGATE_STATE | Unsupported | Unsupported | Metadata not implemented |
 | Extension/custom types | Unsupported | Unsupported | Metadata not implemented |
-| GEOMETRY | Partial | Partial | Treated as raw bytes; semantic geometry decoding is not implemented |
+| GEOMETRY | Partial | Partial | Decoded as WKB-compatible bytes from DuckDB spatial geometry values; semantic geometry structs are not implemented |
 
 ## DBConnection and client coverage
 

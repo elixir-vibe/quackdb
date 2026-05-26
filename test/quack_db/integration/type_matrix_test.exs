@@ -113,6 +113,28 @@ defmodule QuackDB.Integration.TypeMatrixTest do
            ]
   end
 
+  test "decodes spatial geometry as WKB-compatible bytes" do
+    connection = start_connection!()
+
+    QuackDB.query!(connection, QuackDB.Spatial.load())
+
+    geometry = QuackDB.Spatial.point(1, 2)
+
+    assert %QuackDB.Result{rows: [[geometry, wkb, hexwkb]]} =
+             QuackDB.query!(connection, [
+               "SELECT ",
+               geometry,
+               " AS geometry, ",
+               QuackDB.Spatial.as_wkb(geometry),
+               " AS wkb, ",
+               QuackDB.Spatial.as_hex_wkb(geometry),
+               " AS hexwkb"
+             ])
+
+    assert geometry == wkb
+    assert geometry == Base.decode16!(hexwkb, case: :mixed)
+  end
+
   test "decodes nested edge cases" do
     assert [row] =
              query_rows!("""

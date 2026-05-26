@@ -1,7 +1,8 @@
 defmodule QuackDB.SQLTest do
   use ExUnit.Case, async: true
 
-  test "builds LOAD statements" do
+  test "builds INSTALL and LOAD statements" do
+    assert QuackDB.SQL.install(:quack) |> IO.iodata_to_binary() == "INSTALL quack;"
     assert QuackDB.SQL.load(:quack) |> IO.iodata_to_binary() == "LOAD quack;"
   end
 

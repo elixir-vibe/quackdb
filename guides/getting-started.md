@@ -331,6 +331,27 @@ Keyword rows preserve append order and allow QuackDB to infer the column list fr
 
 Native append columns can be declared with scalar `QuackDB.Type` specs and nested specs such as `{:list, :varchar}`, `{:struct, [source: :varchar, count: :integer]}`, `{:array, :integer, 3}`, and `{:map, :varchar, :varchar}`. Temporal append values are normalized through Elixir's Calendar-aware `Date`, `Time`, `NaiveDateTime`, and `DateTime` conversion APIs before encoding.
 
+## Spatial helpers
+
+DuckDB's spatial extension can be loaded with SQL helpers, and spatial expressions can be composed as iodata:
+
+```elixir
+alias QuackDB.Spatial
+
+QuackDB.query!(conn, Spatial.load())
+
+point = Spatial.point(1, 2)
+
+QuackDB.query!(conn, [
+  "SELECT ",
+  point, " AS geom, ",
+  Spatial.as_wkb(point), " AS wkb, ",
+  Spatial.as_text(point), " AS wkt"
+])
+```
+
+DuckDB `GEOMETRY` values decode as WKB-compatible bytes. Add optional `{:geo, "~> 4.1"}` when you want to convert those bytes to `Geo` structs with `QuackDB.Geo.decode_wkb!/1`.
+
 ## Inspect output in IEx
 
 QuackDB implements compact inspection for common structs so manual review stays readable:

@@ -51,6 +51,12 @@ defmodule QuackDB.SQL do
     raise ArgumentError, "expected params to be a list, got: #{inspect(params)}"
   end
 
+  @doc "Builds an `INSTALL extension;` statement."
+  @spec install(atom() | String.t()) :: iodata()
+  def install(extension) do
+    ["INSTALL ", identifier!(extension, :extension), ";"]
+  end
+
   @doc "Builds a `LOAD extension;` statement."
   @spec load(atom() | String.t()) :: iodata()
   def load(extension) do

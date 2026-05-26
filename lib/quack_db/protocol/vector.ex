@@ -210,7 +210,8 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp decode_flat(binary, type, row_count, vector) do
-    with {:ok, has_validity?, rest} <- read_required(binary, 100, &Reader.read_bool/1),
+    with {:ok, rest} <- maybe_skip_geometry_version(binary, type),
+         {:ok, has_validity?, rest} <- read_required(rest, 100, &Reader.read_bool/1),
          {:ok, validity, rest} <- maybe_read_validity(rest, has_validity?, row_count),
          {:ok, values, rest} <- read_values(rest, type, row_count, validity),
          {:ok, field_end, rest} <- Reader.read_field_id(rest),
@@ -218,6 +219,21 @@ defmodule QuackDB.Protocol.Vector do
       {:ok, %{vector | values: values}, rest}
     end
   end
+
+  defp maybe_skip_geometry_version(binary, %{name: :geometry}) do
+    case Reader.read_field_id(binary) do
+      {:ok, 99, rest} ->
+        with {:ok, _version, rest} <- Reader.read_uleb128(rest), do: {:ok, rest}
+
+      {:ok, _field_id, _rest} ->
+        {:ok, binary}
+
+      {:error, _error} = error ->
+        error
+    end
+  end
+
+  defp maybe_skip_geometry_version(binary, _type), do: {:ok, binary}
 
   defp read_values(binary, type, row_count, validity) do
     physical_type = LogicalType.physical_type(type)
@@ -679,7 +695,7 @@ defmodule QuackDB.Protocol.Vector do
     (byte &&& 1 <<< rem(index, 8)) != 0
   end
 
-  defp decode_string_like(%{name: :blob}, value), do: value
+  defp decode_string_like(%{name: name}, value) when name in [:blob, :geometry], do: value
   defp decode_string_like(%{name: :bit}, value), do: decode_bitstring(value)
 
   defp decode_string_like(%{name: :bignum}, value), do: decode_bignum(value)
