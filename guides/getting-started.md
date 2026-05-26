@@ -136,53 +136,23 @@ result.rows
 
 ## Query files and lakehouse sources
 
-DuckDB can scan files, object stores, and lakehouse table formats directly. `QuackDB.Source` builds safe table-function fragments that can be used from Ecto queries or raw SQL:
+DuckDB can scan files, object stores, and lakehouse table formats directly. `QuackDB.Source` builds safe table-function fragments that can be used from Ecto queries or direct SQL:
 
 ```elixir
 use QuackDB.Ecto
 
 alias QuackDB.Source
 
-source =
-  Source.parquet("s3://bucket/events/*.parquet",
-    hive_partitioning: true,
-    union_by_name: true
-  )
+source = Source.csv("events.csv", header: true)
 
 MyApp.AnalyticsRepo.all(
   from event in source,
-    group_by: event.category,
-    select: %{category: event.category, events: count()}
+    where: event.id > 1,
+    select: %{id: event.id, name: event.name}
 )
 ```
 
-Available helpers include:
-
-- `QuackDB.Source.parquet/2`
-- `QuackDB.Source.csv/2`
-- `QuackDB.Source.json/2`
-- `QuackDB.Source.xlsx/2`
-- `QuackDB.Source.delta/2`
-- `QuackDB.Source.iceberg/2`
-
-Options are emitted as DuckDB named parameters, and paths/options are formatted as SQL literals instead of interpolated directly:
-
-```elixir
-Source.csv("events.csv", header: true, columns: %{id: "INTEGER", name: "VARCHAR"})
-#=> "read_csv('events.csv', header = TRUE, columns = {'id': 'INTEGER', 'name': 'VARCHAR'})"
-```
-
-Use `QuackDB.SQL.install/1`, `QuackDB.SQL.load/1`, and `QuackDB.Secret` to configure remote filesystems:
-
-```elixir
-alias QuackDB.{Secret, SQL}
-
-QuackDB.query!(conn, SQL.install(:httpfs))
-QuackDB.query!(conn, SQL.load(:httpfs))
-QuackDB.query!(conn, Secret.s3(provider: :credential_chain))
-```
-
-The same fragments can still be passed to `QuackDB.query/4` when you need direct SQL composition.
+See [`guides/sources.md`](sources.md) for HTTP(S), S3/R2/GCS, Azure/ADLS, Hugging Face, Delta, Iceberg, extensions, and DuckDB secrets.
 
 ## Stream large result sets
 

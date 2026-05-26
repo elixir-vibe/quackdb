@@ -153,13 +153,13 @@ QuackDB provides a few layers that can be used independently:
 | Layer | Use it for | Start here |
 | --- | --- | --- |
 | `QuackDB.query/4`, streams, and columnar helpers | Direct DBConnection-style analytical queries | [`guides/getting-started.md`](guides/getting-started.md) |
-| `QuackDB.Source` | DuckDB file, object-store, and lakehouse table functions | [`guides/getting-started.md#query-files-and-lakehouse-sources`](guides/getting-started.md#query-files-and-lakehouse-sources) |
+| `QuackDB.Source` | DuckDB file, object-store, and lakehouse table functions | [`guides/sources.md`](guides/sources.md) |
 | `QuackDB.insert_rows/4` and `insert_columns/4` | Native Quack append protocol writes | [`guides/getting-started.md#append-rows`](guides/getting-started.md#append-rows) |
 | `Ecto.Adapters.QuackDB` and `use QuackDB.Ecto` | Ecto SQL queries, analytics helpers, spatial fragments, and plain inserts | [`guides/getting-started.md#ecto-raw-sql`](guides/getting-started.md#ecto-raw-sql) |
 | `QuackDB.Explorer` and `Table.Reader` | DataFrame conversion, dataframe append, and Livebook-friendly tabular output | [`guides/explorer.md`](guides/explorer.md) |
 | `QuackDB.Spatial`, `QuackDB.Ecto.Spatial`, and `QuackDB.Geometry` | DuckDB Spatial SQL, Ecto spatial queries, and optional Geo/WKB conversion | [`guides/spatial.md`](guides/spatial.md) |
 | Telemetry spans | Query, append, and fetch spans | [`guides/telemetry.md`](guides/telemetry.md) |
-| `QuackDB.Secret` and `QuackDB.SQL.install/1` / `load/1` | DuckDB extensions and secrets for HTTP/S3/R2/GCS/Azure/Hugging Face sources | [`guides/getting-started.md#query-files-and-lakehouse-sources`](guides/getting-started.md#query-files-and-lakehouse-sources) |
+| `QuackDB.Secret` and `QuackDB.SQL.install/1` / `load/1` | DuckDB extensions and secrets for HTTP/S3/R2/GCS/Azure/Hugging Face sources | [`guides/sources.md`](guides/sources.md) |
 
 A few common snippets:
 
@@ -264,4 +264,4 @@ QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
 
-See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/spatial.md`](guides/spatial.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/research.md`](docs/research.md) for protocol notes.
+See [`guides/getting-started.md`](guides/getting-started.md) for a longer walkthrough, [`guides/type-support.md`](guides/type-support.md) for the current DuckDB type matrix, [`guides/examples.md`](guides/examples.md), [`guides/explorer.md`](guides/explorer.md), [`guides/sources.md`](guides/sources.md), [`guides/spatial.md`](guides/spatial.md), [`guides/telemetry.md`](guides/telemetry.md), and [`docs/research.md`](docs/research.md) for protocol notes.

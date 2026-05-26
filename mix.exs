@@ -75,6 +75,7 @@ defmodule QuackDB.MixProject do
         "guides/type-support.md",
         "guides/examples.md",
         "guides/explorer.md",
+        "guides/sources.md",
         "guides/spatial.md",
         "guides/telemetry.md",
         "examples/livebook_analytics.livemd",
