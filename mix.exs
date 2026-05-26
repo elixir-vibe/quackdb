@@ -75,6 +75,7 @@ defmodule QuackDB.MixProject do
       main: "readme",
       extras: [
         "README.md",
+        "CONTRIBUTING.md",
         "guides/getting-started.md",
         "guides/type-support.md",
         "guides/examples.md",

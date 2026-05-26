@@ -345,6 +345,8 @@ mix deps.get
 mix ci
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks, example smoke tests, package audit steps, and release dry-run notes.
+
 Integration tests are skipped by default. To run them against a Quack server:
 
 ```sh

@@ -59,6 +59,7 @@ find quackdb-* -type f | sort
 if find quackdb-* \
   \( -path '*/examples/*' \
      -o -path '*docs/research*' \
+     -o -path '*docs/testing*' \
      -o -path '*deps*' \
      -o -path '*_build*' \) -print | grep .; then
   echo "unexpected files in package" >&2
@@ -82,6 +83,7 @@ The package should not include:
 
 - `examples/`
 - `docs/research/`
+- `docs/testing/`
 - `test/`
 - `deps/`
 - `_build/`
