@@ -68,9 +68,11 @@ mix quackdb.install --target linux-amd64 --cache-dir priv/quackdb-binaries
 
 This is useful for CI cache priming or container image build steps. Runtime `duckdb: :managed` still chooses the current OS/architecture automatically.
 
-Supported targets for the pinned version are:
+Supported managed-download targets for the pinned version are:
 
 - `linux-amd64`
 - `linux-arm64`
 - `osx-amd64`
 - `osx-arm64`
+
+Windows managed downloads are not supported yet. Use `QUACKDB_BINARY_PATH` or pass `duckdb: "C:/path/to/duckdb.exe"` on Windows until zip extraction and checksum coverage are added.

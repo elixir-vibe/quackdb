@@ -241,7 +241,7 @@ children =
   )
 ```
 
-`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. QuackDB does not download DuckDB during dependency compilation; use `duckdb: :managed` or the install Mix task when you want QuackDB to download and cache DuckDB's official CLI binary. Managed downloads are checksum-verified for QuackDB's pinned DuckDB version. Set `QUACKDB_BINARY_PATH` or pass `duckdb: "/path/to/duckdb"` when you want to control the executable. By default it sets DuckDB `threads` to `System.schedulers_online()` and lowers `quack_fetch_batch_chunks` from DuckDB's default `12` to `4`, which keeps fetch responses smaller while still batching chunks. For heavy analytical scans, use a smaller client `pool_size` such as `1..4`; for many small concurrent queries, use `System.schedulers_online()`.
+`QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. QuackDB does not download DuckDB during dependency compilation; use `duckdb: :managed` or the install Mix task when you want QuackDB to download and cache DuckDB's official CLI binary. Managed downloads are checksum-verified for QuackDB's pinned DuckDB version. Set `QUACKDB_BINARY_PATH` or pass `duckdb: "/path/to/duckdb"` when you want to control the executable. See the [managed DuckDB guide](guides/managed-duckdb.md) for cache, checksum, and target-prefetch options. By default it sets DuckDB `threads` to `System.schedulers_online()` and lowers `quack_fetch_batch_chunks` from DuckDB's default `12` to `4`, which keeps fetch responses smaller while still batching chunks. For heavy analytical scans, use a smaller client `pool_size` such as `1..4`; for many small concurrent queries, use `System.schedulers_online()`.
 
 ## Development
 

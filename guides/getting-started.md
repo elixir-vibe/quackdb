@@ -58,7 +58,7 @@ mix quackdb.install
 mix quackdb.install --print-path
 ```
 
-Use `QUACKDB_BINARY_PATH` or pass `duckdb: "/path/to/duckdb"` when you want QuackDB to use a system or custom executable instead.
+Use `QUACKDB_BINARY_PATH` or pass `duckdb: "/path/to/duckdb"` when you want QuackDB to use a system or custom executable instead. See the [managed DuckDB guide](managed-duckdb.md) for cache, checksum, and target-prefetch options.
 
 Or start DuckDB manually with the `quack` extension loaded:
 
