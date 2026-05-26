@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.Value do
-  @moduledoc false
+  @moduledoc """
+  Scalar value normalization for DuckDB logical types.
+  """
 
   import Bitwise
 

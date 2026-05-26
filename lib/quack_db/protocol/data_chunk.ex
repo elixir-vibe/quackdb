@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.DataChunk do
-  @moduledoc false
+  @moduledoc """
+  Encoding and row/column materialization helpers for DuckDB data chunks.
+  """
 
   alias QuackDB.Error
   alias QuackDB.Protocol.LogicalType

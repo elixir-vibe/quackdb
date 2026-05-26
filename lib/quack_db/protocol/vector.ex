@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.Vector do
-  @moduledoc false
+  @moduledoc """
+  DuckDB vector encoding and decoding helpers.
+  """
 
   import Bitwise
 

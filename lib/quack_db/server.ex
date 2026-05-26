@@ -27,6 +27,8 @@ defmodule QuackDB.Server do
   alias QuackDB.Protocol.Message.Disconnect
   alias QuackDB.Protocol.Message.ErrorResponse
 
+  @ready_check_timeout 1_000
+
   defstruct [
     :daemon,
     :duckdb,
@@ -230,7 +232,7 @@ defmodule QuackDB.Server do
   defp check_ready(state) do
     with {:ok, uri} <- QuackDB.URI.normalize(state.uri),
          request <- connection_request(state),
-         {:ok, response} <- QuackDB.Transport.post(uri, request, timeout: 1_000),
+         {:ok, response} <- QuackDB.Transport.post(uri, request, timeout: @ready_check_timeout),
          {:ok, {header, body}} <- Codec.decode(response),
          :ok <- ready_response(header, body) do
       disconnect(uri, header.connection_id)
@@ -265,7 +267,7 @@ defmodule QuackDB.Server do
 
   defp disconnect(uri, connection_id) do
     request = Codec.encode(%Disconnect{}, connection_id: connection_id)
-    _ignored = QuackDB.Transport.post(uri, request, timeout: 1_000)
+    _ignored = QuackDB.Transport.post(uri, request, timeout: @ready_check_timeout)
     :ok
   end
 

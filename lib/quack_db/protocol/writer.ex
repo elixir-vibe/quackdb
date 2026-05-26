@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.Writer do
-  @moduledoc false
+  @moduledoc """
+  Binary writer helpers for Quack protocol encoding.
+  """
 
   import Bitwise
 

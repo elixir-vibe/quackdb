@@ -17,6 +17,7 @@
 - Added a focused sources guide for DuckDB file/object-store/lakehouse sources, extensions, and secrets.
 - Added `QuackDB.Extension` helpers for DuckDB `INSTALL` and `LOAD` statements.
 - Clarified that QuackDB does not automatically upload local source files.
+- Replaced Req-based HTTP transport with a stateful Mint transport owned by each DBConnection process.
 - Added examples for telemetry observation, Explorer dataframe roundtrips, append benchmarks, Livebook analytics, and a WMS-like spatial GeoJSON app.
 
 ### Fixed

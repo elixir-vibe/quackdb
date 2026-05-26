@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.LogicalType do
-  @moduledoc false
+  @moduledoc """
+  DuckDB logical type encoding helpers for Quack protocol messages.
+  """
 
   alias QuackDB.Error
   alias QuackDB.Protocol.Reader

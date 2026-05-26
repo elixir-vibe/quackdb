@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.Message do
-  @moduledoc false
+  @moduledoc """
+  Quack protocol message structs.
+  """
 
   defmodule Header do
     @moduledoc """

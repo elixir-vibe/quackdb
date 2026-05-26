@@ -35,7 +35,8 @@ defmodule QuackDB.MixProject do
   defp deps do
     [
       {:db_connection, "~> 2.7"},
-      {:req, "~> 0.5"},
+      {:mint, "~> 1.8"},
+      {:castore, "~> 1.0"},
       {:decimal, "~> 2.0"},
       {:muontrap, "~> 1.5"},
       {:telemetry, "~> 1.0"},
@@ -86,7 +87,29 @@ defmodule QuackDB.MixProject do
         Guides: ~r/guides\//,
         Examples: ~r/examples\//,
         Research: ~r/docs\//
-      ]
+      ],
+      filter_modules: &public_doc_module?/2
     ]
+  end
+
+  defp public_doc_module?(module, _metadata) do
+    name = Atom.to_string(module)
+
+    not (name in internal_doc_modules() or String.starts_with?(name, "Elixir.QuackDB.Protocol."))
+  end
+
+  defp internal_doc_modules do
+    Enum.map(
+      [
+        QuackDB.Application,
+        QuackDB.DBConnection,
+        QuackDB.Inspect,
+        QuackDB.Protocol,
+        QuackDB.Transport,
+        QuackDB.Transport.Mint,
+        QuackDB.URI
+      ],
+      &Atom.to_string/1
+    )
   end
 end

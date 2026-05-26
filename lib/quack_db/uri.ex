@@ -1,5 +1,7 @@
 defmodule QuackDB.URI do
-  @moduledoc false
+  @moduledoc """
+  URI normalization for Quack HTTP endpoints.
+  """
 
   alias QuackDB.Error
 

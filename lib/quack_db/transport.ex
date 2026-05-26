@@ -1,49 +1,31 @@
 defmodule QuackDB.Transport do
-  @moduledoc false
+  @moduledoc """
+  Transport entry point for Quack binary HTTP requests.
 
-  alias QuackDB.Error
+  The default implementation uses a Mint-backed stateful connection owned by the DBConnection process.
+  """
 
-  @type option :: {:timeout, timeout()} | {:req_options, Keyword.t()}
+  @shutdown_timeout 1_000
 
-  @spec post(URI.t(), iodata(), [option]) :: {:ok, binary()} | {:error, Error.t()}
-  def post(uri, body, options \\ []) do
-    request_options = [
-      url: URI.to_string(uri),
-      body: IO.iodata_to_binary(body),
-      headers: headers(),
-      receive_timeout: Keyword.get(options, :timeout, 15_000)
-    ]
-
-    options
-    |> Keyword.get(:req_options, [])
-    |> Keyword.merge(request_options)
-    |> Req.post()
-    |> normalize_response()
+  def start_link(uri, options \\ []) do
+    QuackDB.Transport.Mint.start_link(uri, options)
   end
 
-  defp headers do
-    [
-      {"content-type", "application/duckdb"},
-      {"accept", "application/duckdb, application/vnd.duckdb, application/octet-stream"}
-    ]
+  def post(%URI{} = uri, body, options) do
+    with {:ok, server} <- start_link(uri, options) do
+      try do
+        QuackDB.Transport.Mint.post(server, uri, body, options)
+      after
+        GenServer.stop(
+          server,
+          :normal,
+          Keyword.get(options, :shutdown_timeout, @shutdown_timeout)
+        )
+      end
+    end
   end
 
-  defp normalize_response({:ok, %{status: 200, body: body}}) when is_binary(body) do
-    {:ok, body}
-  end
-
-  defp normalize_response({:ok, %{status: status, body: body}}) do
-    message = "Quack server returned HTTP #{status}"
-
-    {:error,
-     Error.new(:http_error, message, source: :transport, metadata: %{body: body, status: status})}
-  end
-
-  defp normalize_response({:error, reason}) do
-    {:error,
-     Error.new(:transport_error, Exception.message(reason),
-       source: :transport,
-       metadata: %{reason: reason}
-     )}
+  def post(server, uri, body, options) do
+    QuackDB.Transport.Mint.post(server, uri, body, options)
   end
 end

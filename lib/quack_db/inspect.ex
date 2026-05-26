@@ -1,5 +1,7 @@
 defmodule QuackDB.Inspect do
-  @moduledoc false
+  @moduledoc """
+  Shared helpers for compact `Inspect` protocol implementations.
+  """
 
   import Inspect.Algebra
 

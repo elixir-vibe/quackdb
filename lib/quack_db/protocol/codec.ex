@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.Codec do
-  @moduledoc false
+  @moduledoc """
+  Encoder and decoder for top-level Quack protocol messages.
+  """
 
   alias QuackDB.Error
   alias QuackDB.Protocol

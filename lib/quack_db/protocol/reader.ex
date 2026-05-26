@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol.Reader do
-  @moduledoc false
+  @moduledoc """
+  Binary reader helpers for Quack protocol decoding.
+  """
 
   import Bitwise
 

@@ -1,5 +1,7 @@
 defmodule QuackDB.Protocol do
-  @moduledoc false
+  @moduledoc """
+  Quack protocol constants and codec entry point namespace.
+  """
 
   @field_end 0xFFFF
   @optional_index_invalid 0xFFFF_FFFF_FFFF_FFFF

@@ -1,5 +1,9 @@
 defmodule QuackDB.DBConnection do
-  @moduledoc false
+  @moduledoc """
+  DBConnection implementation for the remote DuckDB Quack protocol.
+
+  This module owns connection lifecycle, request execution, cursor-based streaming, transaction callbacks, and result normalization. HTTP transport and binary protocol encoding are delegated so the codec remains independent from DBConnection.
+  """
 
   use DBConnection
 
@@ -19,12 +23,15 @@ defmodule QuackDB.DBConnection do
   alias QuackDB.Result
   alias QuackDB.Telemetry
 
+  @disconnect_timeout 1_000
+
   defstruct [
     :uri,
     :token,
     :connection_id,
     :server,
     :transport,
+    :transport_owner,
     :client_version,
     :telemetry_prefix,
     status: :idle,
@@ -37,6 +44,7 @@ defmodule QuackDB.DBConnection do
           connection_id: String.t() | nil,
           server: ConnectionResponse.t() | nil,
           transport: function(),
+          transport_owner: pid() | nil,
           client_version: String.t(),
           telemetry_prefix: [atom()],
           status: DBConnection.status(),
@@ -185,7 +193,12 @@ defmodule QuackDB.DBConnection do
 
   def disconnect(_error, state) do
     request = Codec.encode(%Disconnect{}, connection_id: state.connection_id)
-    _ignored = state.transport.(state.uri, request, timeout: 1_000)
+    _ignored = state.transport.(state.uri, request, timeout: @disconnect_timeout)
+
+    if state.transport_owner do
+      GenServer.stop(state.transport_owner, :normal, @disconnect_timeout)
+    end
+
     :ok
   end
 
@@ -650,7 +663,8 @@ defmodule QuackDB.DBConnection do
        %__MODULE__{
          uri: uri,
          token: Keyword.get(options, :token, ""),
-         transport: Keyword.get(options, :transport, &QuackDB.Transport.post/3),
+         transport: Keyword.get(options, :transport),
+         transport_owner: nil,
          client_version: Keyword.get(options, :client_version, client_version()),
          telemetry_prefix: Keyword.get(options, :telemetry_prefix, Telemetry.default_prefix())
        }}
@@ -658,6 +672,12 @@ defmodule QuackDB.DBConnection do
   end
 
   defp connect_quack(state) do
+    with {:ok, state} <- start_transport(state) do
+      do_connect_quack(state)
+    end
+  end
+
+  defp do_connect_quack(state) do
     request =
       %ConnectionRequest{
         auth_string: state.token,
@@ -671,6 +691,20 @@ defmodule QuackDB.DBConnection do
       normalize_connect_response(decoded, state)
     end
   end
+
+  defp start_transport(%{transport: nil, uri: uri} = state) do
+    case QuackDB.Transport.start_link(uri) do
+      {:ok, owner} ->
+        {:ok,
+         %{state | transport: &QuackDB.Transport.post(owner, &1, &2, &3), transport_owner: owner}}
+
+      {:error, reason} ->
+        {:error, Error.new(:transport_error, inspect(reason), source: :transport)}
+    end
+  end
+
+  defp start_transport(%{transport: transport} = state) when is_function(transport, 3),
+    do: {:ok, state}
 
   defp normalize_connect_response({header, %ConnectionResponse{} = response}, state) do
     {:ok, %{state | connection_id: header.connection_id, server: response}}
