@@ -167,7 +167,7 @@ defmodule QuackDB.SQL do
 
   def literal(value) when is_binary(value) do
     cond do
-      String.valid?(value) ->
+      String.valid?(value) and not String.contains?(value, <<0>>) ->
         {:ok, ["'", String.replace(value, "'", "''"), "'"]}
 
       byte_size(value) == 16 ->

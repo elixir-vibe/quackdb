@@ -65,6 +65,11 @@ defmodule QuackDB.SQLTest do
              "ST_GeomFromWKB(from_hex('0101000000000000000000f03f0000000000000040'))"
   end
 
+  test "formats NUL-containing binaries as blob literals" do
+    assert {:ok, sql} = QuackDB.SQL.format("SELECT ?", [<<3, 2, 1, 0>>])
+    assert sql == "SELECT from_hex('03020100')"
+  end
+
   test "formats blobs, intervals, and lists" do
     assert {:ok, sql} =
              QuackDB.SQL.format("SELECT ?, ?, ?", [

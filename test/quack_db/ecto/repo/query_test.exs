@@ -172,6 +172,17 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     end
   end
 
+  test "Repo.query/3 formats NUL-containing binary params as blobs" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+
+    put_repo_env(transport(parent: parent, prepare: [chunk]))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {:ok, %{rows: [[1]]}} = QuackDB.EctoRepo.query("SELECT ? AS payload", [<<3, 2, 1, 0>>])
+    assert_received {:statement, "SELECT from_hex('03020100') AS payload"}
+  end
+
   test "Repo.query/3 formats parameter lists as SQL literals" do
     parent = self()
     chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])

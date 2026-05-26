@@ -731,7 +731,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     )
 
     uuid = Ecto.UUID.generate()
-    payload = <<3, 2, 1, 4>>
+    payload = <<3, 2, 1, 0>>
 
     assert {1, nil} =
              QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.RenamedBinaryEvent, [
