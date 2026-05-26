@@ -192,13 +192,27 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp select_expr(expression, from), do: select_value_expr(expression, from)
 
-    defp select_value_expr({{:., _, [{:&, _, [0]}, field]}, _, []}, %{source: {_table, schema}})
+    defp select_value_expr({{:., _, [{:&, _, [0]}, field]}, _, []} = expression, %{
+           source: {_table, schema}
+         })
          when is_atom(schema) and not is_nil(schema) do
-      source = schema.__schema__(:field_source, field)
-      schema_field(schema, field, 0, source).expression
+      case schema_field_for_select(schema, field) do
+        nil ->
+          expr(expression)
+
+        schema_field_name ->
+          source = schema.__schema__(:field_source, schema_field_name)
+          schema_field(schema, schema_field_name, 0, source).expression
+      end
     end
 
     defp select_value_expr(expression, _from), do: expr(expression)
+
+    defp schema_field_for_select(schema, field) do
+      Enum.find(schema.__schema__(:fields), fn schema_field ->
+        schema_field == field or schema.__schema__(:field_source, schema_field) == field
+      end)
+    end
 
     defp source(%{source: {table, nil}}, index) when is_binary(table) do
       [source_name(table), " AS q", to_string(index)]

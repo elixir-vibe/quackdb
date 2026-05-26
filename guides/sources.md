@@ -42,6 +42,27 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+## Materialize sources for FTS or repeated queries
+
+DuckDB features such as FTS indexes operate on tables, so source scans are often materialized first:
+
+```elixir
+use QuackDB.Ecto
+
+alias QuackDB.{DDL, FTS, Source}
+
+source = Source.parquet("s3://bucket/documents/*.parquet")
+
+query =
+  from doc in source,
+    select: %{id: doc.id, title: doc.title, body: doc.body}
+
+QuackDB.query!(conn, DDL.create_table("docs", as: query, temporary: true))
+QuackDB.query!(conn, FTS.create_index("docs", :id, [:title, :body], overwrite: true))
+```
+
+See the [full-text search guide](full-text-search.md) for the full BM25 search flow.
+
 ## Direct SQL queries
 
 The same source fragments can be composed into direct QuackDB SQL when that is clearer:

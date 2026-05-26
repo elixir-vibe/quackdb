@@ -12,6 +12,8 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
     table = "quackdb_ecto_migration_#{System.unique_integer([:positive, :monotonic])}"
     index = "#{table}_name_index"
 
+    execute_ddl!({:drop_if_exists, %Table{name: table}, :restrict})
+
     execute_ddl!(
       {:create, %Table{name: table},
        [
@@ -30,6 +32,37 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name, score, active FROM #{table}")
 
     execute_ddl!({:drop, %Index{name: index}})
+    execute_ddl!({:drop, %Table{name: table}, :restrict})
+  end
+
+  test "generated temporal and decimal defaults run against DuckDB" do
+    start_repo!()
+    table = "quackdb_ecto_migration_defaults_#{System.unique_integer([:positive, :monotonic])}"
+
+    execute_ddl!({:drop_if_exists, %Table{name: table}, :restrict})
+
+    execute_ddl!(
+      {:create, %Table{name: table},
+       [
+         {:add, :id, :integer, []},
+         {:add, :amount, :decimal, [default: Decimal.new("12.34")]},
+         {:add, :event_date, :date, [default: ~D[2026-05-26]]},
+         {:add, :event_time, :time, [default: ~T[12:34:56]]},
+         {:add, :occurred_at, :naive_datetime, [default: ~N[2026-05-26 12:34:56]]}
+       ]}
+    )
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1]])
+
+    assert %{rows: [[1, amount, ~D[2026-05-26], event_time, occurred_at]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT id, amount, event_date, event_time, occurred_at FROM #{table}"
+             )
+
+    assert Decimal.equal?(amount, Decimal.new("12.34"))
+    assert Time.compare(event_time, ~T[12:34:56]) == :eq
+    assert NaiveDateTime.compare(occurred_at, ~N[2026-05-26 12:34:56]) == :eq
+
     execute_ddl!({:drop, %Table{name: table}, :restrict})
   end
 

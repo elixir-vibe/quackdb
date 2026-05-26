@@ -720,6 +720,33 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert [%{id: ^uuid}] = QuackDB.IntegrationRepo.all(map_query)
   end
 
+  test "Ecto schema parameters preserve renamed binary_id source fields" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "renamed_binary_events")
+
+    create_table!(QuackDB.IntegrationRepo, "renamed_binary_events",
+      event_uuid: :uuid,
+      payload: :blob
+    )
+
+    uuid = Ecto.UUID.generate()
+    payload = <<3, 2, 1, 4>>
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.RenamedBinaryEvent, [
+               [id: uuid, payload: payload]
+             ])
+
+    full_query = from(event in QuackDB.TestSchemas.RenamedBinaryEvent, select: event)
+    map_query = from(event in QuackDB.TestSchemas.RenamedBinaryEvent, select: %{id: event.id})
+
+    assert [%QuackDB.TestSchemas.RenamedBinaryEvent{id: ^uuid, payload: ^payload}] =
+             QuackDB.IntegrationRepo.all(full_query)
+
+    assert [%{id: ^uuid}] = QuackDB.IntegrationRepo.all(map_query)
+  end
+
   test "Ecto raw query parameters preserve UUID and blob values" do
     start_repo!()
     uuid = Ecto.UUID.generate()
