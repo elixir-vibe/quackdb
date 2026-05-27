@@ -552,6 +552,8 @@ MyApp.AnalyticsRepo.all(
       distinct_events: count(event.id, :distinct),
       high_events: filter(count(event.id), event.score >= 90),
       average_score: coalesce(avg(event.score), 0),
+      mode_score: mode(event.score),
+      weighted_score: weighted_avg(event.score, event.weight),
       score_stddev: stddev(event.score),
       score_variance: variance(event.score),
       score_entropy: entropy(event.score),

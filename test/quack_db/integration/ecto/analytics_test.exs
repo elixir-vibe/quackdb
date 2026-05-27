@@ -30,6 +30,7 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           score_or_zero: coalesce(event.score, 0),
           score_stddev: over(stddev(event.score), []),
           score_variance: over(variance(event.score), []),
+          score_mode: over(mode(event.score), []),
           score_entropy: over(entropy(event.score), []),
           score_mad: over(mad(event.score), []),
           rolling_score:
@@ -65,6 +66,7 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                score_or_zero: 10,
                score_stddev: stddev,
                score_variance: variance,
+               score_mode: 10,
                score_entropy: entropy,
                score_mad: mad,
                rolling_score: 10
@@ -105,6 +107,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           median_score: median(event.score),
           p95_score: quantile_cont(event.score, 0.95),
           scores: list(event.score),
+          weighted_score: weighted_avg(event.score, event.score),
+          score_geometric_mean: geometric_mean(event.score),
           distinct_names: count(event.name, :distinct),
           names: string_agg(event.name, ","),
           best_name: arg_max(event.name, event.score),
@@ -120,6 +124,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                median_score: 20.0,
                p95_score: 29.0,
                scores: [10, 20, 30],
+               weighted_score: weighted_a,
+               score_geometric_mean: geometric_mean_a,
                distinct_names: 3,
                names: "duck,goose,swan",
                best_name: "swan",
@@ -132,6 +138,8 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                median_score: 5.0,
                p95_score: 5.0,
                scores: [5],
+               weighted_score: 5.0,
+               score_geometric_mean: geometric_mean_b,
                distinct_names: 1,
                names: "salmon",
                best_name: "salmon",
@@ -140,6 +148,10 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                exact_histogram: %{10 => 0, 20 => 0, 30 => 0, 2_147_483_647 => 1}
              }
            ] = QuackDB.IntegrationRepo.all(query)
+
+    assert_in_delta weighted_a, 23.333333333333332, 0.000001
+    assert_in_delta geometric_mean_a, 18.171205928321395, 0.000001
+    assert_in_delta geometric_mean_b, 5.0, 0.000001
   end
 
   test "JSON and time-series helpers execute against a real Quack server" do

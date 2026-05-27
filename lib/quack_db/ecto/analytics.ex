@@ -175,6 +175,42 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro mode(expression) do
+      quote do
+        fragment("mode(?)", unquote(expression))
+      end
+    end
+
+    defmacro weighted_avg(expression, weight) do
+      quote do
+        fragment("weighted_avg(?, ?)", unquote(expression), unquote(weight))
+      end
+    end
+
+    defmacro skewness(expression) do
+      quote do
+        fragment("skewness(?)", unquote(expression))
+      end
+    end
+
+    defmacro kurtosis(expression) do
+      quote do
+        fragment("kurtosis(?)", unquote(expression))
+      end
+    end
+
+    defmacro sem(expression) do
+      quote do
+        fragment("sem(?)", unquote(expression))
+      end
+    end
+
+    defmacro geometric_mean(expression) do
+      quote do
+        fragment("geometric_mean(?)", unquote(expression))
+      end
+    end
+
     defmacro covar_pop(left, right) do
       quote do
         fragment("covar_pop(?, ?)", unquote(left), unquote(right))
