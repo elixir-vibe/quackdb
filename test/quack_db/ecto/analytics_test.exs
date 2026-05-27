@@ -69,6 +69,39 @@ defmodule QuackDB.Ecto.AnalyticsTest do
              ~S[SELECT q0."category" AS "category", median(q0."score") AS "median_score", quantile_cont(q0."score", 0.95) AS "p95_score", quantile_disc(q0."score", 0.5) AS "p50_disc", list(q0."score") AS "scores", list(q0."name" ORDER BY q0."score" DESC NULLS LAST) AS "ordered_names", string_agg(q0."name", ',') AS "names", string_agg(q0."name", ',' ORDER BY q0."score" DESC) AS "ordered_names_text", arg_max(q0."name", q0."score") AS "best_name", arg_max(q0."name", q0."score", 2) AS "top_names", arg_min(q0."name", q0."score") AS "worst_name", arg_min(q0."name", q0."score", 2) AS "bottom_names" FROM "events" AS q0 GROUP BY q0."category"]
   end
 
+  test "builds expanded aggregate analytical expressions" do
+    query =
+      from(event in "events",
+        select: %{
+          approximate_users: approx_count_distinct(event.user_id),
+          approximate_p95: approx_quantile(event.score, 0.95),
+          top_scores: approx_top_k(event.score, 3),
+          any_name: any_value(event.name),
+          all_active: bool_and(event.active),
+          any_active: bool_or(event.active),
+          flags_and: band(event.flags),
+          flags_or: bor(event.flags),
+          flags_xor: bxor(event.flags),
+          bit_positions: bitstring_agg(event.score),
+          bit_range: bitstring_agg(event.score, 0, 100),
+          kurtosis_population: kurtosis_pop(event.score),
+          stddev_population: stddev_pop(event.score),
+          variance_population: var_pop(event.score),
+          variance_sample: var_samp(event.score),
+          reservoir_p95: reservoir_quantile(event.score, 0.95),
+          reservoir_p95_sampled: reservoir_quantile(event.score, 0.95, 128),
+          regression_count: regr_count(event.duration_ms, event.score),
+          regression_r2: regr_r2(event.duration_ms, event.score),
+          regression_sxx: regr_sxx(event.duration_ms, event.score),
+          regression_sxy: regr_sxy(event.duration_ms, event.score),
+          regression_syy: regr_syy(event.duration_ms, event.score)
+        }
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT approx_count_distinct(q0."user_id") AS "approximate_users", approx_quantile(q0."score", 0.95) AS "approximate_p95", approx_top_k(q0."score", 3) AS "top_scores", any_value(q0."name") AS "any_name", bool_and(q0."active") AS "all_active", bool_or(q0."active") AS "any_active", bit_and(q0."flags") AS "flags_and", bit_or(q0."flags") AS "flags_or", bit_xor(q0."flags") AS "flags_xor", bitstring_agg(q0."score") AS "bit_positions", bitstring_agg(q0."score", 0, 100) AS "bit_range", kurtosis_pop(q0."score") AS "kurtosis_population", stddev_pop(q0."score") AS "stddev_population", var_pop(q0."score") AS "variance_population", var_samp(q0."score") AS "variance_sample", reservoir_quantile(q0."score", 0.95) AS "reservoir_p95", reservoir_quantile(q0."score", 0.95, 128) AS "reservoir_p95_sampled", regr_count(q0."duration_ms", q0."score") AS "regression_count", regr_r2(q0."duration_ms", q0."score") AS "regression_r2", regr_sxx(q0."duration_ms", q0."score") AS "regression_sxx", regr_sxy(q0."duration_ms", q0."score") AS "regression_sxy", regr_syy(q0."duration_ms", q0."score") AS "regression_syy" FROM "events" AS q0]
+  end
+
   test "builds time buckets from Elixir durations" do
     interval = Duration.new!(minute: 15)
 

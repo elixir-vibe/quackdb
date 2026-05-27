@@ -52396,6 +52396,294 @@
       ]
     },
     %{
+      name: "bit_and",
+      types: [:aggregate],
+      categories: [],
+      arities: [1],
+      overloads: [
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BIGINT",
+          parameter_types: ["BIGINT"],
+          parameter_type_specs: [:bigint],
+          return_type_spec: :bigint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BIT",
+          parameter_types: ["BIT"],
+          parameter_type_specs: [:bit],
+          return_type_spec: :bit
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "HUGEINT",
+          parameter_types: ["HUGEINT"],
+          parameter_type_specs: [:hugeint],
+          return_type_spec: :hugeint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "INTEGER",
+          parameter_types: ["INTEGER"],
+          parameter_type_specs: [:integer],
+          return_type_spec: :integer
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "SMALLINT",
+          parameter_types: ["SMALLINT"],
+          parameter_type_specs: [:smallint],
+          return_type_spec: :smallint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "TINYINT",
+          parameter_types: ["TINYINT"],
+          parameter_type_specs: [:tinyint],
+          return_type_spec: :tinyint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UBIGINT",
+          parameter_types: ["UBIGINT"],
+          parameter_type_specs: [:ubigint],
+          return_type_spec: :ubigint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UHUGEINT",
+          parameter_types: ["UHUGEINT"],
+          parameter_type_specs: [:uhugeint],
+          return_type_spec: :uhugeint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UINTEGER",
+          parameter_types: ["UINTEGER"],
+          parameter_type_specs: [:uinteger],
+          return_type_spec: :uinteger
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "USMALLINT",
+          parameter_types: ["USMALLINT"],
+          parameter_type_specs: [:usmallint],
+          return_type_spec: :usmallint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UTINYINT",
+          parameter_types: ["UTINYINT"],
+          parameter_type_specs: [:utinyint],
+          return_type_spec: :utinyint
+        }
+      ]
+    },
+    %{
+      name: "bit_or",
+      types: [:aggregate],
+      categories: [],
+      arities: [1],
+      overloads: [
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BIGINT",
+          parameter_types: ["BIGINT"],
+          parameter_type_specs: [:bigint],
+          return_type_spec: :bigint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BIT",
+          parameter_types: ["BIT"],
+          parameter_type_specs: [:bit],
+          return_type_spec: :bit
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "HUGEINT",
+          parameter_types: ["HUGEINT"],
+          parameter_type_specs: [:hugeint],
+          return_type_spec: :hugeint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "INTEGER",
+          parameter_types: ["INTEGER"],
+          parameter_type_specs: [:integer],
+          return_type_spec: :integer
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "SMALLINT",
+          parameter_types: ["SMALLINT"],
+          parameter_type_specs: [:smallint],
+          return_type_spec: :smallint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "TINYINT",
+          parameter_types: ["TINYINT"],
+          parameter_type_specs: [:tinyint],
+          return_type_spec: :tinyint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UBIGINT",
+          parameter_types: ["UBIGINT"],
+          parameter_type_specs: [:ubigint],
+          return_type_spec: :ubigint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UHUGEINT",
+          parameter_types: ["UHUGEINT"],
+          parameter_type_specs: [:uhugeint],
+          return_type_spec: :uhugeint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UINTEGER",
+          parameter_types: ["UINTEGER"],
+          parameter_type_specs: [:uinteger],
+          return_type_spec: :uinteger
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "USMALLINT",
+          parameter_types: ["USMALLINT"],
+          parameter_type_specs: [:usmallint],
+          return_type_spec: :usmallint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UTINYINT",
+          parameter_types: ["UTINYINT"],
+          parameter_type_specs: [:utinyint],
+          return_type_spec: :utinyint
+        }
+      ]
+    },
+    %{
+      name: "bit_xor",
+      types: [:aggregate],
+      categories: [],
+      arities: [1],
+      overloads: [
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BIGINT",
+          parameter_types: ["BIGINT"],
+          parameter_type_specs: [:bigint],
+          return_type_spec: :bigint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BIT",
+          parameter_types: ["BIT"],
+          parameter_type_specs: [:bit],
+          return_type_spec: :bit
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "HUGEINT",
+          parameter_types: ["HUGEINT"],
+          parameter_type_specs: [:hugeint],
+          return_type_spec: :hugeint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "INTEGER",
+          parameter_types: ["INTEGER"],
+          parameter_type_specs: [:integer],
+          return_type_spec: :integer
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "SMALLINT",
+          parameter_types: ["SMALLINT"],
+          parameter_type_specs: [:smallint],
+          return_type_spec: :smallint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "TINYINT",
+          parameter_types: ["TINYINT"],
+          parameter_type_specs: [:tinyint],
+          return_type_spec: :tinyint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UBIGINT",
+          parameter_types: ["UBIGINT"],
+          parameter_type_specs: [:ubigint],
+          return_type_spec: :ubigint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UHUGEINT",
+          parameter_types: ["UHUGEINT"],
+          parameter_type_specs: [:uhugeint],
+          return_type_spec: :uhugeint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UINTEGER",
+          parameter_types: ["UINTEGER"],
+          parameter_type_specs: [:uinteger],
+          return_type_spec: :uinteger
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "USMALLINT",
+          parameter_types: ["USMALLINT"],
+          parameter_type_specs: [:usmallint],
+          return_type_spec: :usmallint
+        },
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "UTINYINT",
+          parameter_types: ["UTINYINT"],
+          parameter_type_specs: [:utinyint],
+          return_type_spec: :utinyint
+        }
+      ]
+    },
+    %{
       name: "bitstring_agg",
       types: [:aggregate],
       categories: [],
@@ -52560,6 +52848,38 @@
           parameter_types: ["UTINYINT", "UTINYINT", "UTINYINT"],
           parameter_type_specs: [:utinyint, :utinyint, :utinyint],
           return_type_spec: :bit
+        }
+      ]
+    },
+    %{
+      name: "bool_and",
+      types: [:aggregate],
+      categories: [],
+      arities: [1],
+      overloads: [
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BOOLEAN",
+          parameter_types: ["BOOLEAN"],
+          parameter_type_specs: [:boolean],
+          return_type_spec: :boolean
+        }
+      ]
+    },
+    %{
+      name: "bool_or",
+      types: [:aggregate],
+      categories: [],
+      arities: [1],
+      overloads: [
+        %{
+          arity: 1,
+          type: :aggregate,
+          return_type: "BOOLEAN",
+          parameter_types: ["BOOLEAN"],
+          parameter_type_specs: [:boolean],
+          return_type_spec: :boolean
         }
       ]
     },
@@ -57338,326 +57658,6 @@
           parameter_types: ["INTEGER"],
           parameter_type_specs: [:integer],
           return_type_spec: :hugeint
-        }
-      ]
-    },
-    %{
-      name: "bit_and",
-      reason: "bitwise aggregate; not part of the curated analytical helper surface yet",
-      types: [:aggregate],
-      arities: [1],
-      overloads: [
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BIGINT",
-          parameter_types: ["BIGINT"],
-          parameter_type_specs: [:bigint],
-          return_type_spec: :bigint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BIT",
-          parameter_types: ["BIT"],
-          parameter_type_specs: [:bit],
-          return_type_spec: :bit
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "HUGEINT",
-          parameter_types: ["HUGEINT"],
-          parameter_type_specs: [:hugeint],
-          return_type_spec: :hugeint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "INTEGER",
-          parameter_types: ["INTEGER"],
-          parameter_type_specs: [:integer],
-          return_type_spec: :integer
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "SMALLINT",
-          parameter_types: ["SMALLINT"],
-          parameter_type_specs: [:smallint],
-          return_type_spec: :smallint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "TINYINT",
-          parameter_types: ["TINYINT"],
-          parameter_type_specs: [:tinyint],
-          return_type_spec: :tinyint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UBIGINT",
-          parameter_types: ["UBIGINT"],
-          parameter_type_specs: [:ubigint],
-          return_type_spec: :ubigint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UHUGEINT",
-          parameter_types: ["UHUGEINT"],
-          parameter_type_specs: [:uhugeint],
-          return_type_spec: :uhugeint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UINTEGER",
-          parameter_types: ["UINTEGER"],
-          parameter_type_specs: [:uinteger],
-          return_type_spec: :uinteger
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "USMALLINT",
-          parameter_types: ["USMALLINT"],
-          parameter_type_specs: [:usmallint],
-          return_type_spec: :usmallint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UTINYINT",
-          parameter_types: ["UTINYINT"],
-          parameter_type_specs: [:utinyint],
-          return_type_spec: :utinyint
-        }
-      ]
-    },
-    %{
-      name: "bit_or",
-      reason: "bitwise aggregate; not part of the curated analytical helper surface yet",
-      types: [:aggregate],
-      arities: [1],
-      overloads: [
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BIGINT",
-          parameter_types: ["BIGINT"],
-          parameter_type_specs: [:bigint],
-          return_type_spec: :bigint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BIT",
-          parameter_types: ["BIT"],
-          parameter_type_specs: [:bit],
-          return_type_spec: :bit
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "HUGEINT",
-          parameter_types: ["HUGEINT"],
-          parameter_type_specs: [:hugeint],
-          return_type_spec: :hugeint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "INTEGER",
-          parameter_types: ["INTEGER"],
-          parameter_type_specs: [:integer],
-          return_type_spec: :integer
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "SMALLINT",
-          parameter_types: ["SMALLINT"],
-          parameter_type_specs: [:smallint],
-          return_type_spec: :smallint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "TINYINT",
-          parameter_types: ["TINYINT"],
-          parameter_type_specs: [:tinyint],
-          return_type_spec: :tinyint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UBIGINT",
-          parameter_types: ["UBIGINT"],
-          parameter_type_specs: [:ubigint],
-          return_type_spec: :ubigint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UHUGEINT",
-          parameter_types: ["UHUGEINT"],
-          parameter_type_specs: [:uhugeint],
-          return_type_spec: :uhugeint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UINTEGER",
-          parameter_types: ["UINTEGER"],
-          parameter_type_specs: [:uinteger],
-          return_type_spec: :uinteger
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "USMALLINT",
-          parameter_types: ["USMALLINT"],
-          parameter_type_specs: [:usmallint],
-          return_type_spec: :usmallint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UTINYINT",
-          parameter_types: ["UTINYINT"],
-          parameter_type_specs: [:utinyint],
-          return_type_spec: :utinyint
-        }
-      ]
-    },
-    %{
-      name: "bit_xor",
-      reason: "bitwise aggregate; not part of the curated analytical helper surface yet",
-      types: [:aggregate],
-      arities: [1],
-      overloads: [
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BIGINT",
-          parameter_types: ["BIGINT"],
-          parameter_type_specs: [:bigint],
-          return_type_spec: :bigint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BIT",
-          parameter_types: ["BIT"],
-          parameter_type_specs: [:bit],
-          return_type_spec: :bit
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "HUGEINT",
-          parameter_types: ["HUGEINT"],
-          parameter_type_specs: [:hugeint],
-          return_type_spec: :hugeint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "INTEGER",
-          parameter_types: ["INTEGER"],
-          parameter_type_specs: [:integer],
-          return_type_spec: :integer
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "SMALLINT",
-          parameter_types: ["SMALLINT"],
-          parameter_type_specs: [:smallint],
-          return_type_spec: :smallint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "TINYINT",
-          parameter_types: ["TINYINT"],
-          parameter_type_specs: [:tinyint],
-          return_type_spec: :tinyint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UBIGINT",
-          parameter_types: ["UBIGINT"],
-          parameter_type_specs: [:ubigint],
-          return_type_spec: :ubigint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UHUGEINT",
-          parameter_types: ["UHUGEINT"],
-          parameter_type_specs: [:uhugeint],
-          return_type_spec: :uhugeint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UINTEGER",
-          parameter_types: ["UINTEGER"],
-          parameter_type_specs: [:uinteger],
-          return_type_spec: :uinteger
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "USMALLINT",
-          parameter_types: ["USMALLINT"],
-          parameter_type_specs: [:usmallint],
-          return_type_spec: :usmallint
-        },
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "UTINYINT",
-          parameter_types: ["UTINYINT"],
-          parameter_type_specs: [:utinyint],
-          return_type_spec: :utinyint
-        }
-      ]
-    },
-    %{
-      name: "bool_and",
-      reason: "boolean aggregate; not part of the curated analytical helper surface yet",
-      types: [:aggregate],
-      arities: [1],
-      overloads: [
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BOOLEAN",
-          parameter_types: ["BOOLEAN"],
-          parameter_type_specs: [:boolean],
-          return_type_spec: :boolean
-        }
-      ]
-    },
-    %{
-      name: "bool_or",
-      reason: "boolean aggregate; not part of the curated analytical helper surface yet",
-      types: [:aggregate],
-      arities: [1],
-      overloads: [
-        %{
-          arity: 1,
-          type: :aggregate,
-          return_type: "BOOLEAN",
-          parameter_types: ["BOOLEAN"],
-          parameter_type_specs: [:boolean],
-          return_type_spec: :boolean
         }
       ]
     },

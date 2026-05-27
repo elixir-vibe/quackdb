@@ -26,6 +26,22 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
     """
 
     @simple_fragment_helpers [
+      %{
+        name: :approx_count_distinct,
+        sql: "approx_count_distinct",
+        arity: 1,
+        class: :approximate_aggregate
+      },
+      %{name: :approx_quantile, sql: "approx_quantile", arity: 2, class: :approximate_aggregate},
+      %{name: :approx_top_k, sql: "approx_top_k", arity: 2, class: :approximate_aggregate},
+      %{name: :any_value, sql: "any_value", arity: 1, class: :aggregate},
+      %{name: :band, sql: "bit_and", arity: 1, class: :bitwise_aggregate},
+      %{name: :bor, sql: "bit_or", arity: 1, class: :bitwise_aggregate},
+      %{name: :bxor, sql: "bit_xor", arity: 1, class: :bitwise_aggregate},
+      %{name: :bitstring_agg, sql: "bitstring_agg", arity: 1, class: :bitstring_aggregate},
+      %{name: :bitstring_agg, sql: "bitstring_agg", arity: 3, class: :bitstring_aggregate},
+      %{name: :bool_and, sql: "bool_and", arity: 1, class: :boolean_aggregate},
+      %{name: :bool_or, sql: "bool_or", arity: 1, class: :boolean_aggregate},
       %{name: :median, sql: "median", arity: 1, class: :aggregate},
       %{name: :quantile_cont, sql: "quantile_cont", arity: 2, class: :aggregate},
       %{name: :quantile_disc, sql: "quantile_disc", arity: 2, class: :aggregate},
@@ -43,16 +59,37 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
       %{name: :weighted_avg, sql: "weighted_avg", arity: 2, class: :numeric_aggregate},
       %{name: :skewness, sql: "skewness", arity: 1, class: :statistical_aggregate},
       %{name: :kurtosis, sql: "kurtosis", arity: 1, class: :statistical_aggregate},
+      %{name: :kurtosis_pop, sql: "kurtosis_pop", arity: 1, class: :statistical_aggregate},
       %{name: :sem, sql: "sem", arity: 1, class: :statistical_aggregate},
       %{name: :geometric_mean, sql: "geometric_mean", arity: 1, class: :numeric_aggregate},
       %{name: :covar_pop, sql: "covar_pop", arity: 2, class: :statistical_aggregate},
       %{name: :covar_samp, sql: "covar_samp", arity: 2, class: :statistical_aggregate},
       %{name: :regr_slope, sql: "regr_slope", arity: 2, class: :statistical_aggregate},
       %{name: :regr_intercept, sql: "regr_intercept", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_count, sql: "regr_count", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_r2, sql: "regr_r2", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_sxx, sql: "regr_sxx", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_sxy, sql: "regr_sxy", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_syy, sql: "regr_syy", arity: 2, class: :statistical_aggregate},
       %{name: :entropy, sql: "entropy", arity: 1, class: :statistical_aggregate},
       %{name: :mad, sql: "mad", arity: 1, class: :statistical_aggregate},
       %{name: :histogram, sql: "histogram", arity: 1, class: :histogram_aggregate},
-      %{name: :histogram_exact, sql: "histogram_exact", arity: 2, class: :histogram_aggregate}
+      %{name: :histogram_exact, sql: "histogram_exact", arity: 2, class: :histogram_aggregate},
+      %{
+        name: :reservoir_quantile,
+        sql: "reservoir_quantile",
+        arity: 2,
+        class: :approximate_aggregate
+      },
+      %{
+        name: :reservoir_quantile,
+        sql: "reservoir_quantile",
+        arity: 3,
+        class: :approximate_aggregate
+      },
+      %{name: :stddev_pop, sql: "stddev_pop", arity: 1, class: :statistical_aggregate},
+      %{name: :var_pop, sql: "var_pop", arity: 1, class: :statistical_aggregate},
+      %{name: :var_samp, sql: "var_samp", arity: 1, class: :statistical_aggregate}
     ]
 
     @doc false

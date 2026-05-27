@@ -12,7 +12,7 @@
 - Added `case_when` syntax for DuckDB `CASE WHEN` and atom date parts.
 - Added ordered `list/2` and `string_agg/3` with NULL ordering.
 - Added Ecto `count(..., :distinct)` and `coalesce/2` SQL generation.
-- Added `arg_max/3`, `arg_min/3`, statistical, precise floating-point aggregate, weighted aggregate, product, and histogram helpers.
+- Added `arg_max/3`, `arg_min/3`, approximate aggregate, boolean aggregate, Bitwise-style bit aggregate, statistical, precise floating-point aggregate, weighted aggregate, product, and histogram helpers.
 - Added value window functions with fragment-backed frames.
 - Added direct and Ecto queryable `SUMMARIZE` profiling helpers.
 - Added DuckDB function snapshot task with normalized QuackDB type specs for overload auditing.
