@@ -142,6 +142,101 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert message == "list vector serialized 1 entries for 2 rows"
   end
 
+  test "reports list entry bounds violations" do
+    list_type = LogicalType.new(:list, %{type: 4, child_type: LogicalType.new(:integer)})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(list_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(1)),
+            Writer.field(105, Writer.list([%{offset: 1, length: 1}], &list_entry/1)),
+            Writer.field(106, QuackDB.Protocol.Vector.encode(LogicalType.new(:integer), [10], 1)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :list_entry_out_of_bounds, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "list entry offset 1 with length 1 exceeds child vector size 1"
+  end
+
+  test "reports malformed map entries" do
+    entry_type =
+      LogicalType.new(:struct, %{
+        type: 5,
+        children: [%{name: "key", type: LogicalType.new(:varchar)}]
+      })
+
+    map_type = LogicalType.new(:map, %{type: 4, child_type: entry_type})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(map_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(1)),
+            Writer.field(105, Writer.list([%{offset: 0, length: 1}], &list_entry/1)),
+            Writer.field(106, QuackDB.Protocol.Vector.encode(entry_type, [%{key: "env"}], 1)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_map_entry, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == ~s|MAP entry must include key and value fields, got %{"key" => "env"}|
+  end
+
+  test "reports struct child count mismatches" do
+    struct_type =
+      LogicalType.new(:struct, %{
+        type: 5,
+        children: [
+          %{name: "a", type: LogicalType.new(:integer)},
+          %{name: "b", type: LogicalType.new(:integer)}
+        ]
+      })
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(struct_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(
+              103,
+              Writer.list(
+                [QuackDB.Protocol.Vector.encode(LogicalType.new(:integer), [1], 1)],
+                &Function.identity/1
+              )
+            ),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :struct_child_mismatch, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "struct vector serialized 1 child vectors for 2 child types"
+  end
+
   test "reports array size mismatches" do
     array_type =
       LogicalType.new(:array, %{type: 9, child_type: LogicalType.new(:integer), size: 3})

@@ -290,19 +290,10 @@ defmodule QuackDB.Protocol.Vector do
          {:ok, entries, rest} <- read_required(rest, 105, &read_list_entries(&1, row_count)),
          {:ok, child_vector, rest} <-
            read_required(rest, 106, &decode(&1, LogicalType.child_type(type), list_size)) do
-      values =
-        entries
-        |> Enum.with_index()
-        |> Enum.map(fn {%{offset: offset, length: length}, row_index} ->
-          if valid?(validity, row_index) do
-            value = Enum.slice(child_vector.values, offset, length)
-            if type.name == :map, do: map_entries(value), else: value
-          else
-            nil
-          end
-        end)
-
-      {:ok, values, rest}
+      with :ok <- validate_list_entries(entries, list_size),
+           {:ok, values} <- list_values(type, entries, child_vector.values, validity) do
+        {:ok, values, rest}
+      end
     end
   end
 
@@ -560,7 +551,8 @@ defmodule QuackDB.Protocol.Vector do
   defp struct_child_value(_value, _name), do: nil
 
   defp read_child_vectors(binary, children, row_count) do
-    with {:ok, count, rest} <- Reader.read_uleb128(binary) do
+    with {:ok, count, rest} <- Reader.read_uleb128(binary),
+         :ok <- expect_struct_child_count(children, count) do
       read_child_vectors(rest, children, row_count, count, [])
     end
   end
@@ -660,11 +652,59 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
+  defp validate_list_entries(entries, list_size) do
+    Enum.reduce_while(entries, :ok, fn %{offset: offset, length: length}, :ok ->
+      if offset + length <= list_size do
+        {:cont, :ok}
+      else
+        {:halt,
+         error(
+           :list_entry_out_of_bounds,
+           "list entry offset #{offset} with length #{length} exceeds child vector size #{list_size}"
+         )}
+      end
+    end)
+  end
+
+  defp list_values(type, entries, child_values, validity) do
+    entries
+    |> Enum.with_index()
+    |> Enum.reduce_while({:ok, []}, fn {%{offset: offset, length: length}, row_index},
+                                       {:ok, values} ->
+      if valid?(validity, row_index) do
+        value = Enum.slice(child_values, offset, length)
+
+        case list_value(type, value) do
+          {:ok, value} -> {:cont, {:ok, [value | values]}}
+          {:error, _error} = error -> {:halt, error}
+        end
+      else
+        {:cont, {:ok, [nil | values]}}
+      end
+    end)
+    |> case do
+      {:ok, values} -> {:ok, Enum.reverse(values)}
+      {:error, _error} = error -> error
+    end
+  end
+
+  defp list_value(%{name: :map}, entries), do: map_entries(entries)
+  defp list_value(_type, entries), do: {:ok, entries}
+
   defp map_entries(entries) do
-    Enum.reduce(entries, %{}, fn
-      %{"key" => key, "value" => value}, map -> Map.put(map, key, value)
-      %{key: key, value: value}, map -> Map.put(map, key, value)
-      other, map -> Map.put(map, other, nil)
+    Enum.reduce_while(entries, {:ok, %{}}, fn
+      %{"key" => key, "value" => value}, {:ok, map} ->
+        {:cont, {:ok, Map.put(map, key, value)}}
+
+      %{key: key, value: value}, {:ok, map} ->
+        {:cont, {:ok, Map.put(map, key, value)}}
+
+      other, {:ok, _map} ->
+        {:halt,
+         error(
+           :invalid_map_entry,
+           "MAP entry must include key and value fields, got #{inspect(other)}"
+         )}
     end)
   end
 
@@ -806,6 +846,18 @@ defmodule QuackDB.Protocol.Vector do
       do: :ok,
       else:
         error(:array_size_mismatch, "array vector serialized size #{size}, expected #{expected}")
+  end
+
+  defp expect_struct_child_count(children, count) do
+    expected = length(children)
+
+    if count == expected,
+      do: :ok,
+      else:
+        error(
+          :struct_child_mismatch,
+          "struct vector serialized #{count} child vectors for #{expected} child types"
+        )
   end
 
   defp expect_blob_size(blob, size) when byte_size(blob) == size, do: :ok
