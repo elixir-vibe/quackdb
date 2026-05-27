@@ -8,6 +8,7 @@ defmodule QuackDB.Protocol.CodecTest do
   alias QuackDB.Protocol.Message.Header
   alias QuackDB.Protocol.Message.FetchRequest
   alias QuackDB.Protocol.Message.PrepareRequest
+  alias QuackDB.Protocol.Writer
 
   test "encodes connection request messages" do
     message = %ConnectionRequest{
@@ -83,6 +84,88 @@ defmodule QuackDB.Protocol.CodecTest do
                server_platform: "darwin",
                quack_version: 1
              }}} = Codec.decode(binary)
+  end
+
+  test "reports unknown message types" do
+    binary =
+      IO.iodata_to_binary([
+        Codec.encode_header(%Header{type: :invalid}),
+        Writer.end_object()
+      ])
+
+    assert {:error, %QuackDB.Error{code: :unsupported_message_type, message: message}} =
+             Codec.decode(binary)
+
+    assert message == "decoding invalid messages is not implemented yet"
+  end
+
+  test "reports unknown message type ids" do
+    binary =
+      IO.iodata_to_binary([
+        Writer.field(1, Writer.uleb128(999_999)),
+        Writer.end_object(),
+        Writer.end_object()
+      ])
+
+    assert {:error, %QuackDB.Error{code: :unknown_message_type, message: message}} =
+             Codec.decode(binary)
+
+    assert message == "unknown Quack message type 999999"
+  end
+
+  test "reports unknown header fields" do
+    binary =
+      IO.iodata_to_binary([
+        Writer.field(999, Writer.uleb128(1)),
+        Writer.end_object(),
+        Writer.end_object()
+      ])
+
+    assert {:error, %QuackDB.Error{code: :unknown_header_field, message: message}} =
+             Codec.decode(binary)
+
+    assert message == "unknown message header field 999"
+  end
+
+  test "reports unexpected fields in empty message bodies" do
+    binary =
+      IO.iodata_to_binary([
+        Codec.encode_header(%Header{type: :success_response}),
+        Writer.field(1, Writer.string("unexpected")),
+        Writer.end_object()
+      ])
+
+    assert {:error, %QuackDB.Error{code: :unexpected_body_field, message: message}} =
+             Codec.decode(binary)
+
+    assert message == "expected an empty message body"
+  end
+
+  test "reports trailing bytes after message bodies" do
+    binary =
+      IO.iodata_to_binary([
+        Codec.encode(%ErrorResponse{message: "bad"}),
+        <<0>>
+      ])
+
+    assert {:error, %QuackDB.Error{code: :trailing_bytes, message: message}} =
+             Codec.decode(binary)
+
+    assert message == "message has trailing bytes after the body"
+  end
+
+  test "reports missing append chunks" do
+    binary =
+      IO.iodata_to_binary([
+        Codec.encode_header(%Header{type: :append_request, connection_id: "conn-1"}),
+        Writer.field(2, Writer.string("events")),
+        Writer.end_object()
+      ])
+
+    assert {:error, %QuackDB.Error{code: :missing_append_chunk, message: message}} =
+             Codec.decode(binary)
+
+    assert message == "APPEND_REQUEST is missing append chunk"
   end
 
   test "decodes error response messages" do

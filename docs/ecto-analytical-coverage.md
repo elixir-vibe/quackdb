@@ -16,14 +16,14 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Schema reads | full schema select / `Repo.get!/2` | Ecto-native | yes | yes | covered |
 | Parameters | pinned params and raw params | Ecto-native/raw | yes | yes | covered |
 | Joins | inner/left/right/full/cross | Ecto-native | yes | yes | covered |
-| Aggregates | count/sum/avg/min/max | Ecto-native | partial | yes | partial |
-| Analytical aggregates | median/quantile/list/string_agg/arg_max/arg_min | Helper | yes | yes | covered |
-| Aggregate filter | `FILTER (WHERE ...)` | Ecto-native | yes | partial | partial |
+| Aggregates | count/sum/avg/min/max/count distinct/coalesce | Ecto-native | yes | yes | covered |
+| Analytical aggregates | median/quantile/list/string_agg/arg_max/arg_min/mode/weighted_avg/favg/fsum/product/statistics/histograms | Helper | yes | yes | covered |
+| Aggregate filter | `FILTER (WHERE ...)` | Ecto-native | yes | yes | covered |
 | Grouping | group by/having | Ecto-native | yes | yes | covered |
 | CTEs | non-recursive CTEs | Ecto-native | yes | yes | covered |
 | Windows | row_number/rank/dense_rank/percent_rank/cume_dist | Ecto-native | yes | partial | partial |
-| Windows | lag/lead/first_value/last_value/nth_value | Fragment/raw | partial | no | missing |
-| Windows | custom frame clauses | Fragment/raw | no | no | missing |
+| Windows | lag/lead/first_value/last_value/nth_value | Ecto-native/helper | yes | partial | partial |
+| Windows | fragment-backed frame clauses | Ecto-native/fragment | yes | yes | covered |
 | Sources | CSV/Parquet helpers | Source helpers | yes | yes | covered |
 | Sources | JSON/XLSX helpers | Source helpers/raw | partial | partial | partial |
 | Source analytics | source helper + aggregate/window | Ecto-native/source | yes | partial | partial |
@@ -31,7 +31,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | JSON analytics | json_extract/path queries | Helper/source/raw | yes | yes | partial |
 | Time series | date_trunc/time_bucket/generate_series | Helper/raw | yes | yes | partial |
 | Grouping extensions | grouping sets/rollup/cube | Raw SQL | no | yes | partial |
-| QUALIFY | window filtering | Raw SQL | no | yes | partial |
+| QUALIFY | window filtering | Ecto subquery or raw SQL | yes | yes | partial |
 | Pivoting | pivot/unpivot | Raw SQL | no | yes | partial |
 | Sampling | using sample | Raw SQL | no | yes | partial |
 | Set operations | union/intersect/except | Ecto combinations | yes | yes | covered |
@@ -45,7 +45,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Full-text search | BM25 ranking and stemming | Ecto helper fragments | yes | yes | covered |
 | Advanced joins | semi/anti/asof/positional | Raw SQL | no | no | missing |
 | DuckDB select extensions | `* EXCLUDE`, `* REPLACE`, `COLUMNS(*)` | Raw SQL | no | no | missing |
-| Introspection | summarize/describe/pragma | Raw SQL | no | no | missing |
+| Introspection | summarize/describe/pragma | Direct SQL helper/raw | partial | partial | partial |
 
 ## Migration boundaries
 
@@ -74,6 +74,28 @@ test/quack_db/integration/ecto/
 ```
 
 Use SQL generation tests to pin what QuackDB emits for Ecto-native queries. Use real-server tests for DuckDB-native semantics and raw SQL pass-through.
+
+## QUALIFY-style filters
+
+Ecto does not have a `QUALIFY` clause, but the common top-N-per-group pattern is expressible with a subquery:
+
+```elixir
+ranked =
+  from event in "events",
+    windows: [by_category: [partition_by: event.category, order_by: [desc: event.score]]],
+    select: %{
+      id: event.id,
+      category: event.category,
+      rank: over(row_number(), :by_category)
+    }
+
+from event in subquery(ranked),
+  where: event.rank <= 3,
+  order_by: [event.category, event.rank],
+  select: %{id: event.id, rank: event.rank}
+```
+
+Use raw SQL when DuckDB-specific `QUALIFY` syntax is clearer than the Ecto subquery shape.
 
 ## Query style
 

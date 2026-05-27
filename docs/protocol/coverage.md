@@ -25,7 +25,7 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 | Constant | Supported | Not emitted | Decode expands constants to row values |
 | Dictionary | Supported | Not emitted | Decode validates selection indexes |
 | Sequence | Supported | Not emitted | Decode materializes generated values |
-| FSST | Unsupported | Unsupported | Raises explicit `:unsupported_vector_type`; QuackDB has an internal optional `:fsst` bridge, but DuckDB currently flattens FSST vectors before Quack serialization and the compressed wire payload shape is not exposed by current DuckDB releases |
+| FSST | Unsupported | Unsupported | Raises explicit `:unsupported_vector_type`; QuackDB has an internal optional `:fsst` bridge, but current real-server probes with repeated long strings still return flat `VARCHAR` chunks over Quack, so the compressed wire payload shape is not exposed by current DuckDB releases |
 | Unknown vector ids | Unsupported | Unsupported | Raises explicit `:unknown_vector_type` |
 
 ## Logical type coverage
@@ -84,6 +84,6 @@ Current cross-implementation fixtures compare QuackDB's append/data chunk encodi
 | --- | --- |
 | Real-server type matrix | Keep adding SQL-generated edge cases for standalone `NULL`, nested nullability, unsigned/huge values, temporal precision, and DuckDB extension types as they become stable over Quack. |
 | Append roundtrips | Expand native append tests for null-heavy scalar/nested values, schema mismatch errors, and batch-boundary behavior. |
-| Malformed vectors | Add targeted fixtures for missing required fields, invalid validity masks, malformed list entries, array-size mismatches, and unsupported compressed vectors. |
+| Malformed vectors | Continue adding targeted fixtures for nested offset bounds, malformed map entries, and unsupported compressed vectors. |
 | Unsupported logical types | Add fixtures or synthetic metadata tests for `UNION`, `VARIANT`, extension/custom types, and aggregate state once stable payloads are available. |
-| FSST | Capture a real DuckDB Quack FSST payload if DuckDB starts serializing compressed FSST vectors instead of flattened strings. |
+| FSST | Re-run repeated-long-string probes as DuckDB Quack evolves and capture a real compressed FSST payload if the server stops flattening string vectors before serialization. |
