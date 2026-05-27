@@ -175,6 +175,24 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro favg(expression) do
+      quote do
+        fragment("favg(?)", unquote(expression))
+      end
+    end
+
+    defmacro fsum(expression) do
+      quote do
+        fragment("fsum(?)", unquote(expression))
+      end
+    end
+
+    defmacro product(expression) do
+      quote do
+        fragment("product(?)", unquote(expression))
+      end
+    end
+
     defmacro mode(expression) do
       quote do
         fragment("mode(?)", unquote(expression))

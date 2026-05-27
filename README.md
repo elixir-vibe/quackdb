@@ -152,6 +152,7 @@ defmodule MyApp.Analytics do
         category: event.category,
         p95: quantile_cont(event.duration_ms, 0.95),
         median: median(event.duration_ms),
+        precise_sum: fsum(event.duration_ms),
         mode: mode(event.duration_ms),
         weighted_average: weighted_avg(event.duration_ms, event.weight),
         values: list(event.duration_ms, order_by: [desc_nulls_last: event.duration_ms]),

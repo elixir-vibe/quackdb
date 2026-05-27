@@ -55,6 +55,44 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert message =~ "fsst vectors are not implemented yet"
   end
 
+  test "reports missing required validity fields" do
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [QuackDB.ProtocolFixtures.integer_type()],
+        [[Writer.field(102, Writer.blob(<<1::little-signed-32>>)), Writer.end_object()]]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :unexpected_field, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "expected field 100, got 102"
+  end
+
+  test "reports fixed-size vector payload size mismatches" do
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        2,
+        [QuackDB.ProtocolFixtures.integer_type()],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(102, Writer.blob(<<1::little-signed-32>>)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_blob_size, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "expected 8 bytes, got 4"
+  end
+
   test "reports invalid validity mask sizes" do
     binary =
       QuackDB.ProtocolFixtures.data_chunk(
@@ -131,6 +169,51 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
              DataChunk.decode_wrapper(binary)
 
     assert message == "array vector serialized size 2, expected 3"
+  end
+
+  test "reports dictionary selection size mismatches" do
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        2,
+        [QuackDB.ProtocolFixtures.integer_type()],
+        [
+          [
+            Writer.field(90, Writer.uleb128(3)),
+            Writer.field(91, Writer.blob(<<0::little-unsigned-32>>)),
+            Writer.field(92, Writer.uleb128(1)),
+            QuackDB.ProtocolFixtures.integer_vector([10])
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_blob_size, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "expected 8 bytes, got 4"
+  end
+
+  test "reports sequence vectors missing increment" do
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [QuackDB.ProtocolFixtures.integer_type()],
+        [
+          [
+            Writer.field(90, Writer.uleb128(4)),
+            Writer.field(91, Writer.sleb128(1)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :unexpected_field, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "expected field 92, got 65535"
   end
 
   test "reports dictionary indexes outside the dictionary" do

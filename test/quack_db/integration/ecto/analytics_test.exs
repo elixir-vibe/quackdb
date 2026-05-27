@@ -30,6 +30,9 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           score_or_zero: coalesce(event.score, 0),
           score_stddev: over(stddev(event.score), []),
           score_variance: over(variance(event.score), []),
+          score_favg: over(favg(event.score), []),
+          score_fsum: over(fsum(event.score), []),
+          score_product: over(product(event.score), []),
           score_mode: over(mode(event.score), []),
           score_entropy: over(entropy(event.score), []),
           score_mad: over(mad(event.score), []),
@@ -66,6 +69,9 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                score_or_zero: 10,
                score_stddev: stddev,
                score_variance: variance,
+               score_favg: favg,
+               score_fsum: fsum,
+               score_product: product,
                score_mode: 10,
                score_entropy: entropy,
                score_mad: mad,
@@ -77,6 +83,9 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
 
     assert is_float(stddev)
     assert is_float(variance)
+    assert favg == 15.0
+    assert fsum == 30.0
+    assert product == 200.0
     assert is_float(entropy)
     assert is_number(mad)
   end

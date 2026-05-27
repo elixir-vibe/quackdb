@@ -75,6 +75,19 @@ test/quack_db/integration/ecto/
 
 Use SQL generation tests to pin what QuackDB emits for Ecto-native queries. Use real-server tests for DuckDB-native semantics and raw SQL pass-through.
 
+## Query style
+
+Prefer ordinary Ecto syntax when it maps cleanly to DuckDB SQL:
+
+- comparisons and boolean logic with Elixir/Ecto operators;
+- conditional aggregates with `filter(count(...), predicate)` instead of adapter-specific `*_if` helpers;
+- `selected_as/2` for grouped aliases;
+- `type/2` for JSON/text casts.
+
+Use `QuackDB.Ecto.Analytics` for DuckDB analytical functions that are established SQL vocabulary, such as `median/1`, `quantile_cont/2`, `list/1,2`, `weighted_avg/2`, `fsum/1`, `time_bucket/2,3`, and JSON path helpers.
+
+Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until Ecto supports macro-expanded frame helpers.
+
 ## Boundaries
 
 QuackDB should not try to reimplement all DuckDB syntax as Ecto macros. For DuckDB-specific syntax that Ecto cannot represent cleanly, prefer:

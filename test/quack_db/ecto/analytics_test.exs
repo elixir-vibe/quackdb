@@ -19,6 +19,9 @@ defmodule QuackDB.Ecto.AnalyticsTest do
             end,
           score_stddev: stddev(event.score),
           score_variance: variance(event.score),
+          score_favg: favg(event.score),
+          score_fsum: fsum(event.score),
+          score_product: product(event.score),
           score_mode: mode(event.score),
           weighted_score: weighted_avg(event.score, event.duration_ms),
           score_skewness: skewness(event.score),
@@ -39,7 +42,7 @@ defmodule QuackDB.Ecto.AnalyticsTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT date_part('hour', q0."occurred_at") AS "hour", date_trunc('day', q0."occurred_at") AS "day", CASE WHEN ((q0."score" >= 50) AND (q0."score" <= 90)) THEN 'range' WHEN (q0."score" = 0) THEN NULL ELSE q0."score" END AS "normalized_score", stddev(q0."score") AS "score_stddev", variance(q0."score") AS "score_variance", mode(q0."score") AS "score_mode", weighted_avg(q0."score", q0."duration_ms") AS "weighted_score", skewness(q0."score") AS "score_skewness", kurtosis(q0."score") AS "score_kurtosis", sem(q0."score") AS "score_sem", geometric_mean(q0."score") AS "score_geometric_mean", corr(q0."score", q0."duration_ms") AS "score_correlation", covar_pop(q0."score", q0."duration_ms") AS "score_covar_pop", covar_samp(q0."score", q0."duration_ms") AS "score_covar_samp", regr_slope(q0."duration_ms", q0."score") AS "score_slope", regr_intercept(q0."duration_ms", q0."score") AS "score_intercept", entropy(q0."score") AS "score_entropy", mad(q0."score") AS "score_mad", histogram(q0."score") AS "score_histogram", histogram_exact(q0."score", ?) AS "exact_histogram", equi_width_bins(0, 100, 10, TRUE) AS "bins" FROM "events" AS q0]
+             ~S[SELECT date_part('hour', q0."occurred_at") AS "hour", date_trunc('day', q0."occurred_at") AS "day", CASE WHEN ((q0."score" >= 50) AND (q0."score" <= 90)) THEN 'range' WHEN (q0."score" = 0) THEN NULL ELSE q0."score" END AS "normalized_score", stddev(q0."score") AS "score_stddev", variance(q0."score") AS "score_variance", favg(q0."score") AS "score_favg", fsum(q0."score") AS "score_fsum", product(q0."score") AS "score_product", mode(q0."score") AS "score_mode", weighted_avg(q0."score", q0."duration_ms") AS "weighted_score", skewness(q0."score") AS "score_skewness", kurtosis(q0."score") AS "score_kurtosis", sem(q0."score") AS "score_sem", geometric_mean(q0."score") AS "score_geometric_mean", corr(q0."score", q0."duration_ms") AS "score_correlation", covar_pop(q0."score", q0."duration_ms") AS "score_covar_pop", covar_samp(q0."score", q0."duration_ms") AS "score_covar_samp", regr_slope(q0."duration_ms", q0."score") AS "score_slope", regr_intercept(q0."duration_ms", q0."score") AS "score_intercept", entropy(q0."score") AS "score_entropy", mad(q0."score") AS "score_mad", histogram(q0."score") AS "score_histogram", histogram_exact(q0."score", ?) AS "exact_histogram", equi_width_bins(0, 100, 10, TRUE) AS "bins" FROM "events" AS q0]
   end
 
   test "builds aggregate analytical expressions" do
