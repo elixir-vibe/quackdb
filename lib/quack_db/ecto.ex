@@ -29,15 +29,14 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.FTS`.
     - `QuackDB.Ecto.Regex`.
     - `QuackDB.Ecto.Text`.
-    - `QuackDB.Ecto.Predicates`.
     - `QuackDB.Ecto.Series`.
 
     `QuackDB.Ecto.Conditionals.case_when/1` is also imported for multi-branch
     DuckDB `CASE WHEN` expressions using Elixir clause syntax.
 
     Imports can be disabled individually. When spatial and text helpers are both
-    enabled, `contains/2` is provided by `QuackDB.Ecto.Predicates` and dispatches
-    obvious text calls to DuckDB `contains` and spatial calls to `ST_Contains`.
+    enabled, shared `contains/2` dispatches obvious text calls to DuckDB
+    `contains` and spatial calls to `ST_Contains`.
 
         use QuackDB.Ecto, spatial: false
         use QuackDB.Ecto, full_text_search: false
