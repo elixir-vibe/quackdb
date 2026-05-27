@@ -27,6 +27,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.Analytics`.
     - `QuackDB.Ecto.Spatial`.
     - `QuackDB.Ecto.FTS`.
+    - `QuackDB.Ecto.Regex`.
     - `QuackDB.Ecto.Series`.
 
     `QuackDB.Ecto.Conditionals.case_when/1` is also imported for multi-branch
@@ -37,6 +38,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, spatial: false
         use QuackDB.Ecto, full_text_search: false
         use QuackDB.Ecto, analytics: false
+        use QuackDB.Ecto, regex: false
         use QuackDB.Ecto, series: false
         use QuackDB.Ecto, query: false
     """
@@ -48,6 +50,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       spatial? = Keyword.get(options, :spatial, true)
       full_text_search? = Keyword.get(options, :full_text_search, true)
       series? = Keyword.get(options, :series, true)
+      regex? = Keyword.get(options, :regex, true)
       conditionals? = Keyword.get(options, :conditionals, true)
 
       imports = []
@@ -65,6 +68,7 @@ if Code.ensure_loaded?(Ecto.Query) do
           else: imports
 
       imports = if series?, do: [quote(do: import(QuackDB.Ecto.Series)) | imports], else: imports
+      imports = if regex?, do: [quote(do: import(QuackDB.Ecto.Regex)) | imports], else: imports
 
       imports =
         if conditionals?,
