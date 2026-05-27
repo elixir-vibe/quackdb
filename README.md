@@ -250,6 +250,23 @@ from doc in "docs",
 
 See the [full-text search guide](guides/full-text-search.md).
 
+### Text and regex predicates
+
+DuckDB text and RE2 regular-expression helpers compose with Ecto filters and aggregate `FILTER` clauses. Shared `contains/2` dispatches obvious string calls to DuckDB `contains` and spatial expressions to `ST_Contains`; `contains_text/2` and `st_contains/2` are available when you want to be explicit.
+
+```elixir
+use QuackDB.Ecto
+
+from event in "events",
+  where: contains(event.name, "duck") and regexp_matches(event.name, ~r/^duck/i),
+  select: %{
+    slug: regexp_replace(event.name, ~r/\s+/, "-", "g"),
+    parts: string_split(event.tags, ",")
+  }
+```
+
+DuckDB regexes use RE2, so `~r` literals are intended for the syntax subset shared with Elixir regexes.
+
 ### Spatial queries
 
 DuckDB Spatial works with Ecto queries and `%Geo.*{}` structs when the optional `:geo` package is installed.
@@ -364,6 +381,7 @@ DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/
 
 The repository includes runnable scripts, a Livebook notebook, and a small WMS app:
 
+- [`examples/ecto_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/ecto_analytics.exs) — Ecto analytical aggregates, text predicates, and DuckDB `SUMMARIZE` profiling.
 - [`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) — derive DDL from an Ecto schema, append an Explorer dataframe, query with Ecto DSL, and return a dataframe.
 - [`examples/full_text_search.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/full_text_search.exs) — materialize a source scan, build a DuckDB FTS index, and query BM25 search through direct helpers and Ecto.
 - [`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) — an Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
