@@ -106,7 +106,7 @@ Prefer ordinary Ecto syntax when it maps cleanly to DuckDB SQL:
 - `selected_as/2` for grouped aliases;
 - `type/2` for JSON/text casts.
 
-Use `QuackDB.Ecto.Analytics` for DuckDB analytical functions that are established SQL vocabulary, such as `median/1`, `quantile_cont/2`, `list/1,2`, `weighted_avg/2`, `fsum/1`, `time_bucket/2,3`, and JSON path helpers.
+Use `QuackDB.Ecto.Analytics` for DuckDB analytical functions that are established SQL vocabulary, such as `median/1`, `quantile_cont/2`, `list/1,2`, `weighted_avg/2`, `fsum/1`, `time_bucket/2,3`, JSON path helpers, and query-level profiling with `summarize/3` or `summarize!/3`.
 
 Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until Ecto supports macro-expanded frame helpers.
 

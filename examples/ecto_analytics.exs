@@ -81,5 +81,7 @@ EctoAnalyticsExample.Repo.query!(
 EctoAnalyticsExample.Repo.all(EctoAnalyticsExample.Queries.summary(table))
 |> IO.inspect(label: "analytics", charlists: :as_lists)
 
-EctoAnalyticsExample.Repo.query!(QuackDB.Analytics.summarize(table)).rows
+EctoAnalyticsExample.Queries.summary(table)
+|> then(&QuackDB.Ecto.Analytics.summarize!(EctoAnalyticsExample.Repo, &1))
+|> Map.fetch!(:rows)
 |> IO.inspect(label: "profile", charlists: :as_lists)

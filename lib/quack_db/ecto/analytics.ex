@@ -1,4 +1,4 @@
-if Code.ensure_loaded?(Ecto.Query.API) do
+if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL) do
   defmodule QuackDB.Ecto.Analytics do
     @moduledoc """
     DuckDB analytical expression helpers for Ecto queries.
@@ -24,6 +24,44 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     Ecto's AST, such as `PIVOT`, `UNPIVOT`, `QUALIFY`, and `GROUPING SETS`,
     should still be sent as raw SQL.
     """
+
+    @doc "Runs DuckDB `SUMMARIZE` for an Ecto queryable using the `:all` query operation."
+    def summarize(repo, queryable), do: summarize(repo, :all, queryable, [])
+
+    def summarize(repo, queryable, options) when is_list(options) do
+      summarize(repo, :all, queryable, options)
+    end
+
+    @doc "Runs DuckDB `SUMMARIZE` for an Ecto queryable using the given Ecto SQL operation."
+    def summarize(repo, operation, queryable)
+        when operation in [:all, :update_all, :delete_all] do
+      summarize(repo, operation, queryable, [])
+    end
+
+    def summarize(repo, operation, queryable, options)
+        when operation in [:all, :update_all, :delete_all] do
+      {sql, params} = Ecto.Adapters.SQL.to_sql(operation, repo, queryable)
+      Ecto.Adapters.SQL.query(repo, ["SUMMARIZE ", sql], params, options)
+    end
+
+    @doc "Runs DuckDB `SUMMARIZE` for an Ecto queryable and raises on error."
+    def summarize!(repo, queryable), do: summarize!(repo, :all, queryable, [])
+
+    def summarize!(repo, queryable, options) when is_list(options) do
+      summarize!(repo, :all, queryable, options)
+    end
+
+    @doc "Runs DuckDB `SUMMARIZE` for an Ecto queryable using the given Ecto SQL operation and raises on error."
+    def summarize!(repo, operation, queryable)
+        when operation in [:all, :update_all, :delete_all] do
+      summarize!(repo, operation, queryable, [])
+    end
+
+    def summarize!(repo, operation, queryable, options)
+        when operation in [:all, :update_all, :delete_all] do
+      {sql, params} = Ecto.Adapters.SQL.to_sql(operation, repo, queryable)
+      Ecto.Adapters.SQL.query!(repo, ["SUMMARIZE ", sql], params, options)
+    end
 
     defmacro median(expression) do
       quote do

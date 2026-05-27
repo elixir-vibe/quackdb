@@ -90,6 +90,37 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
     assert is_number(mad)
   end
 
+  test "summarize profiles Ecto queryables through the repo" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_summarize")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      category: :varchar,
+      score: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, table, [
+      ["a", 10],
+      ["a", 20],
+      ["b", 30]
+    ])
+
+    query =
+      from(event in table,
+        where: event.score > ^10,
+        select: %{category: event.category, score: event.score}
+      )
+
+    assert {:ok, result} = summarize(QuackDB.IntegrationRepo, query)
+    assert %{columns: columns, rows: rows} = result
+    assert "column_name" in columns
+    assert Enum.any?(rows, fn [name | _rest] -> name == "score" end)
+
+    assert %{rows: bang_rows} = summarize!(QuackDB.IntegrationRepo, :all, query)
+
+    assert length(bang_rows) == length(rows)
+  end
+
   test "analytical aggregate helpers execute against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_analytics")

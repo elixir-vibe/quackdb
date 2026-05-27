@@ -564,10 +564,22 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-Profile a table or source with DuckDB `SUMMARIZE` when you need a quick statistical overview:
+Profile an Ecto queryable with DuckDB `SUMMARIZE` when you need a quick statistical overview:
+
+```elixir
+query =
+  from event in "events",
+    where: event.score > 0,
+    select: %{category: event.category, score: event.score}
+
+QuackDB.Ecto.Analytics.summarize!(MyApp.AnalyticsRepo, query)
+```
+
+For table/source names or raw SQL outside Ecto, use the direct SQL helper:
 
 ```elixir
 MyApp.AnalyticsRepo.query!(QuackDB.Analytics.summarize("events"))
+MyApp.AnalyticsRepo.query!(QuackDB.Analytics.summarize({:query, "SELECT score FROM events"}))
 ```
 
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
