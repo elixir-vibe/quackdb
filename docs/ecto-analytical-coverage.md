@@ -30,6 +30,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Nested analytics | list/struct/map functions | Fragment/raw | partial | no | missing |
 | JSON analytics | json_extract/path queries | Helper/source/raw | yes | yes | partial |
 | Regular expressions | regexp_extract/matches/replace/split helpers | Helper | yes | yes | covered |
+| Text helpers | contains/starts_with/split_part/string_split | Helper | yes | partial | partial |
 | Time series | date_trunc/time_bucket/generate_series | Helper/raw | yes | yes | partial |
 | Grouping extensions | grouping sets/rollup/cube | Raw SQL | no | yes | partial |
 | QUALIFY | window filtering | Ecto subquery or raw SQL | yes | yes | partial |
@@ -110,6 +111,8 @@ Prefer ordinary Ecto syntax when it maps cleanly to DuckDB SQL:
 Use `QuackDB.Ecto.Analytics` for DuckDB analytical functions that are established SQL vocabulary, such as `median/1`, `quantile_cont/2`, `list/1,2`, `weighted_avg/2`, `fsum/1`, `time_bucket/2,3`, JSON path helpers, and query-level profiling with `summarize/3` or `summarize!/3`.
 
 Use `QuackDB.Ecto.Regex` for DuckDB's `regexp_*` expression functions. DuckDB uses RE2 while Elixir `Regex` uses Erlang/OTP `:re`, so literal `~r/.../` patterns are convenient only for the shared syntax subset. QuackDB translates compatible `~r` modifiers (`i`, `m`, and `s`) into DuckDB option strings, ignores Elixir's Unicode modifier, and rejects modifiers DuckDB cannot represent.
+
+Use `QuackDB.Ecto.Text` for common text predicates and splitting functions (`contains/2`, `starts_with/2`, `ends_with/2`, `split_part/3`, `string_split/2`) when they read better than fragments.
 
 Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until Ecto supports macro-expanded frame helpers.
 

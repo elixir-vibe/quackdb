@@ -9,6 +9,7 @@
 - Added typed Ecto `series/1,3` helpers for DuckDB `generate_series` date/timestamp sources.
 - Added JSON SQL parameters/path helpers plus Ecto access syntax and `type/2` casts.
 - Added Ecto regular-expression helpers for DuckDB `regexp_*` functions with compatible `~r` modifier translation.
+- Added Ecto text helpers for common DuckDB string predicates and splitting functions.
 - Added `case_when` syntax for DuckDB `CASE WHEN` and atom date parts.
 - Added ordered `list/2` and `string_agg/3` with NULL ordering.
 - Added Ecto `count(..., :distinct)` and `coalesce/2` SQL generation.

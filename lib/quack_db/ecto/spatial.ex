@@ -69,6 +69,12 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    defmacro st_contains(left, right) do
+      quote do
+        fragment("ST_Contains(?, ?)", unquote(left), unquote(right))
+      end
+    end
+
     defmacro contains(left, right) do
       quote do
         fragment("ST_Contains(?, ?)", unquote(left), unquote(right))
