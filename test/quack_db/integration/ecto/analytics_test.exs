@@ -194,6 +194,79 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
     assert_in_delta geometric_mean_b, 5.0, 0.000001
   end
 
+  test "expanded aggregate helpers execute against a real Quack server" do
+    start_repo!()
+    table = unique_table("quackdb_ecto_expanded_analytics")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      category: :varchar,
+      name: :varchar,
+      score: :integer,
+      weight: :integer,
+      active: :boolean,
+      flags: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, table, [
+      ["a", "duck", 10, 1, true, 7],
+      ["a", "goose", 20, 2, true, 3],
+      ["a", "swan", 30, 3, false, 1]
+    ])
+
+    query =
+      from(event in table,
+        select: %{
+          approximate_names: approx_count_distinct(event.name),
+          approximate_median: approx_quantile(event.score, 0.5),
+          top_scores: approx_top_k(event.score, 2),
+          any_name: any_value(event.name),
+          all_active: bool_and(event.active),
+          any_active: bool_or(event.active),
+          flags_and: band(event.flags),
+          flags_or: bor(event.flags),
+          flags_xor: bxor(event.flags),
+          bit_positions: bitstring_agg(event.score),
+          bit_range: bitstring_agg(event.score, 0, 32),
+          kurtosis_population: kurtosis_pop(event.score),
+          stddev_population: stddev_pop(event.score),
+          variance_population: var_pop(event.score),
+          variance_sample: var_samp(event.score),
+          reservoir_median: reservoir_quantile(event.score, 0.5),
+          reservoir_sampled: reservoir_quantile(event.score, 0.5, 128),
+          regression_count: regr_count(event.weight, event.score),
+          regression_r2: regr_r2(event.weight, event.score),
+          regression_sxx: regr_sxx(event.weight, event.score),
+          regression_sxy: regr_sxy(event.weight, event.score),
+          regression_syy: regr_syy(event.weight, event.score)
+        }
+      )
+
+    assert [row] = QuackDB.IntegrationRepo.all(query)
+
+    assert row.approximate_names >= 1
+    assert row.approximate_median == 20
+    assert row.top_scores == [10, 20]
+    assert row.any_name in ["duck", "goose", "swan"]
+    assert row.all_active == false
+    assert row.any_active == true
+    assert row.flags_and == 1
+    assert row.flags_or == 7
+    assert row.flags_xor == 5
+    assert is_binary(row.bit_positions)
+    assert is_binary(row.bit_range)
+    assert is_float(row.kurtosis_population)
+    assert_in_delta row.stddev_population, 8.16496580927726, 0.000001
+    assert_in_delta row.variance_population, 66.66666666666667, 0.000001
+    assert_in_delta row.variance_sample, 100.0, 0.000001
+    assert row.reservoir_median == 20
+    assert row.reservoir_sampled == 20
+    assert row.regression_count == 3
+    assert_in_delta row.regression_r2, 1.0, 0.000001
+    assert_in_delta row.regression_sxx, 200.0, 0.000001
+    assert_in_delta row.regression_sxy, 20.0, 0.000001
+    assert_in_delta row.regression_syy, 2.0, 0.000001
+  end
+
   test "JSON and time-series helpers execute against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_json_time")
