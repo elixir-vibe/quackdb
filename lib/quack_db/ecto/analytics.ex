@@ -25,6 +25,39 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
     should still be sent as raw SQL.
     """
 
+    @simple_fragment_helpers [
+      %{name: :median, sql: "median", arity: 1, class: :aggregate},
+      %{name: :quantile_cont, sql: "quantile_cont", arity: 2, class: :aggregate},
+      %{name: :quantile_disc, sql: "quantile_disc", arity: 2, class: :aggregate},
+      %{name: :arg_max, sql: "arg_max", arity: 2, class: :aggregate},
+      %{name: :arg_max, sql: "arg_max", arity: 3, class: :aggregate},
+      %{name: :arg_min, sql: "arg_min", arity: 2, class: :aggregate},
+      %{name: :arg_min, sql: "arg_min", arity: 3, class: :aggregate},
+      %{name: :corr, sql: "corr", arity: 2, class: :statistical_aggregate},
+      %{name: :stddev, sql: "stddev", arity: 1, class: :statistical_aggregate},
+      %{name: :variance, sql: "variance", arity: 1, class: :statistical_aggregate},
+      %{name: :favg, sql: "favg", arity: 1, class: :numeric_aggregate},
+      %{name: :fsum, sql: "fsum", arity: 1, class: :numeric_aggregate},
+      %{name: :product, sql: "product", arity: 1, class: :numeric_aggregate},
+      %{name: :mode, sql: "mode", arity: 1, class: :aggregate},
+      %{name: :weighted_avg, sql: "weighted_avg", arity: 2, class: :numeric_aggregate},
+      %{name: :skewness, sql: "skewness", arity: 1, class: :statistical_aggregate},
+      %{name: :kurtosis, sql: "kurtosis", arity: 1, class: :statistical_aggregate},
+      %{name: :sem, sql: "sem", arity: 1, class: :statistical_aggregate},
+      %{name: :geometric_mean, sql: "geometric_mean", arity: 1, class: :numeric_aggregate},
+      %{name: :covar_pop, sql: "covar_pop", arity: 2, class: :statistical_aggregate},
+      %{name: :covar_samp, sql: "covar_samp", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_slope, sql: "regr_slope", arity: 2, class: :statistical_aggregate},
+      %{name: :regr_intercept, sql: "regr_intercept", arity: 2, class: :statistical_aggregate},
+      %{name: :entropy, sql: "entropy", arity: 1, class: :statistical_aggregate},
+      %{name: :mad, sql: "mad", arity: 1, class: :statistical_aggregate},
+      %{name: :histogram, sql: "histogram", arity: 1, class: :histogram_aggregate},
+      %{name: :histogram_exact, sql: "histogram_exact", arity: 2, class: :histogram_aggregate}
+    ]
+
+    @doc false
+    def __simple_fragment_helpers__, do: @simple_fragment_helpers
+
     @doc "Runs DuckDB `SUMMARIZE` for an Ecto queryable using the `:all` query operation."
     def summarize(repo, queryable), do: summarize(repo, :all, queryable, [])
 
@@ -63,21 +96,20 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
       Ecto.Adapters.SQL.query!(repo, ["SUMMARIZE ", sql], params, options)
     end
 
-    defmacro median(expression) do
-      quote do
-        fragment("median(?)", unquote(expression))
+    for %{name: name, sql: sql, arity: arity} <- @simple_fragment_helpers do
+      arguments = Macro.generate_arguments(arity, __MODULE__)
+
+      fragment_sql =
+        IO.iodata_to_binary([sql, "(", Enum.map_join(1..arity, ", ", fn _ -> "?" end), ")"])
+
+      defmacro unquote(name)(unquote_splicing(arguments)) do
+        simple_fragment(unquote(fragment_sql), [unquote_splicing(arguments)])
       end
     end
 
-    defmacro quantile_cont(expression, quantile) do
+    defp simple_fragment(sql, arguments) do
       quote do
-        fragment("quantile_cont(?, ?)", unquote(expression), unquote(quantile))
-      end
-    end
-
-    defmacro quantile_disc(expression, quantile) do
-      quote do
-        fragment("quantile_disc(?, ?)", unquote(expression), unquote(quantile))
+        fragment(unquote(sql), unquote_splicing(arguments))
       end
     end
 
@@ -99,30 +131,6 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
 
     defmacro string_agg(expression, separator, options) when is_list(options) do
       ordered_aggregate("string_agg", [expression, separator], options)
-    end
-
-    defmacro arg_max(argument, value) do
-      quote do
-        fragment("arg_max(?, ?)", unquote(argument), unquote(value))
-      end
-    end
-
-    defmacro arg_max(argument, value, count) do
-      quote do
-        fragment("arg_max(?, ?, ?)", unquote(argument), unquote(value), unquote(count))
-      end
-    end
-
-    defmacro arg_min(argument, value) do
-      quote do
-        fragment("arg_min(?, ?)", unquote(argument), unquote(value))
-      end
-    end
-
-    defmacro arg_min(argument, value, count) do
-      quote do
-        fragment("arg_min(?, ?, ?)", unquote(argument), unquote(value), unquote(count))
-      end
     end
 
     defmacro json_extract(expression, path) when is_list(path) do
@@ -192,126 +200,6 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
     defmacro date_part(part, timestamp) do
       quote do
         fragment("date_part(?, ?)", unquote(part), unquote(timestamp))
-      end
-    end
-
-    defmacro corr(left, right) do
-      quote do
-        fragment("corr(?, ?)", unquote(left), unquote(right))
-      end
-    end
-
-    defmacro stddev(expression) do
-      quote do
-        fragment("stddev(?)", unquote(expression))
-      end
-    end
-
-    defmacro variance(expression) do
-      quote do
-        fragment("variance(?)", unquote(expression))
-      end
-    end
-
-    defmacro favg(expression) do
-      quote do
-        fragment("favg(?)", unquote(expression))
-      end
-    end
-
-    defmacro fsum(expression) do
-      quote do
-        fragment("fsum(?)", unquote(expression))
-      end
-    end
-
-    defmacro product(expression) do
-      quote do
-        fragment("product(?)", unquote(expression))
-      end
-    end
-
-    defmacro mode(expression) do
-      quote do
-        fragment("mode(?)", unquote(expression))
-      end
-    end
-
-    defmacro weighted_avg(expression, weight) do
-      quote do
-        fragment("weighted_avg(?, ?)", unquote(expression), unquote(weight))
-      end
-    end
-
-    defmacro skewness(expression) do
-      quote do
-        fragment("skewness(?)", unquote(expression))
-      end
-    end
-
-    defmacro kurtosis(expression) do
-      quote do
-        fragment("kurtosis(?)", unquote(expression))
-      end
-    end
-
-    defmacro sem(expression) do
-      quote do
-        fragment("sem(?)", unquote(expression))
-      end
-    end
-
-    defmacro geometric_mean(expression) do
-      quote do
-        fragment("geometric_mean(?)", unquote(expression))
-      end
-    end
-
-    defmacro covar_pop(left, right) do
-      quote do
-        fragment("covar_pop(?, ?)", unquote(left), unquote(right))
-      end
-    end
-
-    defmacro covar_samp(left, right) do
-      quote do
-        fragment("covar_samp(?, ?)", unquote(left), unquote(right))
-      end
-    end
-
-    defmacro regr_slope(dependent, independent) do
-      quote do
-        fragment("regr_slope(?, ?)", unquote(dependent), unquote(independent))
-      end
-    end
-
-    defmacro regr_intercept(dependent, independent) do
-      quote do
-        fragment("regr_intercept(?, ?)", unquote(dependent), unquote(independent))
-      end
-    end
-
-    defmacro entropy(expression) do
-      quote do
-        fragment("entropy(?)", unquote(expression))
-      end
-    end
-
-    defmacro mad(expression) do
-      quote do
-        fragment("mad(?)", unquote(expression))
-      end
-    end
-
-    defmacro histogram(expression) do
-      quote do
-        fragment("histogram(?)", unquote(expression))
-      end
-    end
-
-    defmacro histogram_exact(expression, elements) do
-      quote do
-        fragment("histogram_exact(?, ?)", unquote(expression), unquote(elements))
       end
     end
 

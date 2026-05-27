@@ -32,4 +32,18 @@ defmodule QuackDB.DuckDBFunctionsSnapshotTest do
              &(&1.return_type_spec == :hugeint)
            )
   end
+
+  test "simple Ecto helper manifest matches DuckDB snapshot arities" do
+    {snapshot, _binding} = Code.eval_file(@snapshot_path)
+    candidates = Map.new(snapshot.helper_candidates, &{&1.name, &1})
+
+    for %{name: name, sql: sql, arity: arity} <-
+          QuackDB.Ecto.Analytics.__simple_fragment_helpers__() do
+      helper = Atom.to_string(name)
+      candidate = Map.fetch!(candidates, sql)
+
+      assert arity in candidate.arities,
+             "expected #{helper}/#{arity} to be backed by DuckDB #{sql}/#{arity}"
+    end
+  end
 end
