@@ -26,6 +26,24 @@ defmodule QuackDB.Protocol.DataChunkTest do
     assert DataChunk.rows(decoded) == [[1, "one", true], [2, nil, false]]
   end
 
+  test "rejects mismatched append column lengths" do
+    assert {:error, %QuackDB.Error{code: :invalid_vector_size, message: message}} =
+             DataChunk.from_columns(
+               [id: [1, 2], name: ["one"]],
+               columns: [id: :integer, name: :varchar]
+             )
+
+    assert message =~ "mismatched row counts"
+  end
+
+  test "rejects missing append type inference for empty inputs" do
+    assert {:error, %QuackDB.Error{code: :missing_append_columns}} =
+             DataChunk.from_columns([], columns: [])
+
+    assert {:error, %QuackDB.Error{code: :missing_append_columns}} =
+             DataChunk.from_rows([])
+  end
+
   test "encodes row maps as a flat data chunk" do
     assert {:ok, chunk} =
              DataChunk.from_rows(

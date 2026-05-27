@@ -3,6 +3,20 @@ defmodule QuackDB.Integration.TypeMatrixTest do
 
   @moduletag :integration
 
+  test "decodes standalone null and boolean values" do
+    assert [row] =
+             query_rows!("""
+             SELECT
+               NULL AS sql_null,
+               TRUE AS truthy,
+               FALSE AS falsey,
+               NULL::BOOLEAN AS nullable_bool,
+               NULL::INTEGER AS nullable_integer
+             """)
+
+    assert row == [nil, true, false, nil, nil]
+  end
+
   test "decodes integer family values" do
     assert [row] =
              query_rows!("""
@@ -135,6 +149,13 @@ defmodule QuackDB.Integration.TypeMatrixTest do
     assert geometry == Base.decode16!(hexwkb, case: :mixed)
   end
 
+  test "decodes empty result sets without losing columns" do
+    connection = start_connection!()
+
+    assert %QuackDB.Result{columns: ["id", "name"], rows: [], num_rows: 0} =
+             QuackDB.query!(connection, "SELECT 1::INTEGER AS id, 'duck' AS name WHERE FALSE")
+  end
+
   test "decodes nested edge cases" do
     assert [row] =
              query_rows!("""
@@ -143,7 +164,8 @@ defmodule QuackDB.Integration.TypeMatrixTest do
                [1, NULL, 3] AS nullable_list,
                {'a': NULL, 'b': 2} AS nullable_struct,
                map(['a', 'b'], [NULL, 2]) AS nullable_map,
-               [[1,2], [3,4]] AS nested_list
+               [[1,2], [3,4]] AS nested_list,
+               [NULL, [1, NULL], []]::INTEGER[][] AS nested_nullable_list
              """)
 
     assert row == [
@@ -151,7 +173,8 @@ defmodule QuackDB.Integration.TypeMatrixTest do
              [1, nil, 3],
              %{"a" => nil, "b" => 2},
              %{"a" => nil, "b" => 2},
-             [[1, 2], [3, 4]]
+             [[1, 2], [3, 4]],
+             [nil, [1, nil], []]
            ]
   end
 

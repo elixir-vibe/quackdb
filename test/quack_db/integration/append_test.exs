@@ -136,6 +136,49 @@ defmodule QuackDB.Integration.AppendTest do
     TestHelper.drop_table!(conn, table)
   end
 
+  test "insert_rows appends nullable scalar values", %{conn: conn} do
+    table = TestHelper.unique_table("append_nullable_events")
+
+    TestHelper.create_table!(conn, table,
+      id: :integer,
+      name: :varchar,
+      active: :boolean,
+      amount: {:decimal, 8, 2},
+      tags: {:list, :varchar}
+    )
+
+    assert %QuackDB.Result{num_rows: 2} =
+             QuackDB.insert_rows!(
+               conn,
+               table,
+               [
+                 [id: 1, name: nil, active: true, amount: nil, tags: ["duck", nil]],
+                 [id: 2, name: "goose", active: nil, amount: Decimal.new("12.34"), tags: nil]
+               ],
+               columns: [
+                 id: :integer,
+                 name: :varchar,
+                 active: :boolean,
+                 amount: {:decimal, 8, 2},
+                 tags: {:list, :varchar}
+               ],
+               batch_size: 1
+             )
+
+    assert %QuackDB.Result{rows: rows} =
+             QuackDB.query!(
+               conn,
+               "SELECT id, name, active, amount, tags FROM #{table} ORDER BY id"
+             )
+
+    assert rows == [
+             [1, nil, true, nil, ["duck", nil]],
+             [2, "goose", nil, Decimal.new("12.34"), nil]
+           ]
+
+    TestHelper.drop_table!(conn, table)
+  end
+
   test "insert_rows appends common scalar DuckDB types", %{conn: conn} do
     table = TestHelper.unique_table("append_typed_events")
 

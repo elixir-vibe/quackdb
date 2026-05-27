@@ -76,4 +76,14 @@ QuackDB is intentionally protocol-first, but it does not claim full DuckDB Quack
 
 ## Conformance fixtures
 
-Current cross-implementation fixtures compare QuackDB's append/data chunk encoding byte-for-byte with quack-ts for scalar and nested chunks. See [`docs/protocol/fixtures.md`](fixtures.md) for the fixture inventory and backlog.
+Current cross-implementation fixtures compare QuackDB's append/data chunk encoding byte-for-byte with quack-ts for scalar and nested chunks. See [`fixtures.md`](docs/protocol/fixtures.md) for the fixture inventory, parity checklist, malformed fixtures, and fixture backlog.
+
+## Next coverage targets
+
+| Area | Next work |
+| --- | --- |
+| Real-server type matrix | Keep adding SQL-generated edge cases for standalone `NULL`, nested nullability, unsigned/huge values, temporal precision, and DuckDB extension types as they become stable over Quack. |
+| Append roundtrips | Expand native append tests for null-heavy scalar/nested values, schema mismatch errors, and batch-boundary behavior. |
+| Malformed vectors | Add targeted fixtures for missing required fields, invalid validity masks, malformed list entries, array-size mismatches, and unsupported compressed vectors. |
+| Unsupported logical types | Add fixtures or synthetic metadata tests for `UNION`, `VARIANT`, extension/custom types, and aggregate state once stable payloads are available. |
+| FSST | Capture a real DuckDB Quack FSST payload if DuckDB starts serializing compressed FSST vectors instead of flattened strings. |
