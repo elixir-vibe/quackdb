@@ -33,6 +33,25 @@ defmodule QuackDB.DuckDBFunctionsSnapshotTest do
            )
   end
 
+  test "regex Ecto helper manifest matches DuckDB snapshot arities" do
+    {snapshot, _binding} = Code.eval_file(@snapshot_path)
+
+    functions =
+      snapshot.functions
+      |> Enum.filter(&(&1.type == :scalar))
+      |> Enum.group_by(& &1.name)
+
+    for %{name: name, arities: arities} <- QuackDB.Ecto.Regex.__regex_helpers__() do
+      helper = Atom.to_string(name)
+      function_arities = functions |> Map.fetch!(helper) |> Enum.map(& &1.arity)
+
+      for arity <- arities do
+        assert arity in function_arities,
+               "expected #{helper}/#{arity} to be backed by DuckDB #{helper}/#{arity}"
+      end
+    end
+  end
+
   test "simple Ecto helper manifest matches DuckDB snapshot arities" do
     {snapshot, _binding} = Code.eval_file(@snapshot_path)
     candidates = Map.new(snapshot.helper_candidates, &{&1.name, &1})
