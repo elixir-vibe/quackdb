@@ -27,10 +27,16 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
               event.score == 0 -> nil
               true -> event.score
             end,
+          score_or_zero: coalesce(event.score, 0),
           score_stddev: over(stddev(event.score), []),
           score_variance: over(variance(event.score), []),
           score_entropy: over(entropy(event.score), []),
-          score_mad: over(mad(event.score), [])
+          score_mad: over(mad(event.score), []),
+          rolling_score:
+            over(sum(event.score),
+              order_by: [asc: event.id],
+              frame: fragment("ROWS BETWEEN 1 PRECEDING AND CURRENT ROW")
+            )
         }
       )
     end
@@ -56,10 +62,12 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                tier: "high",
                hour: 3,
                safe_score: 10,
+               score_or_zero: 10,
                score_stddev: stddev,
                score_variance: variance,
                score_entropy: entropy,
-               score_mad: mad
+               score_mad: mad,
+               rolling_score: 10
              },
              _second
            ] =
@@ -97,6 +105,7 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
           median_score: median(event.score),
           p95_score: quantile_cont(event.score, 0.95),
           scores: list(event.score),
+          distinct_names: count(event.name, :distinct),
           names: string_agg(event.name, ","),
           best_name: arg_max(event.name, event.score),
           worst_name: arg_min(event.name, event.score),
@@ -111,6 +120,7 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                median_score: 20.0,
                p95_score: 29.0,
                scores: [10, 20, 30],
+               distinct_names: 3,
                names: "duck,goose,swan",
                best_name: "swan",
                worst_name: "duck",
@@ -122,6 +132,7 @@ defmodule QuackDB.Integration.Ecto.AnalyticsTest do
                median_score: 5.0,
                p95_score: 5.0,
                scores: [5],
+               distinct_names: 1,
                names: "salmon",
                best_name: "salmon",
                worst_name: "salmon",

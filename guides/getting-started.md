@@ -536,27 +536,35 @@ use QuackDB.Ecto
 
 MyApp.AnalyticsRepo.all(
   from event in "events",
-    group_by: [date_part(:hour, event.occurred_at)],
+    group_by: [date_part(:hour, event.occurred_at), selected_as(:tier)],
     select: %{
       hour: date_part(:hour, event.occurred_at),
       tier:
-        case_when do
-          event.score >= 90 -> "high"
-          event.score >= 50 and event.score <= 89 -> "medium"
-          true -> "normal"
-        end,
-      safe_score:
-        case_when do
-          event.score == 0 -> nil
-          true -> event.score
-        end,
+        selected_as(
+          case_when do
+            event.score >= 90 -> "high"
+            event.score >= 50 and event.score <= 89 -> "medium"
+            true -> "normal"
+          end,
+          :tier
+        ),
+      events: count(),
+      distinct_events: count(event.id, :distinct),
+      high_events: filter(count(event.id), event.score >= 90),
+      average_score: coalesce(avg(event.score), 0),
       score_stddev: stddev(event.score),
       score_variance: variance(event.score),
       score_entropy: entropy(event.score),
       score_histogram: histogram(event.score),
-      ordered_scores: list(event.score, order_by: [desc: event.score])
+      ordered_scores: list(event.score, order_by: [desc_nulls_last: event.score])
     }
 )
+```
+
+Profile a table or source with DuckDB `SUMMARIZE` when you need a quick statistical overview:
+
+```elixir
+MyApp.AnalyticsRepo.query!(QuackDB.Analytics.summarize("events"))
 ```
 
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:

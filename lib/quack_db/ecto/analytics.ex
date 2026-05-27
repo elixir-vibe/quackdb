@@ -266,13 +266,25 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       |> Enum.intersperse(", ")
     end
 
-    defp order_expression!({direction, expression}) when direction in [:asc, :desc],
-      do: expression
+    defp order_expression!({direction, expression})
+         when direction in [
+                :asc,
+                :desc,
+                :asc_nulls_first,
+                :asc_nulls_last,
+                :desc_nulls_first,
+                :desc_nulls_last
+              ],
+         do: expression
 
     defp order_expression!(expression), do: expression
 
     defp order_direction!({:asc, _expression}), do: "ASC"
     defp order_direction!({:desc, _expression}), do: "DESC"
+    defp order_direction!({:asc_nulls_first, _expression}), do: "ASC NULLS FIRST"
+    defp order_direction!({:asc_nulls_last, _expression}), do: "ASC NULLS LAST"
+    defp order_direction!({:desc_nulls_first, _expression}), do: "DESC NULLS FIRST"
+    defp order_direction!({:desc_nulls_last, _expression}), do: "DESC NULLS LAST"
     defp order_direction!(_expression), do: "ASC"
 
     defp date_part_literal!(part) do

@@ -22,4 +22,17 @@ defmodule QuackDB.Ecto.SQLGeneration.AggregatesTest do
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
              ~S[SELECT COUNT(q0."id") FILTER (WHERE (q0."kind" = 'duck')) AS "duck_count" FROM "events" AS q0]
   end
+
+  test "generates distinct count and coalesce expressions" do
+    query =
+      from(event in "events",
+        select: %{
+          distinct_users: count(event.user_id, :distinct),
+          score_or_zero: coalesce(event.score, 0)
+        }
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT COUNT(DISTINCT q0."user_id") AS "distinct_users", coalesce(q0."score", 0) AS "score_or_zero" FROM "events" AS q0]
+  end
 end

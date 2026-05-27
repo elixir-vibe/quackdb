@@ -36,8 +36,10 @@ defmodule EctoAnalyticsExample.Queries do
             :tier
           ),
         events: count(),
+        distinct_events: count(event.id, :distinct),
         high_events: filter(count(event.id), event.score >= 90),
-        scores: list(event.score, order_by: [desc: event.score]),
+        scores: list(event.score, order_by: [desc_nulls_last: event.score]),
+        average_score: coalesce(avg(event.score), 0),
         score_stddev: stddev(event.score),
         score_histogram: histogram(event.score)
       }
@@ -78,3 +80,6 @@ EctoAnalyticsExample.Repo.query!(
 
 EctoAnalyticsExample.Repo.all(EctoAnalyticsExample.Queries.summary(table))
 |> IO.inspect(label: "analytics", charlists: :as_lists)
+
+EctoAnalyticsExample.Repo.query!(QuackDB.Analytics.summarize(table)).rows
+|> IO.inspect(label: "profile", charlists: :as_lists)

@@ -413,6 +413,9 @@ if Code.ensure_loaded?(Ecto.Query) do
 
         {:order_by, expressions} ->
           ["ORDER BY ", order_by_exprs(expressions)]
+
+        {:frame, expression} ->
+          expr(expression)
       end)
       |> Enum.intersperse(" ")
     end
@@ -466,7 +469,15 @@ if Code.ensure_loaded?(Ecto.Query) do
       [aggregate |> Atom.to_string() |> String.upcase(), "(", expr(expression), ")"]
     end
 
+    defp expr({:count, _meta, [expression, :distinct]}) do
+      ["COUNT(DISTINCT ", expr(expression), ")"]
+    end
+
     defp expr({:count, _meta, []}), do: "COUNT(*)"
+
+    defp expr({:coalesce, _meta, [left, right]}) do
+      ["coalesce(", expr(left), ", ", expr(right), ")"]
+    end
 
     defp expr({window_function, _meta, []})
          when window_function in [:row_number, :rank, :dense_rank, :percent_rank, :cume_dist] do

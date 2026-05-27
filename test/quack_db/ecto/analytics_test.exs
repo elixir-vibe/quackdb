@@ -46,7 +46,7 @@ defmodule QuackDB.Ecto.AnalyticsTest do
           p95_score: quantile_cont(event.score, 0.95),
           p50_disc: quantile_disc(event.score, 0.5),
           scores: list(event.score),
-          ordered_names: list(event.name, order_by: [desc: event.score]),
+          ordered_names: list(event.name, order_by: [desc_nulls_last: event.score]),
           names: string_agg(event.name, ","),
           ordered_names_text: string_agg(event.name, ",", order_by: [desc: event.score]),
           best_name: arg_max(event.name, event.score),
@@ -57,7 +57,7 @@ defmodule QuackDB.Ecto.AnalyticsTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT q0."category" AS "category", median(q0."score") AS "median_score", quantile_cont(q0."score", 0.95) AS "p95_score", quantile_disc(q0."score", 0.5) AS "p50_disc", list(q0."score") AS "scores", list(q0."name" ORDER BY q0."score" DESC) AS "ordered_names", string_agg(q0."name", ',') AS "names", string_agg(q0."name", ',' ORDER BY q0."score" DESC) AS "ordered_names_text", arg_max(q0."name", q0."score") AS "best_name", arg_max(q0."name", q0."score", 2) AS "top_names", arg_min(q0."name", q0."score") AS "worst_name", arg_min(q0."name", q0."score", 2) AS "bottom_names" FROM "events" AS q0 GROUP BY q0."category"]
+             ~S[SELECT q0."category" AS "category", median(q0."score") AS "median_score", quantile_cont(q0."score", 0.95) AS "p95_score", quantile_disc(q0."score", 0.5) AS "p50_disc", list(q0."score") AS "scores", list(q0."name" ORDER BY q0."score" DESC NULLS LAST) AS "ordered_names", string_agg(q0."name", ',') AS "names", string_agg(q0."name", ',' ORDER BY q0."score" DESC) AS "ordered_names_text", arg_max(q0."name", q0."score") AS "best_name", arg_max(q0."name", q0."score", 2) AS "top_names", arg_min(q0."name", q0."score") AS "worst_name", arg_min(q0."name", q0."score", 2) AS "bottom_names" FROM "events" AS q0 GROUP BY q0."category"]
   end
 
   test "builds time buckets from Elixir durations" do
