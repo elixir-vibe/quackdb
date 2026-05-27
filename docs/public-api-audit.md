@@ -28,7 +28,7 @@ Naming decisions to keep before `0.4.0`:
 - `QuackDB.Ecto.Regex` exposes DuckDB `regexp_*` helpers and accepts compatible literal `~r` patterns.
 - `QuackDB.Ecto.Text` exposes common string predicates and splitting helpers: `contains/2`, `contains_text/2`, `starts_with/2`, `ends_with/2`, `prefix/2`, `suffix/2`, `split_part/3`, `string_split/2`, and `string_split_regex/2,3`.
 - `QuackDB.Ecto.Spatial.st_contains/2` is an explicit spatial escape hatch for shared `contains/2` use.
-- `QuackDB.Ecto.Predicates` is intentionally hidden and imported by `use QuackDB.Ecto` only to dispatch shared `contains/2`.
+- The hidden predicates module is imported by `use QuackDB.Ecto` only to dispatch shared `contains/2`.
 
 Open naming review before `0.4.0`:
 
@@ -47,7 +47,7 @@ Open naming review before `0.4.0`:
 
 ## Maintainer tooling
 
-- `mix quackdb.functions.snapshot` writes a checked-in DuckDB function catalog snapshot under `priv/duckdb_functions/current.exs`.
+- The `quackdb.functions.snapshot` Mix task writes a checked-in DuckDB function catalog snapshot under `priv/duckdb_functions/current.exs`.
 - The snapshot stores normalized QuackDB type specs for overload auditing, but package compilation must not depend on a live DuckDB server.
 
 ## Pre-release checks
