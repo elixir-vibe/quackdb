@@ -114,7 +114,7 @@ Use `QuackDB.Ecto.Regex` for DuckDB's `regexp_*` expression functions. DuckDB us
 
 Use `QuackDB.Ecto.Text` for common text predicates and splitting functions (`contains/2`, `starts_with/2`, `ends_with/2`, `split_part/3`, `string_split/2`) when they read better than fragments. With `use QuackDB.Ecto`, shared `contains/2` routes obvious text calls to DuckDB `contains` and spatial expressions to `ST_Contains`; use `contains_text/2` or `st_contains/2` when you want to be explicit.
 
-Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until Ecto supports macro-expanded frame helpers.
+Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until QuackDB depends on an Ecto release that includes macro-expanded frame helper support.
 
 ## Boundaries
 
