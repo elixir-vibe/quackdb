@@ -10,11 +10,12 @@
 - Added JSON SQL parameters/path helpers plus Ecto access syntax and `type/2` casts.
 - Added Ecto regular-expression helpers for DuckDB `regexp_*` functions with compatible `~r` modifier translation.
 - Added Ecto text helpers for common DuckDB string predicates and splitting functions.
+- Added a public API audit for 0.4.0 review.
 - Added `case_when` syntax for DuckDB `CASE WHEN` and atom date parts.
 - Added ordered `list/2` and `string_agg/3` with NULL ordering.
 - Added Ecto `count(..., :distinct)` and `coalesce/2` SQL generation.
 - Added `arg_max/3`, `arg_min/3`, approximate aggregate, boolean aggregate, Bitwise-style bit aggregate, statistical, precise floating-point aggregate, weighted aggregate, product, and histogram helpers.
-- Added value window functions with fragment-backed frames.
+- Added value window functions with fragment-backed frames and future-ready window frame helper macros.
 - Added direct and Ecto queryable `SUMMARIZE` profiling helpers.
 - Added DuckDB function snapshot task with normalized QuackDB type specs for overload auditing.
 - Added protocol coverage and quack-ts parity docs plus expanded type/null/append conformance coverage.

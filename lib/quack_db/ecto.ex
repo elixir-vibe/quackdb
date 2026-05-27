@@ -30,6 +30,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.Regex`.
     - `QuackDB.Ecto.Text`.
     - `QuackDB.Ecto.Series`.
+    - `QuackDB.Ecto.WindowFrames`.
 
     `QuackDB.Ecto.Conditionals.case_when/1` is also imported for multi-branch
     DuckDB `CASE WHEN` expressions using Elixir clause syntax.
@@ -44,6 +45,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, regex: false
         use QuackDB.Ecto, text: false
         use QuackDB.Ecto, series: false
+        use QuackDB.Ecto, window_frames: false
         use QuackDB.Ecto, query: false
     """
 
@@ -58,6 +60,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       text? = Keyword.get(options, :text, true)
       conditionals? = Keyword.get(options, :conditionals, true)
       predicates? = Keyword.get(options, :predicates, true)
+      window_frames? = Keyword.get(options, :window_frames, true)
 
       imports = []
       imports = if query?, do: [quote(do: import(Ecto.Query)) | imports], else: imports
@@ -83,6 +86,12 @@ if Code.ensure_loaded?(Ecto.Query) do
           else: imports
 
       imports = if series?, do: [quote(do: import(QuackDB.Ecto.Series)) | imports], else: imports
+
+      imports =
+        if window_frames?,
+          do: [quote(do: import(QuackDB.Ecto.WindowFrames)) | imports],
+          else: imports
+
       imports = if regex?, do: [quote(do: import(QuackDB.Ecto.Regex)) | imports], else: imports
 
       imports =
