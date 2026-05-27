@@ -653,17 +653,30 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp validate_list_entries(entries, list_size) do
-    Enum.reduce_while(entries, :ok, fn %{offset: offset, length: length}, :ok ->
-      if offset + length <= list_size do
-        {:cont, :ok}
+    Enum.reduce_while(entries, :ok, fn entry, :ok ->
+      with {:ok, offset, length} <- list_entry_bounds(entry) do
+        if offset + length <= list_size do
+          {:cont, :ok}
+        else
+          {:halt,
+           error(
+             :list_entry_out_of_bounds,
+             "list entry offset #{offset} with length #{length} exceeds child vector size #{list_size}"
+           )}
+        end
       else
-        {:halt,
-         error(
-           :list_entry_out_of_bounds,
-           "list entry offset #{offset} with length #{length} exceeds child vector size #{list_size}"
-         )}
+        {:error, _error} = error -> {:halt, error}
       end
     end)
+  end
+
+  defp list_entry_bounds(%{offset: offset, length: length}), do: {:ok, offset, length}
+
+  defp list_entry_bounds(entry) do
+    error(
+      :invalid_list_entry,
+      "LIST entry must include offset and length fields, got #{inspect(entry)}"
+    )
   end
 
   defp list_values(type, entries, child_values, validity) do

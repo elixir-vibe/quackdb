@@ -142,6 +142,32 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert message == "list vector serialized 1 entries for 2 rows"
   end
 
+  test "reports incomplete list entries" do
+    list_type = LogicalType.new(:list, %{type: 4, child_type: LogicalType.new(:integer)})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(list_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(1)),
+            Writer.field(105, Writer.list([%{offset: 0}], &list_entry/1)),
+            Writer.field(106, QuackDB.Protocol.Vector.encode(LogicalType.new(:integer), [10], 1)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_list_entry, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "LIST entry must include offset and length fields, got %{offset: 0}"
+  end
+
   test "reports list entry bounds violations" do
     list_type = LogicalType.new(:list, %{type: 4, child_type: LogicalType.new(:integer)})
 
@@ -325,10 +351,16 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
              DataChunk.decode_wrapper(binary)
   end
 
-  defp list_entry(%{offset: offset, length: length}) do
+  defp list_entry(entry) do
     [
-      Writer.field(100, Writer.uleb128(offset)),
-      Writer.field(101, Writer.uleb128(length)),
+      if(Map.has_key?(entry, :offset),
+        do: Writer.field(100, Writer.uleb128(entry.offset)),
+        else: []
+      ),
+      if(Map.has_key?(entry, :length),
+        do: Writer.field(101, Writer.uleb128(entry.length)),
+        else: []
+      ),
       Writer.end_object()
     ]
   end
