@@ -492,6 +492,21 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+Text and regex helpers keep DuckDB string predicates in the query DSL. DuckDB regexes use RE2; `~r` literals are convenient for the syntax shared with Elixir regexes, and `contains/2` dispatches obvious text calls to DuckDB `contains` while spatial calls go to `ST_Contains`:
+
+```elixir
+use QuackDB.Ecto
+
+MyApp.AnalyticsRepo.all(
+  from event in "events",
+    where: contains(event.name, "duck") and regexp_matches(event.name, ~r/^duck/i),
+    select: %{
+      slug: regexp_replace(event.name, ~r/\s+/, "-", "g"),
+      tags: string_split(event.tags, ",")
+    }
+)
+```
+
 JSON columns can use Ecto access syntax for string extraction, `type/2` for numeric/boolean casts, or explicit DuckDB JSON helpers:
 
 ```elixir

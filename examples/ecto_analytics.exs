@@ -38,6 +38,8 @@ defmodule EctoAnalyticsExample.Queries do
         events: count(),
         distinct_events: count(event.id, :distinct),
         high_events: filter(count(event.id), event.score >= 90),
+        duck_named_events: filter(count(event.id), contains(event.name, "duck")),
+        bird_events: filter(count(event.id), starts_with(event.kind, "bird")),
         scores: list(event.score, order_by: [desc_nulls_last: event.score]),
         average_score: coalesce(avg(event.score), 0),
         score_stddev: stddev(event.score),
@@ -64,6 +66,8 @@ EctoAnalyticsExample.Repo.query!(
   QuackDB.DDL.create_table(
     table,
     id: :integer,
+    name: :varchar,
+    kind: :varchar,
     score: :integer,
     occurred_at: :timestamp
   )
@@ -71,10 +75,10 @@ EctoAnalyticsExample.Repo.query!(
 
 EctoAnalyticsExample.Repo.query!(
   QuackDB.DML.insert_into(table, [
-    [id: 1, score: 95, occurred_at: ~N[2024-01-01 09:00:00]],
-    [id: 2, score: 96, occurred_at: ~N[2024-01-01 09:15:00]],
-    [id: 3, score: 72, occurred_at: ~N[2024-01-01 10:00:00]],
-    [id: 4, score: 88, occurred_at: ~N[2024-01-01 10:30:00]]
+    [id: 1, name: "duck-001", kind: "bird", score: 95, occurred_at: ~N[2024-01-01 09:00:00]],
+    [id: 2, name: "duck-002", kind: "bird", score: 96, occurred_at: ~N[2024-01-01 09:15:00]],
+    [id: 3, name: "goose-003", kind: "bird", score: 72, occurred_at: ~N[2024-01-01 10:00:00]],
+    [id: 4, name: "salmon-004", kind: "fish", score: 88, occurred_at: ~N[2024-01-01 10:30:00]]
   ])
 )
 
