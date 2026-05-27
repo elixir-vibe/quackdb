@@ -49,6 +49,49 @@ defmodule QuackDB.Type do
     geometry: "GEOMETRY"
   }
 
+  @sql_scalar_types %{
+    "BOOLEAN" => :boolean,
+    "BOOL" => :boolean,
+    "TINYINT" => :tinyint,
+    "SMALLINT" => :smallint,
+    "INTEGER" => :integer,
+    "INT" => :integer,
+    "BIGINT" => :bigint,
+    "UTINYINT" => :utinyint,
+    "USMALLINT" => :usmallint,
+    "UINTEGER" => :uinteger,
+    "UINT" => :uinteger,
+    "UBIGINT" => :ubigint,
+    "HUGEINT" => :hugeint,
+    "UHUGEINT" => :uhugeint,
+    "FLOAT" => :float,
+    "REAL" => :float,
+    "DOUBLE" => :double,
+    "DECIMAL" => :decimal,
+    "VARCHAR" => :varchar,
+    "STRING" => :varchar,
+    "TEXT" => :varchar,
+    "CHAR" => :char,
+    "BLOB" => :blob,
+    "JSON" => :json,
+    "DATE" => :date,
+    "TIME" => :time,
+    "TIMETZ" => :time_tz,
+    "TIME WITH TIME ZONE" => :time_tz,
+    "TIME_NS" => :time_ns,
+    "TIMESTAMP" => :timestamp,
+    "TIMESTAMP_S" => :timestamp_s,
+    "TIMESTAMP_MS" => :timestamp_ms,
+    "TIMESTAMP_NS" => :timestamp_ns,
+    "TIMESTAMPTZ" => :timestamp_tz,
+    "TIMESTAMP WITH TIME ZONE" => :timestamp_tz,
+    "INTERVAL" => :interval,
+    "UUID" => :uuid,
+    "BIT" => :bit,
+    "BIGNUM" => :bignum,
+    "GEOMETRY" => :geometry
+  }
+
   @type spec ::
           atom()
           | String.t()
@@ -94,6 +137,18 @@ defmodule QuackDB.Type do
     raise ArgumentError, "unsupported DuckDB column type: #{inspect(type)}"
   end
 
+  @doc "Parses a DuckDB SQL type name into a QuackDB type spec."
+  @spec from_sql(String.t()) :: {:ok, spec()} | {:error, {:unsupported_sql_type, String.t()}}
+  def from_sql(type) when is_binary(type) do
+    type = normalize_sql_type(type)
+
+    case parse_sql_type(type) do
+      {:ok, spec, []} -> {:ok, spec}
+      {:ok, _spec, _tokens} -> {:error, {:unsupported_sql_type, type}}
+      :error -> {:error, {:unsupported_sql_type, type}}
+    end
+  end
+
   @doc "Renders an identifier with DuckDB SQL quoting."
   @spec quote_identifier(atom() | String.t()) :: iodata()
   def quote_identifier(value) when is_atom(value),
@@ -106,6 +161,106 @@ defmodule QuackDB.Type do
   def quote_identifier(value) do
     raise ArgumentError, "expected identifier as atom or string, got: #{inspect(value)}"
   end
+
+  defp normalize_sql_type(type) do
+    type
+    |> String.trim()
+    |> String.upcase()
+    |> String.split()
+    |> Enum.join(" ")
+  end
+
+  defp parse_sql_type(type) do
+    case Map.fetch(@sql_scalar_types, type) do
+      {:ok, scalar} ->
+        {:ok, scalar, []}
+
+      :error ->
+        type
+        |> tokenize_sql_type()
+        |> parse_type()
+    end
+  end
+
+  defp tokenize_sql_type(type), do: type |> String.to_charlist() |> tokenize_sql_type([])
+
+  defp tokenize_sql_type([], tokens), do: Enum.reverse(tokens)
+
+  defp tokenize_sql_type([char | rest], tokens) when char in [?\s, ?\t, ?\n, ?\r],
+    do: tokenize_sql_type(rest, tokens)
+
+  defp tokenize_sql_type([char | rest], tokens) when char in [?(, ?), ?[, ?], ?,],
+    do: tokenize_sql_type(rest, [<<char>> | tokens])
+
+  defp tokenize_sql_type([char | _rest] = chars, tokens) when char in ?0..?9 do
+    {digits, rest} = Enum.split_while(chars, &(&1 in ?0..?9))
+    tokenize_sql_type(rest, [digits |> to_string() |> String.to_integer() | tokens])
+  end
+
+  defp tokenize_sql_type([char | _rest] = chars, tokens) when char in ?A..?Z or char == ?_ do
+    {identifier, rest} = Enum.split_while(chars, &identifier_char?/1)
+    tokenize_sql_type(rest, [to_string(identifier) | tokens])
+  end
+
+  defp tokenize_sql_type([char | rest], tokens), do: tokenize_sql_type(rest, [<<char>> | tokens])
+
+  defp identifier_char?(char) when char in ?A..?Z, do: true
+  defp identifier_char?(char) when char in ?0..?9, do: true
+  defp identifier_char?(?_), do: true
+  defp identifier_char?(_char), do: false
+
+  defp parse_type(["MAP", "(" | tokens]) do
+    with {:ok, key_type, ["," | tokens]} <- parse_type(tokens),
+         {:ok, value_type, [")" | tokens]} <- parse_type(tokens) do
+      parse_type_postfix({:map, key_type, value_type}, tokens)
+    else
+      _other -> :error
+    end
+  end
+
+  defp parse_type(["DECIMAL", "(", width, ",", scale, ")" | tokens])
+       when is_integer(width) and is_integer(scale),
+       do: parse_type_postfix({:decimal, width, scale}, tokens)
+
+  defp parse_type(["VARCHAR", "(", size, ")" | tokens]) when is_integer(size),
+    do: parse_type_postfix({:varchar, size}, tokens)
+
+  defp parse_type(["CHAR", "(", size, ")" | tokens]) when is_integer(size),
+    do: parse_type_postfix({:char, size}, tokens)
+
+  defp parse_type(tokens), do: parse_scalar_type(tokens)
+
+  defp parse_scalar_type(tokens) do
+    tokens
+    |> scalar_type_prefixes([])
+    |> Enum.reverse()
+    |> Enum.find_value(fn {type, rest} ->
+      case Map.fetch(@sql_scalar_types, type) do
+        {:ok, scalar} -> parse_type_postfix(scalar, rest)
+        :error -> nil
+      end
+    end)
+    |> case do
+      nil -> :error
+      result -> result
+    end
+  end
+
+  defp scalar_type_prefixes([token | rest], prefix) when is_binary(token) do
+    prefix = [token | prefix]
+    type = prefix |> Enum.reverse() |> Enum.join(" ")
+    [{type, rest} | scalar_type_prefixes(rest, prefix)]
+  end
+
+  defp scalar_type_prefixes(_tokens, _prefix), do: []
+
+  defp parse_type_postfix(type, ["[", "]" | tokens]),
+    do: parse_type_postfix({:list, type}, tokens)
+
+  defp parse_type_postfix(type, ["[", size, "]" | tokens]) when is_integer(size),
+    do: parse_type_postfix({:array, type, size}, tokens)
+
+  defp parse_type_postfix(type, tokens), do: {:ok, type, tokens}
 
   defp integer!(value) when is_integer(value) and value >= 0, do: Integer.to_string(value)
 

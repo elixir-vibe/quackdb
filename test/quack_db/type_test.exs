@@ -27,6 +27,27 @@ defmodule QuackDB.TypeTest do
     assert QuackDB.Type.to_sql("ENUM ('duck', 'goose')") == "ENUM ('duck', 'goose')"
   end
 
+  test "parses SQL type names" do
+    assert QuackDB.Type.from_sql("INTEGER") == {:ok, :integer}
+    assert QuackDB.Type.from_sql("DOUBLE") == {:ok, :double}
+    assert QuackDB.Type.from_sql("TIMESTAMP WITH TIME ZONE") == {:ok, :timestamp_tz}
+    assert QuackDB.Type.from_sql("DECIMAL(18, 2)") == {:ok, {:decimal, 18, 2}}
+    assert QuackDB.Type.from_sql("VARCHAR(64)") == {:ok, {:varchar, 64}}
+    assert QuackDB.Type.from_sql("INTEGER[]") == {:ok, {:list, :integer}}
+    assert QuackDB.Type.from_sql("DOUBLE[3]") == {:ok, {:array, :double, 3}}
+    assert QuackDB.Type.from_sql("TIME WITH TIME ZONE[]") == {:ok, {:list, :time_tz}}
+
+    assert QuackDB.Type.from_sql("MAP(VARCHAR, DECIMAL(18, 2))") ==
+             {:ok, {:map, :varchar, {:decimal, 18, 2}}}
+  end
+
+  test "rejects unsupported SQL type names" do
+    assert QuackDB.Type.from_sql("ANY") == {:error, {:unsupported_sql_type, "ANY"}}
+
+    assert QuackDB.Type.from_sql("STRUCT(kind VARCHAR)") ==
+             {:error, {:unsupported_sql_type, "STRUCT(KIND VARCHAR)"}}
+  end
+
   test "quotes identifiers" do
     assert QuackDB.Type.quote_identifier(~s(weird"name)) |> IO.iodata_to_binary() ==
              ~S["weird""name"]

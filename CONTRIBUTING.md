@@ -30,6 +30,20 @@ QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration
 ```
 
+## DuckDB function snapshots
+
+QuackDB keeps a maintainer-generated DuckDB function catalog snapshot under `priv/duckdb_functions/current.exs`. Use it to audit curated Ecto analytical helpers against DuckDB runtime metadata without making normal package compilation depend on a live DuckDB server.
+
+Regenerate it with a running Quack server:
+
+```sh
+QUACKDB_URI='http://[::1]:9494' \
+QUACKDB_TOKEN=super_secret \
+mix quackdb.functions.snapshot
+```
+
+The task records the normalized scalar/aggregate/macro function catalog plus post-processed helper candidates. Review snapshot diffs before committing; do not expose every candidate automatically.
+
 ## Example smoke checks
 
 Run examples from outside the Mix project so `Mix.install/2` can load the local package:
