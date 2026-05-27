@@ -7,6 +7,21 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     so only the shared regex subset is portable. Literal `~r/.../` patterns are
     accepted for convenience and their compatible modifiers are translated to
     DuckDB options.
+
+        import Ecto.Query
+        import QuackDB.Ecto.Regex
+
+        from event in "events",
+          where: regexp_matches(event.name, ~r/^duck/i),
+          select: %{
+            year: regexp_extract(event.name, ~r/(\\d{4})/, 1),
+            slug: regexp_replace(event.name, ~r/\\s+/, "-", "g"),
+            parts: regexp_split_to_array(event.name, ~r/\\s*,\\s*/)
+          }
+
+    Compatible `~r` modifiers are translated to DuckDB option strings: `i`, `m`,
+    and `s`. Elixir's Unicode modifier is ignored; unsupported modifiers raise at
+    macro expansion time.
     """
 
     @regex_helpers [

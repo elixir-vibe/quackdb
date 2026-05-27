@@ -2,6 +2,20 @@ if Code.ensure_loaded?(Ecto.Query.API) do
   defmodule QuackDB.Ecto.Text do
     @moduledoc """
     DuckDB text-expression helpers for Ecto queries.
+
+        import Ecto.Query
+        import QuackDB.Ecto.Text
+
+        from event in "events",
+          where: contains(event.name, "duck") and starts_with(event.kind, "bird"),
+          select: %{
+            second_part: split_part(event.name, "-", 2),
+            tags: string_split(event.tags, ",")
+          }
+
+    `contains_text/2` emits the same DuckDB `contains(?, ?)` call as
+    `contains/2`. It is useful with `use QuackDB.Ecto`, where shared
+    `contains/2` may dispatch between text and spatial predicates.
     """
 
     @text_helpers [
