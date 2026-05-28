@@ -13,6 +13,15 @@ cd /tmp
 elixir /path/to/quackdb/examples/query_observability.exs
 ```
 
+## Source sampling
+
+[`examples/source_sampling.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/source_sampling.exs) scans newline-delimited JSON with `QuackDB.Source`, wraps it in `USING SAMPLE`, queries it through Ecto, and profiles the sampled source with DuckDB `SUMMARIZE`.
+
+```sh
+cd /tmp
+elixir /path/to/quackdb/examples/source_sampling.exs
+```
+
 ## Dataframe analytics
 
 [`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) demonstrates:

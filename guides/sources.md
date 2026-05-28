@@ -29,6 +29,16 @@ Source.parquet("events.parquet")
 |> Source.sample(rows: 1_000)
 ```
 
+Sampling composes with direct profiling helpers when you want a quick look at a large source:
+
+```elixir
+sampled =
+  Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
+  |> Source.sample(percent: 1)
+
+QuackDB.query!(conn, QuackDB.Analytics.summarize({:query, "SELECT score, category FROM #{sampled}"}))
+```
+
 ## Ecto queries
 
 Source fragments can be used as Ecto sources for analytical reads:
@@ -44,6 +54,21 @@ MyApp.AnalyticsRepo.all(
   from event in source,
     group_by: event.category,
     select: %{category: event.category, events: count()}
+)
+```
+
+JSON sources work the same way. Cast JSON/text columns with normal Ecto `type/2` and use QuackDB JSON helpers when needed:
+
+```elixir
+source = Source.json("s3://bucket/events/*.json", format: :newline_delimited)
+
+MyApp.AnalyticsRepo.all(
+  from event in source,
+    where: type(event.payload["score"], :integer) > 10,
+    select: %{
+      name: event.payload["name"],
+      score: type(event.payload["score"], :integer)
+    }
 )
 ```
 
@@ -257,4 +282,22 @@ Source.delta("s3://bucket/delta/events")
 Source.iceberg("s3://bucket/warehouse/events")
 ```
 
-Use Ecto or direct SQL around those fragments just like CSV and Parquet sources.
+Use Ecto or direct SQL around those fragments just like CSV and Parquet sources:
+
+```elixir
+source = Source.delta("s3://bucket/delta/events")
+
+MyApp.AnalyticsRepo.all(
+  from event in source,
+    group_by: event.category,
+    select: %{category: event.category, events: count()}
+)
+```
+
+Keep lakehouse setup SQL explicit when DuckDB-specific options are clearer than another wrapper:
+
+```elixir
+QuackDB.query!(conn, QuackDB.Extension.install(:delta))
+QuackDB.query!(conn, QuackDB.Extension.load(:delta))
+QuackDB.query!(conn, "SET azure_transport_option_type = 'curl'")
+```

@@ -382,6 +382,7 @@ DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/
 The repository includes runnable scripts, a Livebook notebook, and a small WMS app:
 
 - [`examples/ecto_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/ecto_analytics.exs) — Ecto analytical aggregates, text predicates, and DuckDB `SUMMARIZE` profiling.
+- [`examples/source_sampling.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/source_sampling.exs) — JSON source scanning, `USING SAMPLE`, Ecto composition, and sampled source profiling.
 - [`examples/dataframe_analytics.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/dataframe_analytics.exs) — derive DDL from an Ecto schema, append an Explorer dataframe, query with Ecto DSL, and return a dataframe.
 - [`examples/full_text_search.exs`](https://github.com/elixir-vibe/quackdb/blob/master/examples/full_text_search.exs) — materialize a source scan, build a DuckDB FTS index, and query BM25 search through direct helpers and Ecto.
 - [`examples/spatial_wms/`](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms) — an Ash + Ecto + Plug/Bandit app serving DuckDB Spatial rows through a WMS-like GeoJSON endpoint.
