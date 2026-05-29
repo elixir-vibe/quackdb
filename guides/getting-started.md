@@ -515,6 +515,18 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+LIST columns can use helpers for containment, intersection, all-required matching, and unnesting. `use QuackDB.Ecto` imports `contains_list/2`, `has_any/2`, `has_all/2`, and `unnest/1` by default:
+
+```elixir
+use QuackDB.Ecto
+
+MyApp.AnalyticsRepo.all(
+  from fragment in "fragments",
+    where: contains_list(fragment.terms, ^term_id) and has_any(fragment.terms, ^optional_term_ids),
+    select: %{id: fragment.id, term: unnest(fragment.terms)}
+)
+```
+
 JSON columns can use Ecto access syntax for string extraction, `type/2` for numeric/boolean casts, or explicit DuckDB JSON helpers:
 
 ```elixir

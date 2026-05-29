@@ -29,6 +29,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.FTS`.
     - `QuackDB.Ecto.Regex`.
     - `QuackDB.Ecto.Text`.
+    - `QuackDB.Ecto.List`.
     - `QuackDB.Ecto.Series`.
     - `QuackDB.Ecto.WindowFrames`.
 
@@ -45,6 +46,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, analytics: false
         use QuackDB.Ecto, regex: false
         use QuackDB.Ecto, text: false
+        use QuackDB.Ecto, list: false
         use QuackDB.Ecto, series: false
         use QuackDB.Ecto, window_frames: false
         use QuackDB.Ecto, query: false
@@ -61,6 +63,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       text? = Keyword.get(options, :text, true)
       conditionals? = Keyword.get(options, :conditionals, true)
       predicates? = Keyword.get(options, :predicates, true)
+      list? = Keyword.get(options, :list, true)
       window_frames? = Keyword.get(options, :window_frames, true)
 
       imports = []
@@ -87,6 +90,11 @@ if Code.ensure_loaded?(Ecto.Query) do
           else: imports
 
       imports = if series?, do: [quote(do: import(QuackDB.Ecto.Series)) | imports], else: imports
+
+      imports =
+        if list?,
+          do: [quote(do: import(QuackDB.Ecto.List, except: [contains: 2])) | imports],
+          else: imports
 
       imports =
         if window_frames?,

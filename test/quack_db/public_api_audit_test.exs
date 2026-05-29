@@ -7,6 +7,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
         QuackDB.Ecto.Analytics,
         QuackDB.Ecto.Conditionals,
         QuackDB.Ecto.FTS,
+        QuackDB.Ecto.List,
         QuackDB.Ecto.Regex,
         QuackDB.Ecto.Series,
         QuackDB.Ecto.Spatial,
@@ -32,6 +33,10 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       assert exported_macro?(QuackDB.Ecto.WindowFrames, :rows_between, 2)
       assert exported_macro?(QuackDB.Ecto.WindowFrames, :range_between, 2)
       assert exported_macro?(QuackDB.Ecto.WindowFrames, :groups_between, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :contains_list, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :has_any, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :has_all, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :unnest, 1)
     end
 
     defp exported_macro?(module, name, arity) do

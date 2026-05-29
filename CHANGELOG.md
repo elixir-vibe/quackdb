@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- Added direct SQL and Ecto LIST helpers for `list_contains`, `list_has_any`, `list_has_all`, and `unnest`.
 
 ## 0.4.0 - 2026-05-29
 
