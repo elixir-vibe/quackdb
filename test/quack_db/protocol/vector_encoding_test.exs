@@ -194,7 +194,72 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert message == "list entry offset 1 with length 1 exceeds child vector size 1"
   end
 
-  test "reports malformed map entries" do
+  test "reports map child types that are not structs" do
+    map_type =
+      LogicalType.new(:map, %{
+        type: 4,
+        child_type: LogicalType.new(:varchar)
+      })
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(map_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(1)),
+            Writer.field(105, Writer.list([%{offset: 0, length: 1}], &list_entry/1)),
+            Writer.field(
+              106,
+              QuackDB.Protocol.Vector.encode(LogicalType.new(:varchar), ["env"], 1)
+            ),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_map_type, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "MAP child type must be STRUCT, got :varchar"
+  end
+
+  test "reports map child structs without key fields" do
+    entry_type =
+      LogicalType.new(:struct, %{
+        type: 5,
+        children: [%{name: "value", type: LogicalType.new(:varchar)}]
+      })
+
+    map_type = LogicalType.new(:map, %{type: 4, child_type: entry_type})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(map_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(1)),
+            Writer.field(105, Writer.list([%{offset: 0, length: 1}], &list_entry/1)),
+            Writer.field(106, QuackDB.Protocol.Vector.encode(entry_type, [%{value: "test"}], 1)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_map_type, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "MAP child struct must include a key field"
+  end
+
+  test "reports map child structs without value fields" do
     entry_type =
       LogicalType.new(:struct, %{
         type: 5,
@@ -220,10 +285,43 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
       |> then(&[Writer.field(300, &1), Writer.end_object()])
       |> IO.iodata_to_binary()
 
-    assert {:error, %QuackDB.Error{code: :invalid_map_entry, message: message}} =
+    assert {:error, %QuackDB.Error{code: :invalid_map_type, message: message}} =
              DataChunk.decode_wrapper(binary)
 
-    assert message == ~s|MAP entry must include key and value fields, got %{"key" => "env"}|
+    assert message == "MAP child struct must include a value field"
+  end
+
+  test "preserves null map values" do
+    entry_type =
+      LogicalType.new(:struct, %{
+        type: 5,
+        children: [
+          %{name: "key", type: LogicalType.new(:varchar)},
+          %{name: "value", type: LogicalType.new(:varchar)}
+        ]
+      })
+
+    map_type = LogicalType.new(:map, %{type: 4, child_type: entry_type})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        1,
+        [LogicalType.encode(map_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(1)),
+            Writer.field(105, Writer.list([%{offset: 0, length: 1}], &list_entry/1)),
+            Writer.field(106, malformed_map_entry_vector(entry_type)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:ok, chunk, ""} = DataChunk.decode_wrapper(binary)
+    assert DataChunk.rows(chunk) == [[%{"env" => nil}]]
   end
 
   test "reports struct child count mismatches" do
@@ -349,6 +447,27 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
 
     assert {:error, %QuackDB.Error{code: :dictionary_index_out_of_range}} =
              DataChunk.decode_wrapper(binary)
+  end
+
+  defp malformed_map_entry_vector(entry_type) do
+    [
+      Writer.field(100, Writer.bool(false)),
+      Writer.field(
+        103,
+        Writer.list(
+          [
+            QuackDB.Protocol.Vector.encode(LogicalType.new(:varchar), ["env"], 1),
+            QuackDB.Protocol.Vector.encode(
+              LogicalType.struct_children(entry_type) |> List.last() |> Map.fetch!(:type),
+              [nil],
+              1
+            )
+          ],
+          &Function.identity/1
+        )
+      ),
+      Writer.end_object()
+    ]
   end
 
   defp list_entry(entry) do

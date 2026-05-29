@@ -701,24 +701,69 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
-  defp list_value(%{name: :map}, entries), do: map_entries(entries)
+  defp list_value(%{name: :map} = type, entries) do
+    with :ok <- validate_map_child_type(type) do
+      map_entries(entries)
+    end
+  end
+
   defp list_value(_type, entries), do: {:ok, entries}
 
+  defp validate_map_child_type(type) do
+    child_type = LogicalType.child_type(type)
+
+    if child_type.name == :struct do
+      children = LogicalType.struct_children(child_type)
+      child_names = MapSet.new(children, & &1.name)
+
+      cond do
+        not MapSet.member?(child_names, "key") ->
+          error(:invalid_map_type, "MAP child struct must include a key field")
+
+        not MapSet.member?(child_names, "value") ->
+          error(:invalid_map_type, "MAP child struct must include a value field")
+
+        true ->
+          :ok
+      end
+    else
+      error(:invalid_map_type, "MAP child type must be STRUCT, got #{inspect(child_type.name)}")
+    end
+  end
+
   defp map_entries(entries) do
-    Enum.reduce_while(entries, {:ok, %{}}, fn
-      %{"key" => key, "value" => value}, {:ok, map} ->
+    Enum.reduce_while(entries, {:ok, %{}}, fn entry, {:ok, map} ->
+      with {:ok, key, value} <- map_key_value(entry) do
         {:cont, {:ok, Map.put(map, key, value)}}
-
-      %{key: key, value: value}, {:ok, map} ->
-        {:cont, {:ok, Map.put(map, key, value)}}
-
-      other, {:ok, _map} ->
-        {:halt,
-         error(
-           :invalid_map_entry,
-           "MAP entry must include key and value fields, got #{inspect(other)}"
-         )}
+      else
+        {:error, _error} = error -> {:halt, error}
+      end
     end)
+  end
+
+  defp map_key_value(%{"key" => key} = entry) do
+    if Map.has_key?(entry, "value") do
+      {:ok, key, Map.fetch!(entry, "value")}
+    else
+      invalid_map_entry(entry)
+    end
+  end
+
+  defp map_key_value(%{key: key} = entry) do
+    if Map.has_key?(entry, :value) do
+      {:ok, key, Map.fetch!(entry, :value)}
+    else
+      invalid_map_entry(entry)
+    end
+  end
+
+  defp map_key_value(other), do: invalid_map_entry(other)
+
+  defp invalid_map_entry(entry) do
+    error(
+      :invalid_map_entry,
+      "MAP entry must include key and value fields, got #{inspect(entry)}"
+    )
   end
 
   defp select_dictionary_values(values, selection) do
