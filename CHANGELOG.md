@@ -2,9 +2,7 @@
 
 ## Unreleased
 
-### Fixed
-
-- Rejected malformed Quack logical type objects that omit the required type id.
+No unreleased changes.
 
 ## 0.4.0 - 2026-05-29
 
@@ -26,6 +24,10 @@
 - Added DuckDB function snapshot task with normalized QuackDB type specs for overload auditing.
 - Added protocol coverage and quack-ts parity docs plus expanded type/null/append conformance coverage, including stricter variable-vector value count validation and nested dictionary/constant vector coverage.
 - Added source sampling, JSON source composition, lakehouse workflow docs, metadata examples, ordinary Elixir map encoding for explicit DuckDB MAP append columns, enumerable stream append, and Table.Reader input append.
+
+### Fixed
+
+- Rejected malformed Quack logical type objects that omit the required type id.
 
 ## 0.3.0 - 2026-05-26
 
