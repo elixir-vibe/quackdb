@@ -26,6 +26,25 @@ defmodule QuackDB.Protocol.DataChunkTest do
     assert DataChunk.rows(decoded) == [[1, "one", true], [2, nil, false]]
   end
 
+  test "encodes column-oriented explicit map values from ordinary Elixir maps" do
+    assert {:ok, chunk} =
+             DataChunk.from_columns(
+               [labels: [%{env: "prod", region: "eu"}, %{env: nil}, %{}, nil]],
+               columns: [labels: {:map, :varchar, :varchar}]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+
+    assert DataChunk.rows(decoded) == [
+             [%{"env" => "prod", "region" => "eu"}],
+             [%{"env" => nil}],
+             [%{}],
+             [nil]
+           ]
+  end
+
   test "rejects mismatched append column lengths" do
     assert {:error, %QuackDB.Error{code: :invalid_vector_size, message: message}} =
              DataChunk.from_columns(
