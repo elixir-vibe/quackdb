@@ -1,6 +1,6 @@
 # Public API audit for 0.4.0
 
-This audit tracks public API added after `0.3.0` so names can be reviewed before the next release.
+This audit tracks public API added after `0.3.0` and records the accepted naming decisions for `0.4.0`. No open naming decisions remain for this release.
 
 ## Ecto analytical helpers
 
