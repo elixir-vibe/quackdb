@@ -52,6 +52,10 @@ defmodule QuackDB do
       QuackDB.insert_rows!(conn, "events", [[labels: [%{key: "env", value: "prod"}]]],
         columns: [labels: {:map, :varchar, :varchar}]
       )
+
+  Duplicate MAP keys decode with the later entry winning, matching `Map.put/3`.
+  Keys and values are encoded through the declared DuckDB key/value types; for
+  example, atom keys in `{:map, :varchar, :varchar}` columns become strings.
   """
   @spec insert_rows(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}

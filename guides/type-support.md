@@ -68,7 +68,7 @@ QuackDB.insert_rows!(conn, "events", [[labels: [%{key: "env", value: "prod"}]]],
 )
 ```
 
-Both encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-value Elixir map semantics are not implied; DuckDB MAP columns still have one key type and one value type.
+Both encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-value Elixir map semantics are not implied; DuckDB MAP columns still have one key type and one value type. Duplicate MAP keys decode with the later entry winning, matching `Map.put/3`. Keys and values are encoded through the declared DuckDB types, so atom keys in `{:map, :varchar, :varchar}` columns become strings.
 
 ## Vector encodings
 

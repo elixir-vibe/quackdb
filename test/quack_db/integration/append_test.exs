@@ -198,6 +198,39 @@ defmodule QuackDB.Integration.AppendTest do
     TestHelper.drop_table!(conn, table)
   end
 
+  test "insert_rows appends ordinary Elixir maps inside nested MAP types", %{conn: conn} do
+    table = TestHelper.unique_table("append_nested_map_events")
+
+    TestHelper.create_table!(conn, table,
+      id: :integer,
+      metadata: {:struct, [source: :varchar, labels: {:map, :varchar, :varchar}]}
+    )
+
+    assert %QuackDB.Result{num_rows: 2} =
+             QuackDB.insert_rows!(
+               conn,
+               table,
+               [
+                 [id: 1, metadata: %{source: "sensor", labels: %{env: "prod"}}],
+                 [id: 2, metadata: %{source: "batch", labels: nil}]
+               ],
+               columns: [
+                 id: :integer,
+                 metadata: {:struct, [source: :varchar, labels: {:map, :varchar, :varchar}]}
+               ]
+             )
+
+    assert %QuackDB.Result{rows: rows} =
+             QuackDB.query!(conn, "SELECT id, metadata FROM #{table} ORDER BY id")
+
+    assert rows == [
+             [1, %{"source" => "sensor", "labels" => %{"env" => "prod"}}],
+             [2, %{"source" => "batch", "labels" => nil}]
+           ]
+
+    TestHelper.drop_table!(conn, table)
+  end
+
   test "insert_rows appends nullable scalar values", %{conn: conn} do
     table = TestHelper.unique_table("append_nullable_events")
 

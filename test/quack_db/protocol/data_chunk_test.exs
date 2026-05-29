@@ -157,6 +157,54 @@ defmodule QuackDB.Protocol.DataChunkTest do
            ]
   end
 
+  test "explicit map columns decode duplicate keys with last entry winning" do
+    assert {:ok, chunk} =
+             DataChunk.from_rows(
+               [[labels: [%{key: "env", value: "dev"}, %{key: "env", value: "prod"}]]],
+               columns: [labels: {:map, :varchar, :varchar}]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+    assert DataChunk.rows(decoded) == [[%{"env" => "prod"}]]
+  end
+
+  test "explicit map columns coerce atom keys through the declared key type" do
+    assert {:ok, chunk} =
+             DataChunk.from_rows(
+               [[labels: %{env: "prod", region: "eu"}]],
+               columns: [labels: {:map, :varchar, :varchar}]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+    assert DataChunk.rows(decoded) == [[%{"env" => "prod", "region" => "eu"}]]
+  end
+
+  test "ordinary Elixir maps encode inside nested explicit map types" do
+    assert {:ok, chunk} =
+             DataChunk.from_rows(
+               [
+                 [metadata: %{source: "sensor", labels: %{env: "prod"}}],
+                 [metadata: %{source: "batch", labels: nil}]
+               ],
+               columns: [
+                 metadata: {:struct, [source: :varchar, labels: {:map, :varchar, :varchar}]}
+               ]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+
+    assert DataChunk.rows(decoded) == [
+             [%{"source" => "sensor", "labels" => %{"env" => "prod"}}],
+             [%{"source" => "batch", "labels" => nil}]
+           ]
+  end
+
   test "plain map inference remains struct-shaped" do
     assert {:ok, chunk} = DataChunk.from_rows([[labels: %{env: "test", region: "eu"}]])
 
