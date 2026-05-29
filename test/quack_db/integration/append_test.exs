@@ -136,6 +136,39 @@ defmodule QuackDB.Integration.AppendTest do
     TestHelper.drop_table!(conn, table)
   end
 
+  test "insert_rows appends ordinary Elixir maps to explicit MAP columns", %{conn: conn} do
+    table = TestHelper.unique_table("append_elixir_map_events")
+
+    TestHelper.create_table!(conn, table,
+      id: :integer,
+      labels: {:map, :varchar, :varchar}
+    )
+
+    assert %QuackDB.Result{num_rows: 3} =
+             QuackDB.insert_rows!(
+               conn,
+               table,
+               [
+                 [id: 1, labels: %{env: "prod", region: "eu"}],
+                 [id: 2, labels: %{env: nil}],
+                 [id: 3, labels: %{}]
+               ],
+               columns: [id: :integer, labels: {:map, :varchar, :varchar}],
+               batch_size: 2
+             )
+
+    assert %QuackDB.Result{rows: rows} =
+             QuackDB.query!(conn, "SELECT id, labels FROM #{table} ORDER BY id")
+
+    assert rows == [
+             [1, %{"env" => "prod", "region" => "eu"}],
+             [2, %{"env" => nil}],
+             [3, %{}]
+           ]
+
+    TestHelper.drop_table!(conn, table)
+  end
+
   test "insert_rows appends nullable scalar values", %{conn: conn} do
     table = TestHelper.unique_table("append_nullable_events")
 

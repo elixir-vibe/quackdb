@@ -112,12 +112,15 @@ defmodule QuackDB.Protocol.DataChunkTest do
            ]
   end
 
-  test "encodes explicit map columns from ordinary Elixir maps" do
+  test "explicit map columns encode ordinary Elixir maps and key-value entries equivalently" do
     assert {:ok, chunk} =
              DataChunk.from_rows(
                [
                  [labels: %{env: "test", region: "eu"}],
-                 [labels: %{env: nil}]
+                 [labels: [%{key: "env", value: "test"}, %{key: "region", value: "eu"}]],
+                 [labels: %{env: nil}],
+                 [labels: %{}],
+                 [labels: nil]
                ],
                columns: [labels: {:map, :varchar, :varchar}]
              )
@@ -128,8 +131,17 @@ defmodule QuackDB.Protocol.DataChunkTest do
 
     assert DataChunk.rows(decoded) == [
              [%{"env" => "test", "region" => "eu"}],
-             [%{"env" => nil}]
+             [%{"env" => "test", "region" => "eu"}],
+             [%{"env" => nil}],
+             [%{}],
+             [nil]
            ]
+  end
+
+  test "plain map inference remains struct-shaped" do
+    assert {:ok, chunk} = DataChunk.from_rows([[labels: %{env: "test", region: "eu"}]])
+
+    assert [%{name: :struct}] = chunk.types
   end
 
   test "encodes calendar date and time values through ISO calendar conversions" do
