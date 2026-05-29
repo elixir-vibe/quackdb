@@ -17,7 +17,7 @@ This audit tracks public API added after `0.3.0` so names can be reviewed before
 - Boolean/bit helpers: `bool_and/1`, `bool_or/1`, `band/1`, `bor/1`, `bxor/1`, `bitstring_agg/1,3`.
 - Histograms: `histogram/1`, `histogram_exact/2`, `equi_width_bins/3,4`.
 
-Naming decisions to keep before `0.4.0`:
+Accepted naming decisions before `0.4.0`:
 
 - Keep `band/1`, `bor/1`, and `bxor/1` for aggregate bitwise operations to match Elixir `Bitwise` naming rather than raw DuckDB `bit_and`, `bit_or`, and `bit_xor`.
 - Keep `list/1,2` as the DuckDB-native aggregate name. Do not reintroduce `duckdb_list/1`.
@@ -30,15 +30,21 @@ Naming decisions to keep before `0.4.0`:
 - `QuackDB.Ecto.Spatial.st_contains/2` is an explicit spatial escape hatch for shared `contains/2` use.
 - The hidden predicates module is imported by `use QuackDB.Ecto` only to dispatch shared `contains/2`.
 
-Open naming review before `0.4.0`:
+Accepted naming decisions before `0.4.0`:
 
-- Accepted: `contains_text/2` is the explicit text escape hatch for ambiguous shared `contains/2` calls.
-- Accepted: `st_contains/2` remains as an explicit spatial escape hatch alongside direct spatial imports.
-- Accepted: ambiguous shared `contains/2` calls raise instead of defaulting to spatial.
+- Keep `contains_text/2` as the explicit text escape hatch for ambiguous shared `contains/2` calls.
+- Keep `st_contains/2` as the explicit spatial escape hatch alongside direct spatial imports.
+- Keep ambiguous shared `contains/2` calls raising instead of defaulting to spatial.
+- Keep the predicates module hidden; `contains/2` dispatch is an implementation detail of `use QuackDB.Ecto`.
 
 ## Window frames
 
 `QuackDB.Ecto.WindowFrames` provides `rows_between/2`, `range_between/2`, and `groups_between/2`. They expand to `fragment(...)` and are intended for Ecto releases that include macro-expanded window frame support. Until QuackDB depends on such a release, examples should continue to show literal frame fragments.
+
+Accepted naming decisions before `0.4.0`:
+
+- Keep the module name `QuackDB.Ecto.WindowFrames`.
+- Keep tuple bounds such as `{:preceding, 6}` and `{:following, 1}` plus atoms `:current_row`, `:unbounded_preceding`, and `:unbounded_following`. This keeps bounds compile-time data and avoids extra helper macros for each bound.
 
 ## Direct SQL, sources, and append APIs
 
