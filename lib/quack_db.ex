@@ -20,6 +20,9 @@ defmodule QuackDB do
   @type insert_row :: map() | Keyword.t()
   @type insert_column :: {atom() | String.t(), [term()]}
 
+  @typedoc "Native append column type specs."
+  @type append_type :: QuackDB.Type.spec()
+
   @spec start_link([start_option]) :: GenServer.on_start()
   def start_link(options) do
     QuackDB.DBConnection.start_link(options)
@@ -30,6 +33,26 @@ defmodule QuackDB do
     QuackDB.DBConnection.child_spec(options)
   end
 
+  @doc """
+  Appends row-oriented values to a DuckDB table through Quack's native append protocol.
+
+  Rows are maps or keywords. Pass `:columns` with type specs when values are empty,
+  contain only nils, or need a specific nested DuckDB type.
+
+  Plain Elixir maps infer as DuckDB `STRUCT` values. For explicit
+  `{:map, key_type, value_type}` columns, ordinary Elixir maps are encoded as
+  DuckDB `MAP` values:
+
+      QuackDB.insert_rows!(conn, "events", [[labels: %{env: "prod"}]],
+        columns: [labels: {:map, :varchar, :varchar}]
+      )
+
+  DuckDB-style key/value entries are also accepted for explicit MAP columns:
+
+      QuackDB.insert_rows!(conn, "events", [[labels: [%{key: "env", value: "prod"}]]],
+        columns: [labels: {:map, :varchar, :varchar}]
+      )
+  """
   @spec insert_rows(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
   def insert_rows(connection, table, rows, options \\ []) when is_list(rows) do
@@ -54,8 +77,9 @@ defmodule QuackDB do
   Appends column-oriented values to a DuckDB table through Quack's native append protocol.
 
   Column values are provided as `{name, values}` pairs. All columns must have the
-  same row count. Pass `:columns` with type specs when values are empty or contain
-  only nils.
+  same row count. Pass `:columns` with type specs when values are empty, contain
+  only nils, or need a specific nested DuckDB type. Explicit MAP columns accept
+  ordinary Elixir maps and DuckDB-style key/value entries.
   """
   @spec insert_columns(DBConnection.conn(), String.t() | atom(), [insert_column()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
