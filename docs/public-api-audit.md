@@ -32,8 +32,9 @@ Naming decisions to keep before `0.4.0`:
 
 Open naming review before `0.4.0`:
 
-- Confirm `contains_text/2` is the right explicit text escape hatch name.
-- Confirm `st_contains/2` should remain as an explicit alias alongside spatial `contains/2`.
+- Accepted: `contains_text/2` is the explicit text escape hatch for ambiguous shared `contains/2` calls.
+- Accepted: `st_contains/2` remains as an explicit spatial escape hatch alongside direct spatial imports.
+- Accepted: ambiguous shared `contains/2` calls raise instead of defaulting to spatial.
 
 ## Window frames
 

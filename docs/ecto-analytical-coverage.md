@@ -112,7 +112,7 @@ Use `QuackDB.Ecto.Analytics` for DuckDB analytical functions that are establishe
 
 Use `QuackDB.Ecto.Regex` for DuckDB's `regexp_*` expression functions. DuckDB uses RE2 while Elixir `Regex` uses Erlang/OTP `:re`, so literal `~r/.../` patterns are convenient only for the shared syntax subset. QuackDB translates compatible `~r` modifiers (`i`, `m`, and `s`) into DuckDB option strings, ignores Elixir's Unicode modifier, and rejects modifiers DuckDB cannot represent.
 
-Use `QuackDB.Ecto.Text` for common text predicates and splitting functions (`contains/2`, `starts_with/2`, `ends_with/2`, `split_part/3`, `string_split/2`) when they read better than fragments. With `use QuackDB.Ecto`, shared `contains/2` routes obvious text calls to DuckDB `contains` and spatial expressions to `ST_Contains`; use `contains_text/2` or `st_contains/2` when you want to be explicit.
+Use `QuackDB.Ecto.Text` for common text predicates and splitting functions (`contains/2`, `starts_with/2`, `ends_with/2`, `split_part/3`, `string_split/2`) when they read better than fragments. With `use QuackDB.Ecto`, shared `contains/2` routes obvious text calls to DuckDB `contains` and spatial helper expressions to `ST_Contains`; ambiguous calls raise so use `contains_text/2` or `st_contains/2` when you want to be explicit.
 
 Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until QuackDB depends on an Ecto release that includes macro-expanded frame helper support.
 

@@ -40,9 +40,9 @@ defmodule QuackDB.Ecto.PredicatesTest do
         )
       end
 
-      def ambiguous_query do
+      def explicit_spatial_query do
         from(event in "events",
-          where: contains(event.region, event.geom),
+          where: st_contains(event.region, event.geom),
           select: event.id
         )
       end
@@ -71,9 +71,24 @@ defmodule QuackDB.Ecto.PredicatesTest do
            |> IO.iodata_to_binary() ==
              ~S[SELECT q0."id" FROM "events" AS q0 WHERE ST_Contains(ST_GeomFromText(?), q0."geom")]
 
-    assert Query.ambiguous_query()
+    assert Query.explicit_spatial_query()
            |> Ecto.Adapters.QuackDB.Connection.all()
            |> IO.iodata_to_binary() ==
              ~S[SELECT q0."id" FROM "events" AS q0 WHERE ST_Contains(q0."region", q0."geom")]
+  end
+
+  test "raises for ambiguous contains calls" do
+    assert_raise ArgumentError, ~r/ambiguous contains\/2/, fn ->
+      defmodule AmbiguousContainsProbe do
+        use QuackDB.Ecto
+
+        def query do
+          from(event in "events",
+            where: contains(event.region, event.geom),
+            select: event.id
+          )
+        end
+      end
+    end
   end
 end

@@ -37,7 +37,8 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     Imports can be disabled individually. When spatial and text helpers are both
     enabled, shared `contains/2` dispatches obvious text calls to DuckDB
-    `contains` and spatial calls to `ST_Contains`.
+    `contains` and spatial helper calls to `ST_Contains`. Ambiguous calls raise;
+    use `contains_text/2` or `st_contains/2` when intent is not obvious.
 
         use QuackDB.Ecto, spatial: false
         use QuackDB.Ecto, full_text_search: false

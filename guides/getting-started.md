@@ -492,7 +492,7 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-Text and regex helpers keep DuckDB string predicates in the query DSL. DuckDB regexes use RE2; `~r` literals are convenient for the syntax shared with Elixir regexes, and `contains/2` dispatches obvious text calls to DuckDB `contains` while spatial calls go to `ST_Contains`:
+Text and regex helpers keep DuckDB string predicates in the query DSL. DuckDB regexes use RE2; `~r` literals are convenient for the syntax shared with Elixir regexes, and `contains/2` dispatches obvious text calls to DuckDB `contains` while spatial helper calls go to `ST_Contains`. Ambiguous calls raise; use `contains_text/2` or `st_contains/2` when intent is not obvious:
 
 ```elixir
 use QuackDB.Ecto

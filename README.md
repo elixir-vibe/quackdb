@@ -252,7 +252,7 @@ See the [full-text search guide](guides/full-text-search.md).
 
 ### Text and regex predicates
 
-DuckDB text and RE2 regular-expression helpers compose with Ecto filters and aggregate `FILTER` clauses. Shared `contains/2` dispatches obvious string calls to DuckDB `contains` and spatial expressions to `ST_Contains`; `contains_text/2` and `st_contains/2` are available when you want to be explicit.
+DuckDB text and RE2 regular-expression helpers compose with Ecto filters and aggregate `FILTER` clauses. Shared `contains/2` dispatches obvious string calls to DuckDB `contains` and spatial helper expressions to `ST_Contains`; ambiguous calls raise so `contains_text/2` and `st_contains/2` are available when you want to be explicit.
 
 ```elixir
 use QuackDB.Ecto
