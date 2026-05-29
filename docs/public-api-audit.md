@@ -51,6 +51,7 @@ Accepted naming decisions before `0.4.0`:
 - `QuackDB.Analytics.summarize/1` renders direct DuckDB `SUMMARIZE` SQL for table names and raw query tuples.
 - Source helpers added `QuackDB.Source.sample/2` and `QuackDB.Source.histogram_values/3`.
 - Append helpers added `QuackDB.insert_stream/4`, `insert_stream!/4`, `insert_table/4`, and `insert_table!/4`.
+- Explicit `{:map, key_type, value_type}` append columns accept ordinary Elixir maps. Plain Elixir maps without an explicit MAP column spec continue to infer as DuckDB `STRUCT` values.
 
 ## Maintainer tooling
 

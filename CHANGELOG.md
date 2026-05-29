@@ -18,7 +18,7 @@
 - Added value window functions with fragment-backed frames and future-ready window frame helper macros.
 - Added direct and Ecto queryable `SUMMARIZE` profiling helpers.
 - Added DuckDB function snapshot task with normalized QuackDB type specs for overload auditing.
-- Added protocol coverage and quack-ts parity docs plus expanded type/null/append conformance coverage.
+- Added protocol coverage and quack-ts parity docs plus expanded type/null/append conformance coverage, including stricter variable-vector value count validation and nested dictionary/constant vector coverage.
 - Added source sampling, JSON source composition, lakehouse workflow docs, metadata examples, ordinary Elixir map encoding for explicit DuckDB MAP append columns, enumerable stream append, and Table.Reader input append.
 
 ## 0.3.0 - 2026-05-26

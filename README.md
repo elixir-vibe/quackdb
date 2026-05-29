@@ -309,6 +309,14 @@ QuackDB.insert_columns!(conn, "measurements", [
 ])
 ```
 
+Explicit MAP columns accept ordinary Elixir maps while plain map inference stays STRUCT-shaped:
+
+```elixir
+QuackDB.insert_rows!(conn, "events", [[id: 1, labels: %{env: "prod", region: "eu"}]],
+  columns: [id: :integer, labels: {:map, :varchar, :varchar}]
+)
+```
+
 When Explorer is installed, dataframes can be appended directly:
 
 ```elixir
@@ -333,7 +341,7 @@ Any `Table.Reader`-compatible data can be appended through the same column appen
 QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
 ```
 
-Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. See the [Explorer guide](guides/explorer.md).
+Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. See the [type support guide](guides/type-support.md) and the [Explorer guide](guides/explorer.md).
 
 ## Results, Livebook, and telemetry
 
