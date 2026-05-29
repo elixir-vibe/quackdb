@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-No unreleased changes.
+### Fixed
+
+- Rejected malformed Quack logical type objects that omit the required type id.
 
 ## 0.4.0 - 2026-05-29
 
