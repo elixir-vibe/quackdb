@@ -112,6 +112,26 @@ defmodule QuackDB.Protocol.DataChunkTest do
            ]
   end
 
+  test "encodes explicit map columns from ordinary Elixir maps" do
+    assert {:ok, chunk} =
+             DataChunk.from_rows(
+               [
+                 [labels: %{env: "test", region: "eu"}],
+                 [labels: %{env: nil}]
+               ],
+               columns: [labels: {:map, :varchar, :varchar}]
+             )
+
+    binary = IO.iodata_to_binary(DataChunk.encode_wrapper(chunk))
+
+    assert {:ok, decoded, ""} = DataChunk.decode_wrapper(binary)
+
+    assert DataChunk.rows(decoded) == [
+             [%{"env" => "test", "region" => "eu"}],
+             [%{"env" => nil}]
+           ]
+  end
+
   test "encodes calendar date and time values through ISO calendar conversions" do
     assert {:ok, chunk} =
              DataChunk.from_rows(

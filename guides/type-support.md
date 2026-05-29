@@ -56,6 +56,20 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 
 `QuackDB.insert_rows/4` supports scalar append values plus nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` columns when explicit column specs are provided. Temporal append values use Elixir's Calendar conversion APIs and are encoded in DuckDB's ISO calendar representation.
 
+Plain Elixir maps infer as DuckDB `STRUCT` values. For explicit `{:map, key_type, value_type}` columns, QuackDB accepts either DuckDB-style key/value entries or ordinary Elixir maps:
+
+```elixir
+QuackDB.insert_rows!(conn, "events", [[labels: %{env: "prod", region: "eu"}]],
+  columns: [labels: {:map, :varchar, :varchar}]
+)
+
+QuackDB.insert_rows!(conn, "events", [[labels: [%{key: "env", value: "prod"}]]],
+  columns: [labels: {:map, :varchar, :varchar}]
+)
+```
+
+Both encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-value Elixir map semantics are not implied; DuckDB MAP columns still have one key type and one value type.
+
 ## Vector encodings
 
 | DuckDB vector encoding | Status |

@@ -19,7 +19,7 @@
 - Added direct and Ecto queryable `SUMMARIZE` profiling helpers.
 - Added DuckDB function snapshot task with normalized QuackDB type specs for overload auditing.
 - Added protocol coverage and quack-ts parity docs plus expanded type/null/append conformance coverage.
-- Added source sampling, JSON source composition, lakehouse workflow docs, metadata examples, enumerable stream append, and Table.Reader input append.
+- Added source sampling, JSON source composition, lakehouse workflow docs, metadata examples, ordinary Elixir map encoding for explicit DuckDB MAP append columns, enumerable stream append, and Table.Reader input append.
 
 ## 0.3.0 - 2026-05-26
 

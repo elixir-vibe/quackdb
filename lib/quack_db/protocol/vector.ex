@@ -95,6 +95,25 @@ defmodule QuackDB.Protocol.Vector do
     )
   end
 
+  defp encode_variable_values(%LogicalType{name: :map} = type, values, :list) do
+    child_type = LogicalType.child_type(type)
+
+    values =
+      Enum.map(values, fn
+        nil -> nil
+        value when is_map(value) -> map_to_entries(value)
+        value -> value
+      end)
+
+    {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+
+    [
+      Writer.field(104, Writer.uleb128(length(child_values))),
+      Writer.field(105, Writer.list(Enum.reverse(entries), &encode_list_entry/1)),
+      Writer.field(106, encode(child_type, child_values, length(child_values)))
+    ]
+  end
+
   defp encode_variable_values(type, values, :list) do
     child_type = LogicalType.child_type(type)
     {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
@@ -136,6 +155,10 @@ defmodule QuackDB.Protocol.Vector do
     raise Error.new(:unsupported_physical_type, "#{physical_type} vectors are not encodable yet",
             source: :protocol
           )
+  end
+
+  defp map_to_entries(value) do
+    Enum.map(value, fn {key, entry_value} -> %{key: key, value: entry_value} end)
   end
 
   defp invalid_array_value!(value, array_size) do
