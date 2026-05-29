@@ -19,6 +19,47 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert DataChunk.rows(chunk) == [[30], [10], [20], [30]]
   end
 
+  test "decodes dictionary nested list vectors" do
+    list_type = LogicalType.new(:list, %{type: 4, child_type: LogicalType.new(:integer)})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        2,
+        [LogicalType.encode(list_type)],
+        [
+          [
+            Writer.field(90, Writer.uleb128(3)),
+            Writer.field(91, Writer.blob(<<1::little-unsigned-32, 0::little-unsigned-32>>)),
+            Writer.field(92, Writer.uleb128(2)),
+            QuackDB.Protocol.Vector.encode(list_type, [[1, 2], [3]], 2)
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:ok, chunk, ""} = DataChunk.decode_wrapper(binary)
+    assert DataChunk.rows(chunk) == [[[3]], [[1, 2]]]
+  end
+
+  test "decodes constant nested list vectors" do
+    list_type = LogicalType.new(:list, %{type: 4, child_type: LogicalType.new(:integer)})
+
+    [flat_head | flat_tail] = QuackDB.Protocol.Vector.encode(list_type, [[1, 2]], 1)
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        3,
+        [LogicalType.encode(list_type)],
+        [[Writer.field(90, Writer.uleb128(2)), flat_head | flat_tail]]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:ok, chunk, ""} = DataChunk.decode_wrapper(binary)
+    assert DataChunk.rows(chunk) == [[[1, 2]], [[1, 2]], [[1, 2]]]
+  end
+
   test "decodes sequence vectors" do
     binary =
       QuackDB.ProtocolFixtures.data_chunk(
@@ -69,6 +110,28 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
              DataChunk.decode_wrapper(binary)
 
     assert message == "expected field 100, got 102"
+  end
+
+  test "reports variable-size vector value count mismatches" do
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        2,
+        [LogicalType.encode(LogicalType.new(:varchar))],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(102, Writer.list(["one"], &Writer.blob/1)),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :vector_value_count_mismatch, message: message}} =
+             DataChunk.decode_wrapper(binary)
+
+    assert message == "varchar vector serialized 1 values for 2 rows"
   end
 
   test "reports fixed-size vector payload size mismatches" do

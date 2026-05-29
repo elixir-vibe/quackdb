@@ -271,10 +271,11 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
-  defp decode_variable_values(binary, type, :varchar, _row_count, validity) do
+  defp decode_variable_values(binary, type, :varchar, row_count, validity) do
     read_blob_list = fn rest -> Reader.read_list(rest, &Reader.read_blob/1) end
 
-    with {:ok, values, rest} <- read_required(binary, 102, read_blob_list) do
+    with {:ok, values, rest} <- read_required(binary, 102, read_blob_list),
+         :ok <- expect_value_count(values, row_count, :varchar) do
       values =
         values
         |> Enum.with_index()
@@ -927,6 +928,18 @@ defmodule QuackDB.Protocol.Vector do
       do: :ok,
       else:
         error(:array_size_mismatch, "array vector serialized size #{size}, expected #{expected}")
+  end
+
+  defp expect_value_count(values, row_count, physical_type) do
+    count = length(values)
+
+    if count == row_count,
+      do: :ok,
+      else:
+        error(
+          :vector_value_count_mismatch,
+          "#{physical_type} vector serialized #{count} values for #{row_count} rows"
+        )
   end
 
   defp expect_struct_child_count(children, count) do
