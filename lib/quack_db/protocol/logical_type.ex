@@ -79,7 +79,8 @@ defmodule QuackDB.Protocol.LogicalType do
   @spec decode(binary()) :: Reader.read_result(t())
   def decode(binary) do
     with {:ok, type, rest} <- decode_type(binary, %__MODULE__{}),
-         :ok <- expect_type_id(type) do
+         :ok <- expect_type_id(type),
+         :ok <- expect_type_info(type) do
       {:ok, type, rest}
     end
   end
@@ -332,6 +333,13 @@ defmodule QuackDB.Protocol.LogicalType do
 
   defp expect_type_id(_type), do: error(:invalid_logical_type, "logical type is missing id field")
 
+  defp expect_type_info(%__MODULE__{type_info: nil}), do: :ok
+  defp expect_type_info(%__MODULE__{type_info: %{type: type}}) when is_integer(type), do: :ok
+
+  defp expect_type_info(_type) do
+    error(:invalid_logical_type_info, "logical type metadata is missing type field")
+  end
+
   defp decode_type_info(binary), do: decode_type_info(binary, %{})
 
   defp decode_type_info(binary, info) do
@@ -410,7 +418,7 @@ defmodule QuackDB.Protocol.LogicalType do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
         field_id == QuackDB.Protocol.field_end() ->
-          {:ok, child, rest}
+          with :ok <- expect_child_type(child), do: {:ok, child, rest}
 
         field_id == 0 ->
           with {:ok, name, rest} <- Reader.read_string(rest) do
@@ -426,6 +434,15 @@ defmodule QuackDB.Protocol.LogicalType do
           error(:unknown_child_type_field, "unknown child type field #{field_id}")
       end
     end
+  end
+
+  defp expect_child_type(%{name: name, type: %__MODULE__{}}) when is_binary(name), do: :ok
+
+  defp expect_child_type(child) do
+    error(
+      :invalid_child_type,
+      "child type must include name and type fields, got #{inspect(child)}"
+    )
   end
 
   defp field_201_name(%{type: 2}), do: :scale

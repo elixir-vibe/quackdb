@@ -27,7 +27,7 @@ No unreleased changes.
 
 ### Fixed
 
-- Rejected malformed Quack logical type objects that omit the required type id.
+- Rejected malformed Quack logical type objects that omit required type ids, metadata type tags, or child type fields.
 
 ## 0.3.0 - 2026-05-26
 

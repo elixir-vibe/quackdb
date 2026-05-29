@@ -44,6 +44,27 @@ defmodule QuackDB.Protocol.LogicalTypeTest do
     assert message == "unknown logical type field 999"
   end
 
+  test "reports logical type metadata without type fields" do
+    binary =
+      [
+        Writer.field(100, Writer.uleb128(LogicalType.id(:decimal))),
+        Writer.field(
+          101,
+          Writer.nullable(
+            [Writer.field(101, Writer.string("alias")), Writer.end_object()],
+            &Function.identity/1
+          )
+        ),
+        Writer.end_object()
+      ]
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_logical_type_info, message: message}} =
+             LogicalType.decode(binary)
+
+    assert message == "logical type metadata is missing type field"
+  end
+
   test "reports unknown logical type metadata fields" do
     binary =
       logical_type_with_info([
@@ -56,6 +77,22 @@ defmodule QuackDB.Protocol.LogicalTypeTest do
              LogicalType.decode(binary)
 
     assert message == "unknown logical type metadata field 999"
+  end
+
+  test "reports incomplete child type fields" do
+    child = [Writer.field(0, Writer.string("value")), Writer.end_object()]
+
+    binary =
+      logical_type_with_info([
+        Writer.field(100, Writer.uleb128(5)),
+        Writer.field(200, Writer.list([child], &Function.identity/1)),
+        Writer.end_object()
+      ])
+
+    assert {:error, %QuackDB.Error{code: :invalid_child_type, message: message}} =
+             LogicalType.decode(binary)
+
+    assert message == ~s|child type must include name and type fields, got %{name: "value"}|
   end
 
   test "reports unknown child type fields" do
