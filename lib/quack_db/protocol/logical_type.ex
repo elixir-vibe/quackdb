@@ -77,7 +77,12 @@ defmodule QuackDB.Protocol.LogicalType do
   end
 
   @spec decode(binary()) :: Reader.read_result(t())
-  def decode(binary), do: decode_type(binary, %__MODULE__{})
+  def decode(binary) do
+    with {:ok, type, rest} <- decode_type(binary, %__MODULE__{}),
+         :ok <- expect_type_id(type) do
+      {:ok, type, rest}
+    end
+  end
 
   @spec physical_type(t()) :: atom()
   def physical_type(%__MODULE__{name: :boolean}), do: :bool
@@ -322,6 +327,10 @@ defmodule QuackDB.Protocol.LogicalType do
       end
     end
   end
+
+  defp expect_type_id(%__MODULE__{id: id}) when is_integer(id), do: :ok
+
+  defp expect_type_id(_type), do: error(:invalid_logical_type, "logical type is missing id field")
 
   defp decode_type_info(binary), do: decode_type_info(binary, %{})
 

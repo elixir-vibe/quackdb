@@ -16,6 +16,20 @@ defmodule QuackDB.Protocol.LogicalTypeTest do
              LogicalType.decode(binary)
   end
 
+  test "reports missing logical type ids" do
+    binary =
+      [
+        Writer.field(101, Writer.nullable(nil, &Function.identity/1)),
+        Writer.end_object()
+      ]
+      |> IO.iodata_to_binary()
+
+    assert {:error, %QuackDB.Error{code: :invalid_logical_type, message: message}} =
+             LogicalType.decode(binary)
+
+    assert message == "logical type is missing id field"
+  end
+
   test "reports unknown logical type fields" do
     binary =
       [
