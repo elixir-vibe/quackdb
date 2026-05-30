@@ -37,7 +37,7 @@ defmodule QuackDB.MixProject do
       {:db_connection, "~> 2.7"},
       {:mint, "~> 1.8"},
       {:castore, "~> 1.0"},
-      {:decimal, "~> 2.0"},
+      {:decimal, "~> 2.0 or ~> 3.0"},
       {:muontrap, "~> 1.5"},
       {:telemetry, "~> 1.0"},
       {:table, "~> 0.1", optional: true},

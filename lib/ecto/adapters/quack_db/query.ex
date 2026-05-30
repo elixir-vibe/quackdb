@@ -192,6 +192,10 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp select_expr(expression, from), do: select_value_expr(expression, from)
 
+    defp select_value_expr({:&, _meta, [binding]}, from) when is_integer(binding) do
+      source_fields(from, binding, nil)
+    end
+
     defp select_value_expr({{:., _, [{:&, _, [0]}, field]}, _, []} = expression, %{
            source: {_table, schema}
          })
@@ -563,12 +567,17 @@ if Code.ensure_loaded?(Ecto.Query) do
       ["(", expr(left), " LIKE ", expr(right), ")"]
     end
 
+    defp expr({:ilike, _meta, [left, right]}) do
+      ["(", expr(left), " ILIKE ", expr(right), ")"]
+    end
+
     defp expr({:is_nil, _meta, [expression]}) do
       ["(", expr(expression), " IS NULL)"]
     end
 
     defp expr({:identifier, _meta, [value]}) when is_binary(value), do: quote_identifier(value)
     defp expr({:^, _meta, [_index]}), do: "?"
+    defp expr({:^, _meta, [_index, _count]}), do: "?"
     defp expr(%Ecto.Query.Tagged{value: value, type: type}), do: typed_expr(value, type)
     defp expr(value) when is_binary(value), do: literal(value)
     defp expr(value) when is_integer(value) or is_float(value), do: to_string(value)
@@ -615,6 +624,16 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp in_expr(left, %Ecto.Query.Tagged{value: values}) when is_list(values),
       do: in_expr(left, values)
+
+    defp in_expr(left, {:^, _meta, [_index, count]}) when is_integer(count) and count > 0 do
+      [
+        "(",
+        expr(left),
+        " IN (",
+        1..count |> Enum.map(fn _ -> "?" end) |> Enum.intersperse(", "),
+        "))"
+      ]
+    end
 
     defp in_expr(left, values) when is_list(values) do
       ["(", expr(left), " IN (", values |> Enum.map(&expr/1) |> Enum.intersperse(", "), "))"]
