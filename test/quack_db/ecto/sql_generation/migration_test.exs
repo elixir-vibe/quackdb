@@ -16,7 +16,34 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
       |> single_sql()
 
     assert sql ==
-             ~s|CREATE TABLE "events" ("id" BIGINT PRIMARY KEY, "name" VARCHAR NOT NULL, "score" INTEGER DEFAULT 0)|
+             ~s|CREATE TABLE "events" ("id" BIGINT, "name" VARCHAR NOT NULL, "score" INTEGER DEFAULT 0, PRIMARY KEY ("id"))|
+  end
+
+  test "generates map columns as JSON" do
+    sql =
+      {:create, %Table{name: "events"}, [{:add, :metadata, :map, [null: false]}]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql == ~s|CREATE TABLE "events" ("metadata" JSON NOT NULL)|
+  end
+
+  test "generates list defaults" do
+    sql =
+      {:create, %Table{name: "events"}, [{:add, :tags, {:array, :string}, [default: []]}]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql == ~s|CREATE TABLE "events" ("tags" VARCHAR[] DEFAULT [])|
+  end
+
+  test "generates map defaults as JSON" do
+    sql =
+      {:create, %Table{name: "events"}, [{:add, :metadata, :map, [default: %{kind: "duck"}]}]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql == ~s|CREATE TABLE "events" ("metadata" JSON DEFAULT JSON '{"kind":"duck"}')|
   end
 
   test "generates temporal and decimal defaults" do
@@ -39,14 +66,6 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
              ~s|CREATE TABLE "events" ("amount" DECIMAL DEFAULT 12.34, "event_date" DATE DEFAULT DATE '2026-05-26', "event_time" TIME DEFAULT TIME '12:34:56', "occurred_at" TIMESTAMP DEFAULT TIMESTAMP '2026-05-26 12:34:56', "precise_at" TIMESTAMP DEFAULT TIMESTAMP '2026-05-26 12:34:56.123456', "received_at" TIMESTAMPTZ DEFAULT TIMESTAMPTZ '2026-05-26T12:34:56Z', "precise_received_at" TIMESTAMPTZ DEFAULT TIMESTAMPTZ '2026-05-26T12:34:56.123456Z')|
   end
 
-  test "rejects unsupported default values explicitly" do
-    assert_raise QuackDB.Error, ~r/unsupported migration default value/, fn ->
-      {:create, %Table{name: "events"}, [{:add, :payload, :string, [default: %{kind: "duck"}]}]}
-      |> Connection.execute_ddl()
-      |> single_sql()
-    end
-  end
-
   test "generates composite primary key and references" do
     sql =
       {:create, %Table{name: "events", primary_key: :composite},
@@ -60,7 +79,34 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
       |> single_sql()
 
     assert sql ==
-             ~s|CREATE TABLE "events" ("account_id" INTEGER, "id" INTEGER, "category_id" INTEGER REFERENCES "categories"("id") ON DELETE CASCADE, PRIMARY KEY ("account_id", "id"))|
+             ~s|CREATE TABLE "events" ("account_id" INTEGER, "id" INTEGER, "category_id" INTEGER REFERENCES "categories"("id"), PRIMARY KEY ("account_id", "id"))|
+  end
+
+  test "generates serial primary key DDL" do
+    sql =
+      {:create_if_not_exists, %Table{name: "events"},
+       [{:add, :id, :bigserial, [primary_key: true]}, {:add, :name, :string, []}]}
+      |> Connection.execute_ddl()
+      |> Enum.map(&IO.iodata_to_binary/1)
+
+    assert sql == [
+             ~s|CREATE SEQUENCE IF NOT EXISTS "events_id_seq"|,
+             ~s|CREATE TABLE IF NOT EXISTS "events" ("id" BIGINT DEFAULT nextval('events_id_seq'), "name" VARCHAR, PRIMARY KEY ("id"))|
+           ]
+  end
+
+  test "infers composite primary keys from multiple primary key columns" do
+    sql =
+      {:create, %Table{name: "tree_nodes", primary_key: false},
+       [
+         {:add, :fragment_id, :bigint, [primary_key: true]},
+         {:add, :id, :integer, [primary_key: true]}
+       ]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql ==
+             ~s|CREATE TABLE "tree_nodes" ("fragment_id" BIGINT, "id" INTEGER, PRIMARY KEY ("fragment_id", "id"))|
   end
 
   test "generates alter table DDL" do

@@ -14,7 +14,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
       [
         with_ctes(query.with_ctes),
-        select(query.select, query.distinct, query.from),
+        select(query.select, query.distinct, query),
         " FROM ",
         source(query.from, 0),
         joins(query.joins),
@@ -102,15 +102,15 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp recursive(true), do: "RECURSIVE "
     defp recursive(false), do: []
 
-    defp select(nil, distinct, _from), do: ["SELECT ", distinct(distinct), "*"]
+    defp select(nil, distinct, _query), do: ["SELECT ", distinct(distinct), "*"]
 
-    defp select(%Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}, take: take}, distinct, from)
+    defp select(%Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}, take: take}, distinct, query)
          when is_integer(binding) do
-      ["SELECT ", distinct(distinct), source_fields(from, binding, Map.get(take, binding))]
+      ["SELECT ", distinct(distinct), source_fields(query, binding, Map.get(take, binding))]
     end
 
-    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, from) do
-      ["SELECT ", distinct(distinct), select_expr(expr, from)]
+    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, query) do
+      ["SELECT ", distinct(distinct), select_expr(expr, query)]
     end
 
     defp distinct(nil), do: []
@@ -127,8 +127,10 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp distinct(%{expr: expression}), do: ["DISTINCT ON (", expr(expression), ") "]
 
-    defp source_fields(from, binding, nil), do: schema_fields(from, binding)
-    defp source_fields(_from, binding, {_shape, fields}), do: selected_fields(binding, fields)
+    defp source_fields(query, binding, nil),
+      do: schema_fields(binding_source(query, binding), binding)
+
+    defp source_fields(_query, binding, {_shape, fields}), do: selected_fields(binding, fields)
 
     defp selected_fields(binding, fields) do
       fields
@@ -192,21 +194,25 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp select_expr(expression, from), do: select_value_expr(expression, from)
 
-    defp select_value_expr({:&, _meta, [binding]}, from) when is_integer(binding) do
-      source_fields(from, binding, nil)
+    defp select_value_expr({:&, _meta, [binding]}, query) when is_integer(binding) do
+      source_fields(query, binding, nil)
     end
 
-    defp select_value_expr({{:., _, [{:&, _, [0]}, field]}, _, []} = expression, %{
-           source: {_table, schema}
-         })
-         when is_atom(schema) and not is_nil(schema) do
-      case schema_field_for_select(schema, field) do
-        nil ->
-          expr(expression)
+    defp select_value_expr({{:., _, [{:&, _, [binding]}, field]}, _, []} = expression, query)
+         when is_integer(binding) do
+      case binding_source(query, binding) do
+        %{source: {_table, schema}} when is_atom(schema) and not is_nil(schema) ->
+          case schema_field_for_select(schema, field) do
+            nil ->
+              expr(expression)
 
-        schema_field_name ->
-          source = schema.__schema__(:field_source, schema_field_name)
-          schema_field(schema, schema_field_name, 0, source).expression
+            schema_field_name ->
+              source = schema.__schema__(:field_source, schema_field_name)
+              schema_field(schema, schema_field_name, binding, source).expression
+          end
+
+        _other ->
+          expr(expression)
       end
     end
 
@@ -216,6 +222,12 @@ if Code.ensure_loaded?(Ecto.Query) do
       Enum.find(schema.__schema__(:fields), fn schema_field ->
         schema_field == field or schema.__schema__(:field_source, schema_field) == field
       end)
+    end
+
+    defp binding_source(%Ecto.Query{from: from}, 0), do: from
+
+    defp binding_source(%Ecto.Query{joins: joins}, binding) when binding > 0 do
+      Enum.at(joins, binding - 1)
     end
 
     defp source(%{source: {table, nil}}, index) when is_binary(table) do

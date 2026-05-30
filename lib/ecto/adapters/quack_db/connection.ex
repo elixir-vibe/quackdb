@@ -142,17 +142,20 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         when command in [:create, :create_if_not_exists] do
       assert_table_options!(table)
 
-      [
-        [
-          "CREATE TABLE ",
-          if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
-          quote_table(table.prefix, table.name),
-          " (",
-          column_definitions(table, columns),
-          ")",
-          table_options(table.options)
-        ]
+      serial_sequences = serial_sequence_ddl(command, table, columns)
+
+      table_ddl = [
+        "CREATE TABLE ",
+        if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
+        quote_table(table.prefix, table.name),
+        " (",
+        column_definitions(table, columns),
+        pk_definition(columns, ", "),
+        ")",
+        table_options(table.options)
       ]
+
+      [table_ddl | Enum.reverse(serial_sequences)] |> Enum.reverse()
     end
 
     def execute_ddl({command, %Table{} = table, _mode})
@@ -372,6 +375,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     defp dump_param({:binary_id, value}), do: {:uuid, Ecto.UUID.cast!(value)}
     defp dump_param({:binary, value}), do: {:blob, value}
+    defp dump_param(value) when is_map(value) and not is_struct(value), do: {:json, value}
     defp dump_param(value), do: value
 
     defp ensure_list_params!(params) do
@@ -483,40 +487,70 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       unsupported_iodata!(:placeholders, ":placeholders with RETURNING are unsupported")
     end
 
-    defp column_definitions(table, columns) do
-      definitions = Enum.map(columns, &column_definition(&1, table))
-      pks = columns |> Enum.filter(&composite_pk?/1) |> Enum.map(&elem(&1, 1))
+    defp serial_sequence_ddl(command, table, columns) do
+      columns
+      |> Enum.filter(fn
+        {:add, _name, type, _options} -> type in [:serial, :bigserial]
+        _other -> false
+      end)
+      |> Enum.map(fn {:add, name, _type, _options} ->
+        [
+          "CREATE SEQUENCE ",
+          if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
+          quote_identifier(serial_sequence_name(table, name))
+        ]
+      end)
+    end
 
-      case {table.primary_key, pks} do
-        {:composite, [_ | _]} ->
-          pk = [
+    defp pk_definition(columns, prefix) do
+      pks =
+        for {:add, name, _type, options} <- columns,
+            Keyword.get(options, :primary_key, false),
+            do: name
+
+      case pks do
+        [] ->
+          []
+
+        _pks ->
+          [
+            prefix,
             "PRIMARY KEY (",
             pks |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "),
             ")"
           ]
-
-          [pk | Enum.reverse(definitions)] |> Enum.reverse() |> Enum.intersperse(", ")
-
-        _ ->
-          Enum.intersperse(definitions, ", ")
       end
     end
 
-    defp composite_pk?({:add, _name, _type, options}),
-      do: Keyword.get(options, :primary_key, false)
+    defp column_definitions(table, columns) do
+      Enum.map_intersperse(columns, ", ", &column_definition(table, &1))
+    end
 
-    defp column_definition({:add, name, %Reference{} = reference, options}, table) do
+    defp column_definition(_table, {:add, name, %Reference{} = reference, options}) do
       [
         quote_identifier(name),
         " ",
         column_type(reference.type),
-        column_options(options, table),
+        column_options(options),
         reference_expr(reference)
       ]
     end
 
-    defp column_definition({:add, name, type, options}, table) do
-      [quote_identifier(name), " ", column_type(type), column_options(options, table)]
+    defp column_definition(table, {:add, name, type, options})
+         when type in [:serial, :bigserial] do
+      [
+        quote_identifier(name),
+        " ",
+        column_type(type),
+        " DEFAULT nextval('",
+        serial_sequence_name(table, name),
+        "')",
+        column_options(options)
+      ]
+    end
+
+    defp column_definition(_table, {:add, name, type, options}) do
+      [quote_identifier(name), " ", column_type(type), column_options(options)]
     end
 
     defp column_change({:add, name, %Reference{} = reference, options}) do
@@ -547,13 +581,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp column_change({:remove, name}), do: ["DROP COLUMN ", quote_identifier(name)]
     defp column_change({:remove, name, _type, _options}), do: column_change({:remove, name})
 
-    defp column_options(options, table \\ %Table{}) do
+    defp column_options(options) do
       [
         null_option(Keyword.get(options, :null)),
-        default_option(Keyword.fetch(options, :default)),
-        primary_key_option(
-          table.primary_key != :composite and Keyword.get(options, :primary_key, false)
-        )
+        default_option(Keyword.fetch(options, :default))
       ]
     end
 
@@ -567,6 +598,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     defp default_option({:ok, value}) when is_binary(value),
       do: [" DEFAULT '", String.replace(value, "'", "''"), "'"]
+
+    defp default_option({:ok, value}) when is_list(value) do
+      [" DEFAULT ", QuackDB.SQL.literal!(value)]
+    end
 
     defp default_option({:ok, %Decimal{} = value}),
       do: [" DEFAULT ", Decimal.to_string(value, :normal)]
@@ -590,6 +625,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp default_option({:ok, value}) when is_number(value) or is_boolean(value),
       do: [" DEFAULT ", to_string(value)]
 
+    defp default_option({:ok, value}) when is_map(value) and not is_struct(value) do
+      [" DEFAULT ", QuackDB.SQL.literal!({:json, value})]
+    end
+
     defp default_option({:ok, value}) do
       unsupported_iodata!(
         :migration_default,
@@ -597,8 +636,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       )
     end
 
-    defp primary_key_option(true), do: " PRIMARY KEY"
-    defp primary_key_option(false), do: []
+    defp serial_sequence_name(%Table{} = table, column) do
+      [table.prefix, table.name, column, "seq"]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map_join("_", &to_string/1)
+    end
 
     defp reference_expr(%Reference{} = reference) do
       [
@@ -613,11 +655,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     defp reference_action(_kind, :nothing), do: []
-    defp reference_action(:delete, :delete_all), do: " ON DELETE CASCADE"
-    defp reference_action(:delete, :nilify_all), do: " ON DELETE SET NULL"
+    defp reference_action(:delete, action) when action in [:delete_all, :nilify_all], do: []
     defp reference_action(:delete, :restrict), do: " ON DELETE RESTRICT"
-    defp reference_action(:update, :update_all), do: " ON UPDATE CASCADE"
-    defp reference_action(:update, :nilify_all), do: " ON UPDATE SET NULL"
+    defp reference_action(:update, action) when action in [:update_all, :nilify_all], do: []
     defp reference_action(:update, :restrict), do: " ON UPDATE RESTRICT"
     defp reference_action(_kind, _action), do: []
 
@@ -638,6 +678,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp ecto_type_to_duckdb(:string), do: :varchar
     defp ecto_type_to_duckdb(:text), do: :varchar
     defp ecto_type_to_duckdb(:binary), do: :blob
+    defp ecto_type_to_duckdb(:map), do: :json
     defp ecto_type_to_duckdb(:decimal), do: :decimal
     defp ecto_type_to_duckdb(:date), do: :date
     defp ecto_type_to_duckdb(type) when type in [:time, :time_usec], do: :time
