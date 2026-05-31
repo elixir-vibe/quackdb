@@ -126,6 +126,7 @@ The harness emits `METRIC scenario.key=value` lines so results can later be pars
 
 - Server RSS sampling is now built into `bench/stress.exs` by summing the MuonTrap wrapper process and its DuckDB descendants.
 - `QUACKDB_STRESS_PROFILE=1` now runs `EXPLAIN ANALYZE` for read scenarios, writes plans to `tmp/stress-profiles/`, and emits `duckdb_total_ms` plus a client-overhead estimate.
+- `QUACKDB_STRESS_EPROF=1` runs Erlang `:eprof` around measured read scenarios to identify Elixir protocol/materialization hot spots.
 - File-backed database runs to observe checkpoint/WAL behavior.
 - Nested-heavy decode scenarios: LIST/STRUCT/MAP/JSON/null-heavy columns.
 - A mixed workload scenario with reads and appends running simultaneously.

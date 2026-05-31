@@ -106,9 +106,21 @@ defmodule QuackDB.Protocol.DataChunk do
   def rows(%__MODULE__{row_count: 0}, _names), do: []
 
   def rows(%__MODULE__{} = chunk, _names) do
-    for row_index <- 0..(chunk.row_count - 1)//1 do
-      Enum.map(chunk.columns, fn column -> Enum.at(column.values, row_index) end)
-    end
+    columns = Enum.map(chunk.columns, & &1.values)
+    build_rows(columns, chunk.row_count, [])
+  end
+
+  defp build_rows(_columns, 0, rows), do: Enum.reverse(rows)
+
+  defp build_rows(columns, remaining, rows) do
+    {row, columns} = take_row(columns, [], [])
+    build_rows(columns, remaining - 1, [row | rows])
+  end
+
+  defp take_row([], row, columns), do: {Enum.reverse(row), Enum.reverse(columns)}
+
+  defp take_row([[value | rest] | columns], row, advanced) do
+    take_row(columns, [value | row], [rest | advanced])
   end
 
   defp encode_column(%{type: type, values: values}) do

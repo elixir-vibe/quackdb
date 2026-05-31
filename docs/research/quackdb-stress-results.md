@@ -161,17 +161,33 @@ Findings:
 - Wide/nested results are especially decode/materialization-bound.
 - Columnar batches slightly improve narrow scalar reads but do not fix nested decode costs because nested vector decoding still creates Elixir values eagerly.
 
+### Eprof-driven decode fixes
+
+`QUACKDB_STRESS_EPROF=1` runs `:eprof` around measured read scenarios. Profiling `wide_nested_columnar_batches` at 1,000 rows found two O(n²) list-access paths:
+
+- `QuackDB.Protocol.DataChunk.rows/2` used `Enum.at/2` for each row/column cell.
+- `QuackDB.Protocol.Vector.list_values/4` used `Enum.slice/3` from the start of the child-value list for each list entry.
+
+After replacing row materialization with head/tail traversal and list slicing with tuple-indexed extraction, a 50,000-row local run improved substantially:
+
+| Scenario | Before elapsed ms | After elapsed ms | Before rows/s | After rows/s |
+| --- | ---: | ---: | ---: | ---: |
+| `materialized_result` | 801.82 | 43.83 | 62,358 | 1,140,667 |
+| `streamed_rows` | 731.98 | 41.65 | 68,308 | 1,200,567 |
+| `columnar_batches` | 704.67 | 43.23 | 70,956 | 1,156,658 |
+| `wide_nested_materialized` | 5,688.66 | 239.21 | 8,789 | 209,025 |
+| `wide_nested_columnar_batches` | 5,697.78 | 302.41 | 8,775 | 165,339 |
+
 ## Bugs and weak points surfaced
 
 1. Large row materialization remains the clearest bottleneck. Streaming should be promoted in docs and examples for large result sets.
 2. Wide/nested result decoding is much slower than narrow scalar decoding. This points at protocol vector decode and nested value materialization as optimization targets.
 3. Larger `quack_fetch_batch_chunks` values can make streaming slower. This was counterintuitive and should be validated on larger row counts and remote networks before changing defaults.
 4. `CASE WHEN id % 10 = 0 THEN NULL::DOUBLE ELSE amount END` in the wide/nested stress query triggered `expected a 64-bit float` during decode. This was fixed by skipping physical payload decoding for invalid fixed-width vector slots; DuckDB can store non-decodable sentinel bytes in null `DOUBLE` slots.
-5. The benchmark still reports client-observed time only. We need server-side profiling (`EXPLAIN ANALYZE` or DuckDB profiling output) to split DuckDB execution from Quack transport/protocol/client materialization.
+5. Even after the row/list fixes, client decode/materialization is still much larger than DuckDB execution time for wide/nested outputs.
 
 ## Next actions
 
-- Add a profiling mode to `bench/stress.exs` that runs `EXPLAIN ANALYZE` for read scenarios and stores the plan text next to client timings.
 - Add larger analytical/file-backed sweeps before changing `threads` defaults.
 - Add payload-shape sweeps for append defaults: narrow scalar, wide scalar, nested, strings, blobs, and null-heavy batches.
 - Consider documenting `quack_fetch_batch_chunks=1` for local streaming workloads and keeping the default conservative until remote-network runs are available.

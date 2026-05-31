@@ -292,18 +292,7 @@ defmodule QuackDB.Protocol.Vector do
 
     with {:ok, child_vectors, rest} <-
            read_required(binary, 103, &read_child_vectors(&1, children, row_count)) do
-      values =
-        for row_index <- 0..(row_count - 1)//1 do
-          if valid?(validity, row_index) do
-            children
-            |> Enum.zip(child_vectors)
-            |> Map.new(fn {%{name: name}, vector} ->
-              {name, Enum.at(vector.values, row_index)}
-            end)
-          else
-            nil
-          end
-        end
+      values = struct_values(children, child_vectors, row_count, validity)
 
       {:ok, values, rest}
     end
@@ -596,26 +585,54 @@ defmodule QuackDB.Protocol.Vector do
 
   defp decode_fixed_values(blob, type, physical_type, row_count, validity) do
     with {:ok, values, <<>>} <-
-           decode_fixed_values(blob, type, physical_type, row_count, validity, []) do
+           decode_fixed_values(blob, type, physical_type, row_count, validity, 0, []) do
       {:ok, Enum.reverse(values)}
     end
   end
 
-  defp decode_fixed_values(rest, _type, _physical_type, 0, _validity, values),
+  defp decode_fixed_values(rest, _type, _physical_type, 0, _validity, _index, values),
     do: {:ok, values, rest}
 
-  defp decode_fixed_values(binary, type, physical_type, remaining, validity, values) do
-    index = length(values)
+  defp decode_fixed_values(binary, type, physical_type, remaining, validity, index, values) do
     size = LogicalType.fixed_size(physical_type)
 
     if valid?(validity, index) do
       with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
-        decode_fixed_values(rest, type, physical_type, remaining - 1, validity, [value | values])
+        decode_fixed_values(rest, type, physical_type, remaining - 1, validity, index + 1, [
+          value | values
+        ])
       end
     else
       <<_ignored::binary-size(size), rest::binary>> = binary
-      decode_fixed_values(rest, type, physical_type, remaining - 1, validity, [nil | values])
+
+      decode_fixed_values(rest, type, physical_type, remaining - 1, validity, index + 1, [
+        nil | values
+      ])
     end
+  end
+
+  defp struct_values(children, child_vectors, row_count, validity) do
+    columns =
+      Enum.map(Enum.zip(children, child_vectors), fn {%{name: name}, vector} ->
+        {name, vector.values}
+      end)
+
+    build_struct_values(columns, row_count, validity, 0, [])
+  end
+
+  defp build_struct_values(_columns, 0, _validity, _index, values), do: Enum.reverse(values)
+
+  defp build_struct_values(columns, remaining, validity, index, values) do
+    {row, columns} = take_struct_row(columns, valid?(validity, index), %{}, [])
+    build_struct_values(columns, remaining - 1, validity, index + 1, [row | values])
+  end
+
+  defp take_struct_row([], true, row, columns), do: {row, Enum.reverse(columns)}
+  defp take_struct_row([], false, _row, columns), do: {nil, Enum.reverse(columns)}
+
+  defp take_struct_row([{name, [value | rest]} | columns], valid?, row, advanced) do
+    row = if valid?, do: Map.put(row, name, value), else: row
+    take_struct_row(columns, valid?, row, [{name, rest} | advanced])
   end
 
   defp maybe_read_validity(binary, false, _row_count), do: {:ok, nil, binary}
@@ -709,12 +726,14 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp list_values(type, entries, child_values, validity) do
+    child_values = List.to_tuple(child_values)
+
     entries
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {%{offset: offset, length: length}, row_index},
                                        {:ok, values} ->
       if valid?(validity, row_index) do
-        value = Enum.slice(child_values, offset, length)
+        value = tuple_slice(child_values, offset, length)
 
         case list_value(type, value) do
           {:ok, value} -> {:cont, {:ok, [value | values]}}
@@ -737,6 +756,14 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp list_value(_type, entries), do: {:ok, entries}
+
+  defp tuple_slice(tuple, offset, length), do: tuple_slice(tuple, offset, length, [])
+
+  defp tuple_slice(_tuple, _offset, 0, values), do: Enum.reverse(values)
+
+  defp tuple_slice(tuple, offset, remaining, values) do
+    tuple_slice(tuple, offset + 1, remaining - 1, [:erlang.element(offset + 1, tuple) | values])
+  end
 
   defp validate_map_child_type(type) do
     child_type = LogicalType.child_type(type)
