@@ -13,6 +13,13 @@ defmodule QuackDB.SQLTest do
              "SET GLOBAL quack_fetch_batch_chunks = 4;"
   end
 
+  test "builds EXPLAIN statements" do
+    assert QuackDB.SQL.explain("SELECT 1") |> IO.iodata_to_binary() == "EXPLAIN SELECT 1"
+
+    assert QuackDB.SQL.explain("SELECT 1", analyze: true) |> IO.iodata_to_binary() ==
+             "EXPLAIN ANALYZE SELECT 1"
+  end
+
   test "builds CALL statements with positional and named arguments" do
     assert QuackDB.SQL.call(:quack_serve, ["quack:localhost"], token: "super_secret")
            |> IO.iodata_to_binary() ==

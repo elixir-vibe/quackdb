@@ -370,7 +370,9 @@ defmodule QuackDB.Stress do
 
     {elapsed, result} =
       timed(fn ->
-        QuackDB.query!(connection, ["EXPLAIN ANALYZE ", sql], [], timeout: config.timeout)
+        QuackDB.query!(connection, QuackDB.SQL.explain(sql, analyze: true), [],
+          timeout: config.timeout
+        )
       end)
 
     text = explain_text(result)

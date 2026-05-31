@@ -74,6 +74,16 @@ defmodule QuackDB.SQL do
   def set_global(name, value),
     do: ["SET GLOBAL ", identifier!(name, :setting), " = ", literal!(value), ";"]
 
+  @doc "Builds an `EXPLAIN ...` or `EXPLAIN ANALYZE ...` statement."
+  @spec explain(iodata(), keyword()) :: iodata()
+  def explain(statement, options \\ []) when is_list(options) do
+    if Keyword.get(options, :analyze, false) do
+      ["EXPLAIN ANALYZE ", statement]
+    else
+      ["EXPLAIN ", statement]
+    end
+  end
+
   @doc "Builds a `CALL function(args..., option = value...);` statement."
   @spec call(atom() | String.t(), [parameter()], keyword(parameter())) :: iodata()
   def call(function, positional_args \\ [], named_args \\ [])

@@ -131,7 +131,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     @impl true
     def explain_query(connection, query, params, options) do
-      case query(connection, ["EXPLAIN ", query], params, options) do
+      case query(connection, QuackDB.SQL.explain(query), params, options) do
         {:ok, %{rows: rows}} -> {:ok, Enum.map_join(rows, "\n", &explain_row/1)}
         result -> result
       end
