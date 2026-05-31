@@ -7,11 +7,12 @@ defmodule QuackDB.Stress do
     Process.flag(:trap_exit, true)
     config = config()
     {connection, cleanup, server} = connect(config)
+    config = Map.put(config, :server_pid, server.pid)
 
     try do
       IO.puts("# QuackDB stress run")
       IO.puts("started_at=#{DateTime.utc_now() |> DateTime.to_iso8601()}")
-      IO.puts("server=#{server}")
+      IO.puts("server=#{server.uri}")
       IO.puts("#{config_line(config)}\n")
 
       setup_source!(connection, config.rows)
@@ -22,6 +23,8 @@ defmodule QuackDB.Stress do
         materialized_result(connection, config),
         streamed_rows(connection, config),
         columnar_batches(connection, config),
+        wide_nested_materialized(connection, config),
+        wide_nested_columnar_batches(connection, config),
         append_rows(connection, config),
         append_columns(connection, config)
       ]
@@ -54,7 +57,7 @@ defmodule QuackDB.Stress do
     {:ok, connection} =
       QuackDB.start_link(uri: uri, token: config.token, pool_size: config.concurrency)
 
-    {connection, fn -> stop_linked(connection) end, uri}
+    {connection, fn -> stop_linked(connection) end, %{uri: uri, pid: nil}}
   end
 
   defp connect(config) do
@@ -81,7 +84,7 @@ defmodule QuackDB.Stress do
       stop_linked(server)
     end
 
-    {connection, cleanup, QuackDB.Server.uri(server)}
+    {connection, cleanup, %{uri: QuackDB.Server.uri(server), pid: server}}
   end
 
   defp setup_source!(connection, rows) do
@@ -171,6 +174,47 @@ defmodule QuackDB.Stress do
     end)
   end
 
+  defp wide_nested_materialized(connection, config) do
+    measure("wide_nested_materialized", config, fn ->
+      QuackDB.query!(connection, wide_nested_sql(), [], timeout: config.timeout).rows
+      |> length()
+    end)
+  end
+
+  defp wide_nested_columnar_batches(connection, config) do
+    measure("wide_nested_columnar_batches", config, fn ->
+      {:ok, count} =
+        DBConnection.transaction(connection, fn tx ->
+          tx
+          |> QuackDB.columnar_batches(wide_nested_sql(), [],
+            max_rows: config.fetch_rows,
+            timeout: config.timeout
+          )
+          |> Enum.reduce(0, fn batch, count -> count + batch.num_rows end)
+        end)
+
+      count
+    end)
+  end
+
+  defp wide_nested_sql do
+    """
+    SELECT
+      id,
+      category,
+      amount,
+      payload,
+      payload || '-suffix' AS payload_suffix,
+      repeat(payload, 2) AS payload_repeated,
+      samples,
+      json_object('id', id, 'category', category, 'payload', payload) AS attrs_json,
+      [category, category + 1, category + 2, category + 3] AS category_window,
+      id % 2 = 0 AS even
+    FROM #{@table}
+    ORDER BY id
+    """
+  end
+
   defp append_rows(connection, config) do
     measure("append_rows", config, fn ->
       QuackDB.query!(connection, "DROP TABLE IF EXISTS #{@append_rows_table}")
@@ -228,6 +272,7 @@ defmodule QuackDB.Stress do
       skipped(name)
     else
       memory_before = :erlang.memory(:total)
+      rss_before = server_rss_mb(config.server_pid)
       started = System.monotonic_time(:microsecond)
 
       samples =
@@ -247,7 +292,8 @@ defmodule QuackDB.Stress do
 
       elapsed = System.monotonic_time(:microsecond) - started
       memory_after = :erlang.memory(:total)
-      stats = latency_stats(samples)
+      rss_after = server_rss_mb(config.server_pid)
+      stats = latency_stats(samples) |> Map.merge(rss_stats(rss_before, rss_after))
       rate = config.queries / max(elapsed / 1_000_000, 1.0e-9)
 
       result(name, config.queries, elapsed, rate, memory_before, memory_after, stats)
@@ -259,10 +305,21 @@ defmodule QuackDB.Stress do
       skipped(name)
     else
       memory_before = :erlang.memory(:total)
+      rss_before = server_rss_mb(config.server_pid)
       {elapsed, count} = timed(fun)
       memory_after = :erlang.memory(:total)
+      rss_after = server_rss_mb(config.server_pid)
       rate = count / max(elapsed / 1_000_000, 1.0e-9)
-      result(name, count, elapsed, rate, memory_before, memory_after, %{})
+
+      result(
+        name,
+        count,
+        elapsed,
+        rate,
+        memory_before,
+        memory_after,
+        rss_stats(rss_before, rss_after)
+      )
     end
   end
 
@@ -304,6 +361,53 @@ defmodule QuackDB.Stress do
   defp percentile(sorted, percentile) do
     index = min(length(sorted) - 1, max(0, ceil(length(sorted) * percentile) - 1))
     Enum.at(sorted, index)
+  end
+
+  defp rss_stats(nil, _rss_after), do: %{}
+  defp rss_stats(_rss_before, nil), do: %{}
+
+  defp rss_stats(rss_before, rss_after) do
+    %{server_rss_mb: rss_after, server_rss_delta_mb: rss_after - rss_before}
+  end
+
+  defp server_rss_mb(nil), do: nil
+
+  defp server_rss_mb(server_pid) do
+    with os_pid when is_integer(os_pid) <- QuackDB.Server.os_pid(server_pid) do
+      pids = [os_pid | descendant_pids(os_pid)] |> Enum.uniq()
+
+      case Enum.reduce(pids, 0, &(&2 + process_rss_kb(&1))) do
+        0 -> nil
+        rss_kb -> rss_kb / 1024
+      end
+    else
+      _other -> nil
+    end
+  end
+
+  defp descendant_pids(os_pid) do
+    case System.cmd("pgrep", ["-P", Integer.to_string(os_pid)]) do
+      {"", 1} ->
+        []
+
+      {output, 0} ->
+        output
+        |> String.split("\n", trim: true)
+        |> Enum.map(&String.to_integer/1)
+        |> Enum.flat_map(fn pid -> [pid | descendant_pids(pid)] end)
+
+      _other ->
+        []
+    end
+  end
+
+  defp process_rss_kb(os_pid) do
+    with {output, 0} <- System.cmd("ps", ["-o", "rss=", "-p", Integer.to_string(os_pid)]),
+         {rss_kb, _rest} <- output |> String.trim() |> Integer.parse() do
+      rss_kb
+    else
+      _other -> 0
+    end
   end
 
   defp print_metrics(name, metrics) do

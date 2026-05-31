@@ -124,7 +124,7 @@ The harness emits `METRIC scenario.key=value` lines so results can later be pars
 
 ## Next instrumentation to add after baseline
 
-- Server RSS sampling via `QuackDB.Server.os_pid/1` and `ps` during each scenario.
+- Server RSS sampling is now built into `bench/stress.exs` by summing the MuonTrap wrapper process and its DuckDB descendants.
 - Separate DuckDB execution time from transport/decode time using `EXPLAIN ANALYZE` or profiling output for selected SQL.
 - File-backed database runs to observe checkpoint/WAL behavior.
 - Nested-heavy decode scenarios: LIST/STRUCT/MAP/JSON/null-heavy columns.
