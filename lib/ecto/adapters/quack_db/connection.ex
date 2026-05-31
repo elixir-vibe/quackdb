@@ -416,7 +416,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       |> Enum.intersperse(" AND ")
     end
 
-    defp insert_value(nil), do: "DEFAULT"
+    defp insert_value(nil), do: "?"
 
     defp insert_value({%Ecto.Query{} = query, _params_counter}),
       do: ["(", Ecto.Adapters.QuackDB.Query.all(query), ")"]

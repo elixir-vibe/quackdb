@@ -21,6 +21,22 @@ defmodule QuackDB.Ecto.SQLGeneration.InsertTest do
     assert sql == ~s|INSERT INTO "events" ("id", "name") VALUES (?, ?), (?, ?)|
   end
 
+  test "generates insert_all SQL placeholders for nil values" do
+    sql =
+      Connection.insert(
+        nil,
+        "events",
+        [:id, :name],
+        [[nil, :name]],
+        {:raise, [], []},
+        [],
+        []
+      )
+      |> IO.iodata_to_binary()
+
+    assert sql == ~s|INSERT INTO "events" ("id", "name") VALUES (?, ?)|
+  end
+
   test "generates insert SQL with returning" do
     sql =
       Connection.insert(

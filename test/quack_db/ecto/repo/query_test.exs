@@ -68,6 +68,21 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
                      ~s|INSERT INTO "events" ("id", "name") VALUES (1, 'duck'), (2, 'goose')|}
   end
 
+  test "Repo.insert_all/3 preserves nil params as NULL values" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+
+    put_repo_env(transport(parent: parent, prepare: [chunk], names: ["Count"]))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all("events", [
+               [id: nil, name: "duck"]
+             ])
+
+    assert_received {:statement, ~s|INSERT INTO "events" ("id", "name") VALUES (NULL, 'duck')|}
+  end
+
   test "Repo.insert_all/3 can use Quack append protocol explicitly" do
     parent = self()
 

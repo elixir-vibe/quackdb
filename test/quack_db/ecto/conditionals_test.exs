@@ -20,7 +20,7 @@ defmodule QuackDB.Ecto.ConditionalsTest do
 
   test "builds CASE expressions with case_when syntax" do
     assert Queries.tier_query() |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT CASE WHEN (q0."score" >= 90) THEN 'high' WHEN (q0."score" >= 50) THEN 'medium' ELSE 'low' END AS "tier" FROM "events" AS q0]
+             ~S[SELECT CASE WHEN (q0."score" >= ?) THEN 'high' WHEN (q0."score" >= ?) THEN 'medium' ELSE 'low' END AS "tier" FROM "events" AS q0]
   end
 
   test "requires a final true clause" do

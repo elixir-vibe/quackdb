@@ -20,7 +20,7 @@ defmodule QuackDB.Ecto.SQLGeneration.AggregatesTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT COUNT(q0."id") FILTER (WHERE (q0."kind" = 'duck')) AS "duck_count" FROM "events" AS q0]
+             ~S[SELECT COUNT(q0."id") FILTER (WHERE (q0."kind" = ?)) AS "duck_count" FROM "events" AS q0]
   end
 
   test "generates distinct count and coalesce expressions" do

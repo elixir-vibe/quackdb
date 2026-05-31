@@ -15,7 +15,7 @@ defmodule QuackDB.Ecto.SQLGeneration.UpdateDeleteTest do
     sql = query |> Connection.update_all() |> IO.iodata_to_binary()
 
     assert sql ==
-             ~s|UPDATE "events" AS q0 SET "score" = "score" + 1, "name" = ? WHERE (q0."id" = ?)|
+             ~s|UPDATE "events" AS q0 SET "score" = "score" + ?, "name" = ? WHERE (q0."id" = ?)|
   end
 
   test "generates joined update_all SQL" do

@@ -15,7 +15,7 @@ defmodule QuackDB.Ecto.SQLGeneration.AnalyticalTest do
       |> select([event], %{id: event.id})
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[WITH "recent" AS (SELECT q0."id" AS "id", q0."name" AS "name" FROM "events" AS q0 WHERE (q0."id" > 1)) SELECT q0."id" AS "id" FROM "recent" AS q0]
+             ~S[WITH "recent" AS (SELECT q0."id" AS "id", q0."name" AS "name" FROM "events" AS q0 WHERE (q0."id" > ?)) SELECT q0."id" AS "id" FROM "recent" AS q0]
   end
 
   test "generates Ecto SQL with window functions" do

@@ -10,21 +10,30 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     @spec all(Ecto.Query.t()) :: iodata()
     def all(%Ecto.Query{} = query) do
+      all(query, root_context(query))
+    end
+
+    @spec all_literal(Ecto.Query.t()) :: iodata()
+    def all_literal(%Ecto.Query{} = query) do
+      all(query, %{root_context(query) | literal_tagged?: true})
+    end
+
+    defp all(%Ecto.Query{} = query, context) do
       assert_read_only_query!(query)
 
       [
         with_ctes(query.with_ctes),
-        select(query.select, query.distinct, query),
+        select(query.select, query.distinct, query, context),
         " FROM ",
-        source(query.from, 0),
-        joins(query.joins),
-        wheres(query.wheres),
-        group_bys(query.group_bys),
-        havings(query.havings),
-        windows(query.windows),
-        order_bys(query.order_bys),
-        limit(query.limit),
-        offset(query.offset),
+        source(query.from, 0, context),
+        joins(query.joins, context),
+        wheres(query.wheres, context),
+        group_bys(query.group_bys, context),
+        havings(query.havings, context),
+        windows(query.windows, context),
+        order_bys(query.order_bys, context),
+        limit(query.limit, context),
+        offset(query.offset, context),
         combinations(query.combinations),
         lock(query.lock)
       ]
@@ -102,15 +111,36 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp recursive(true), do: "RECURSIVE "
     defp recursive(false), do: []
 
-    defp select(nil, distinct, _query), do: ["SELECT ", distinct(distinct), "*"]
+    defp select(nil, distinct, _query, _context), do: ["SELECT ", distinct(distinct), "*"]
 
-    defp select(%Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}, take: take}, distinct, query)
+    defp select(
+           %Ecto.Query.SelectExpr{expr: {:&, _meta, [binding]}, take: take},
+           distinct,
+           query,
+           context
+         )
          when is_integer(binding) do
-      ["SELECT ", distinct(distinct), source_fields(query, binding, Map.get(take, binding))]
+      [
+        "SELECT ",
+        distinct(distinct),
+        source_fields(query, binding, Map.get(take, binding), context)
+      ]
     end
 
-    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, query) do
-      ["SELECT ", distinct(distinct), select_expr(expr, query)]
+    defp select(%Ecto.Query.SelectExpr{expr: expr, fields: fields}, distinct, query, context)
+         when is_list(fields) and fields != [] do
+      if contains_full_source?(expr) do
+        expressions =
+          fields |> Enum.map(&select_value_expr(&1, query, context)) |> Enum.intersperse(", ")
+
+        ["SELECT ", distinct(distinct), expressions]
+      else
+        ["SELECT ", distinct(distinct), select_expr(expr, query, context)]
+      end
+    end
+
+    defp select(%Ecto.Query.SelectExpr{expr: expr}, distinct, query, context) do
+      ["SELECT ", distinct(distinct), select_expr(expr, query, context)]
     end
 
     defp distinct(nil), do: []
@@ -127,22 +157,46 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp distinct(%{expr: expression}), do: ["DISTINCT ON (", expr(expression), ") "]
 
-    defp source_fields(query, binding, nil),
-      do: schema_fields(binding_source(query, binding), binding)
+    defp source_fields(query, binding, nil, context),
+      do: schema_fields(binding_source(query, binding), binding, context)
 
-    defp source_fields(_query, binding, {_shape, fields}), do: selected_fields(binding, fields)
+    defp source_fields(_query, binding, {_shape, fields}, context),
+      do: selected_fields(binding, fields, context)
 
-    defp selected_fields(binding, fields) do
+    defp selected_fields(binding, fields, context) do
       fields
-      |> Enum.map(fn field -> ["q", to_string(binding), ".", quote_identifier(field)] end)
+      |> Enum.map(fn field -> [binding_alias(binding, context), ".", quote_identifier(field)] end)
       |> Enum.intersperse(", ")
     end
 
-    defp schema_fields(%{source: {_table, schema}}, binding) when is_atom(schema) do
+    defp schema_fields(%{source: {_table, schema}}, binding, context) when is_atom(schema) do
+      schema
+      |> schema_select_fields(binding, context)
+      |> Enum.intersperse(", ")
+    end
+
+    defp schema_fields(%{source: %Ecto.SubQuery{} = subquery}, binding, context) do
+      case subquery_select_fields(subquery) do
+        fields when is_list(fields) ->
+          fields
+          |> Enum.map(fn field ->
+            [binding_alias(binding, context), ".", quote_identifier(field)]
+          end)
+          |> Enum.intersperse(", ")
+
+        _other ->
+          unsupported!(:select, "full-source Ecto selects require a schema-backed source")
+      end
+    end
+
+    defp schema_fields(_from, _binding, _context),
+      do: unsupported!(:select, "full-source Ecto selects require a schema-backed source")
+
+    defp schema_select_fields(schema, binding, context) do
       schema.__schema__(:fields)
       |> Enum.map(fn field ->
         source = schema.__schema__(:field_source, field)
-        field = schema_field(schema, field, binding, source)
+        field = schema_field(schema, field, binding, source, context)
 
         if field.alias? do
           [field.expression, " AS ", quote_identifier(field.name)]
@@ -150,14 +204,22 @@ if Code.ensure_loaded?(Ecto.Query) do
           field.expression
         end
       end)
-      |> Enum.intersperse(", ")
     end
 
-    defp schema_fields(_from, _binding),
-      do: unsupported!(:select, "full-source Ecto selects require a schema-backed source")
+    defp subquery_select_fields(%Ecto.SubQuery{
+           select: {:source, {_table, _schema}, _select, fields}
+         })
+         when is_list(fields),
+         do: Keyword.keys(fields)
 
-    defp schema_field(schema, field, binding, source) do
-      expression = ["q", to_string(binding), ".", quote_identifier(source)]
+    defp subquery_select_fields(%Ecto.SubQuery{query: %{from: %{source: {_table, schema}}}})
+         when is_atom(schema) and not is_nil(schema),
+         do: schema.__schema__(:fields)
+
+    defp subquery_select_fields(_subquery), do: nil
+
+    defp schema_field(schema, field, binding, source, context) do
+      expression = [binding_alias(binding, context), ".", quote_identifier(source)]
 
       case schema.__schema__(:type, field) do
         :binary_id ->
@@ -172,51 +234,63 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
-    defp select_expr({:%{}, _meta, fields}, from) do
+    defp select_expr({:%{}, _meta, fields}, from, context) do
       fields
       |> Enum.map(fn
         {_alias_name, {:selected_as, _meta, [expression, name]}} ->
-          [select_value_expr(expression, from), " AS ", quote_identifier(name)]
+          [select_value_expr(expression, from, context), " AS ", quote_identifier(name)]
 
         {alias_name, expression} ->
-          [select_value_expr(expression, from), " AS ", quote_identifier(alias_name)]
+          [select_value_expr(expression, from, context), " AS ", quote_identifier(alias_name)]
       end)
       |> Enum.intersperse(", ")
     end
 
-    defp select_expr({:{}, _meta, fields}, from) do
-      fields |> Enum.map(&select_value_expr(&1, from)) |> Enum.intersperse(", ")
+    defp select_expr({:{}, _meta, fields}, from, context) do
+      fields |> Enum.map(&select_value_expr(&1, from, context)) |> Enum.intersperse(", ")
     end
 
-    defp select_expr(fields, from) when is_list(fields) do
-      fields |> Enum.map(&select_value_expr(&1, from)) |> Enum.intersperse(", ")
+    defp select_expr(fields, from, context) when is_list(fields) do
+      fields |> Enum.map(&select_value_expr(&1, from, context)) |> Enum.intersperse(", ")
     end
 
-    defp select_expr(expression, from), do: select_value_expr(expression, from)
+    defp select_expr(expression, from, context), do: select_value_expr(expression, from, context)
 
-    defp select_value_expr({:&, _meta, [binding]}, query) when is_integer(binding) do
-      source_fields(query, binding, nil)
+    defp select_value_expr({:%{}, meta, fields}, from, context) do
+      select_expr({:%{}, meta, fields}, from, context)
     end
 
-    defp select_value_expr({{:., _, [{:&, _, [binding]}, field]}, _, []} = expression, query)
+    defp select_value_expr({:{}, meta, fields}, from, context) do
+      select_expr({:{}, meta, fields}, from, context)
+    end
+
+    defp select_value_expr({:&, _meta, [binding]}, query, context) when is_integer(binding) do
+      source_fields(query, binding, nil, context)
+    end
+
+    defp select_value_expr(
+           {{:., _, [{:&, _, [binding]}, field]}, _, []} = expression,
+           query,
+           context
+         )
          when is_integer(binding) do
       case binding_source(query, binding) do
         %{source: {_table, schema}} when is_atom(schema) and not is_nil(schema) ->
           case schema_field_for_select(schema, field) do
             nil ->
-              expr(expression)
+              expr(expression, context)
 
             schema_field_name ->
               source = schema.__schema__(:field_source, schema_field_name)
-              schema_field(schema, schema_field_name, binding, source).expression
+              schema_field(schema, schema_field_name, binding, source, context).expression
           end
 
         _other ->
-          expr(expression)
+          expr(expression, context)
       end
     end
 
-    defp select_value_expr(expression, _from), do: expr(expression)
+    defp select_value_expr(expression, _from, context), do: expr(expression, context)
 
     defp schema_field_for_select(schema, field) do
       Enum.find(schema.__schema__(:fields), fn schema_field ->
@@ -230,29 +304,107 @@ if Code.ensure_loaded?(Ecto.Query) do
       Enum.at(joins, binding - 1)
     end
 
-    defp source(%{source: {table, nil}}, index) when is_binary(table) do
-      [source_name(table), " AS q", to_string(index)]
+    defp source(from, index), do: source(from, index, root_context(%Ecto.Query{}))
+
+    defp source(%{source: {table, nil}}, index, context) when is_binary(table) do
+      [source_name(table), " AS ", binding_alias(index, context)]
     end
 
-    defp source(%{source: {table, schema}}, index)
+    defp source(%{source: {table, schema}}, index, context)
          when is_binary(table) and is_atom(schema) do
-      [source_name(table), " AS q", to_string(index)]
+      [source_name(table), " AS ", binding_alias(index, context)]
     end
 
-    defp source(%{source: %Ecto.SubQuery{query: query}}, index) do
-      ["(", all(query), ") AS q", to_string(index)]
+    defp source(%{source: %Ecto.SubQuery{query: query}}, index, context) do
+      subquery_context = subquery_context(query, context, index)
+      ["(", all(query, subquery_context), ") AS ", binding_alias(index, context)]
     end
 
-    defp source(%{source: {:fragment, _meta, parts}}, index) do
-      [fragment(parts), " AS q", to_string(index)]
+    defp source(%{source: {:fragment, _meta, parts}}, index, context) do
+      [fragment(parts, context), " AS ", binding_alias(index, context)]
     end
 
-    defp source(_from, _index) do
+    defp source(_from, _index, _context) do
       unsupported!(
         :source,
         "only table, source helper, fragment, and subquery sources are supported in Ecto queries"
       )
     end
+
+    defp root_context(%Ecto.Query{} = query) do
+      %{
+        prefix: "",
+        aliases: query.aliases || %{},
+        parent: nil,
+        subqueries: [],
+        literal_tagged?: false
+      }
+    end
+
+    defp subquery_context(%Ecto.Query{} = query, parent, index) do
+      prefix = if contains_parent_as?(query), do: ["s", to_string(index), "_"], else: ""
+
+      %{
+        prefix: prefix,
+        aliases: query.aliases || %{},
+        parent: parent,
+        subqueries: [],
+        literal_tagged?: parent.literal_tagged?
+      }
+    end
+
+    defp context_with_subqueries(context, %{subqueries: subqueries}) when is_list(subqueries),
+      do: %{context | subqueries: subqueries}
+
+    defp context_with_subqueries(context, _expr), do: context
+
+    defp binding_alias(binding, context), do: [context.prefix, "q", to_string(binding)]
+
+    defp parent_binding_alias(alias, %{parent: nil}) do
+      unsupported!(:expression, "unknown Ecto parent_as binding: #{inspect(alias)}")
+    end
+
+    defp parent_binding_alias(alias, %{parent: parent}) do
+      case Map.fetch(parent.aliases, alias) do
+        {:ok, binding} when is_integer(binding) ->
+          binding_alias(binding, parent)
+
+        :error ->
+          parent_binding_alias(alias, parent)
+      end
+    end
+
+    defp contains_full_source?({:&, _meta, [binding]}) when is_integer(binding), do: true
+
+    defp contains_full_source?(
+           {{:., _meta, [{:&, _binding_meta, [_binding]}, _field]}, _call_meta, []}
+         ),
+         do: false
+
+    defp contains_full_source?(tuple) when is_tuple(tuple),
+      do: tuple |> Tuple.to_list() |> contains_full_source?()
+
+    defp contains_full_source?(list) when is_list(list),
+      do: Enum.any?(list, &contains_full_source?/1)
+
+    defp contains_full_source?(_other), do: false
+
+    defp contains_parent_as?({:parent_as, _meta, [_alias]}), do: true
+
+    defp contains_parent_as?(tuple) when is_tuple(tuple) do
+      tuple |> Tuple.to_list() |> contains_parent_as?()
+    end
+
+    defp contains_parent_as?(list) when is_list(list), do: Enum.any?(list, &contains_parent_as?/1)
+
+    defp contains_parent_as?(%_struct{} = struct) do
+      struct |> Map.from_struct() |> contains_parent_as?()
+    end
+
+    defp contains_parent_as?(map) when is_map(map),
+      do: map |> Map.values() |> contains_parent_as?()
+
+    defp contains_parent_as?(_other), do: false
 
     defp source_name(table) do
       if QuackDB.Source.source?(table) do
@@ -286,11 +438,20 @@ if Code.ensure_loaded?(Ecto.Query) do
       ]
     end
 
-    defp joins(joins) do
+    defp joins(joins), do: joins(joins, root_context(%Ecto.Query{}))
+
+    defp joins(joins, context) do
       joins
       |> Enum.with_index(1)
       |> Enum.map(fn {join, index} ->
-        [" ", join_qualifier(join.qual), " ", source(join, index), " ON ", expr(join.on.expr)]
+        [
+          " ",
+          join_qualifier(join.qual),
+          " ",
+          source(join, index, context),
+          " ON ",
+          expr(join.on.expr, context)
+        ]
       end)
     end
 
@@ -299,6 +460,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp join_qualifier(:right), do: "RIGHT OUTER JOIN"
     defp join_qualifier(:full), do: "FULL OUTER JOIN"
     defp join_qualifier(:cross), do: "CROSS JOIN"
+    defp join_qualifier(:inner_lateral), do: "INNER JOIN LATERAL"
+    defp join_qualifier(:left_lateral), do: "LEFT OUTER JOIN LATERAL"
 
     defp join_qualifier(qualifier) do
       unsupported!(:join, "unsupported Ecto join qualifier: #{inspect(qualifier)}")
@@ -385,77 +548,93 @@ if Code.ensure_loaded?(Ecto.Query) do
       ]
     end
 
-    defp wheres([]), do: []
+    defp wheres(wheres), do: wheres(wheres, root_context(%Ecto.Query{}))
+    defp wheres([], _context), do: []
 
-    defp wheres(wheres) do
-      expressions = Enum.map(wheres, fn %{expr: expression} -> expr(expression) end)
+    defp wheres(wheres, context) do
+      expressions =
+        Enum.map(wheres, fn %{expr: expression} = where ->
+          expr(expression, context_with_subqueries(context, where))
+        end)
+
       [" WHERE ", Enum.intersperse(expressions, " AND ")]
     end
 
-    defp group_bys([]), do: []
+    defp group_bys(group_bys), do: group_bys(group_bys, root_context(%Ecto.Query{}))
+    defp group_bys([], _context), do: []
 
-    defp group_bys(group_bys) do
+    defp group_bys(group_bys, context) do
       expressions =
         group_bys
         |> Enum.flat_map(& &1.expr)
-        |> Enum.map(&expr/1)
+        |> Enum.map(&expr(&1, context))
 
       [" GROUP BY ", Enum.intersperse(expressions, ", ")]
     end
 
-    defp havings([]), do: []
+    defp havings(havings), do: havings(havings, root_context(%Ecto.Query{}))
+    defp havings([], _context), do: []
 
-    defp havings(havings) do
-      expressions = Enum.map(havings, fn %{expr: expression} -> expr(expression) end)
+    defp havings(havings, context) do
+      expressions =
+        Enum.map(havings, fn %{expr: expression} = having ->
+          expr(expression, context_with_subqueries(context, having))
+        end)
+
       [" HAVING ", Enum.intersperse(expressions, " AND ")]
     end
 
-    defp windows([]), do: []
+    defp windows([], _context), do: []
 
-    defp windows(windows) do
+    defp windows(windows, context) do
       definitions =
         Enum.map(windows, fn {name, window} ->
-          [quote_identifier(name), " AS (", window_expr(window.expr), ")"]
+          [quote_identifier(name), " AS (", window_expr(window.expr, context), ")"]
         end)
 
       [" WINDOW ", Enum.intersperse(definitions, ", ")]
     end
 
-    defp window_expr(parts) do
+    defp window_expr(parts), do: window_expr(parts, root_context(%Ecto.Query{}))
+
+    defp window_expr(parts, context) do
       parts
       |> Enum.map(fn
         {:partition_by, expressions} ->
-          ["PARTITION BY ", expressions |> Enum.map(&expr/1) |> Enum.intersperse(", ")]
+          ["PARTITION BY ", expressions |> Enum.map(&expr(&1, context)) |> Enum.intersperse(", ")]
 
         {:order_by, expressions} ->
-          ["ORDER BY ", order_by_exprs(expressions)]
+          ["ORDER BY ", order_by_exprs(expressions, context)]
 
         {:frame, expression} ->
-          expr(expression)
+          expr(expression, context)
       end)
       |> Enum.intersperse(" ")
     end
 
-    defp order_bys([]), do: []
+    defp order_bys(order_bys), do: order_bys(order_bys, root_context(%Ecto.Query{}))
+    defp order_bys([], _context), do: []
 
-    defp order_bys(order_bys) do
-      expressions = order_bys |> Enum.flat_map(& &1.expr) |> order_by_exprs()
+    defp order_bys(order_bys, context) do
+      expressions = order_bys |> Enum.flat_map(& &1.expr) |> order_by_exprs(context)
       [" ORDER BY ", expressions]
     end
 
-    defp order_by_exprs(expressions) do
+    defp order_by_exprs(expressions, context) do
       expressions
       |> Enum.map(fn {direction, expression} ->
-        [expr(expression), " ", order_direction(direction)]
+        [expr(expression, context), " ", order_direction(direction)]
       end)
       |> Enum.intersperse(", ")
     end
 
-    defp limit(nil), do: []
-    defp limit(%{expr: expression}), do: [" LIMIT ", expr(expression)]
+    defp limit(limit), do: limit(limit, root_context(%Ecto.Query{}))
+    defp limit(nil, _context), do: []
+    defp limit(%{expr: expression}, context), do: [" LIMIT ", expr(expression, context)]
 
-    defp offset(nil), do: []
-    defp offset(%{expr: expression}), do: [" OFFSET ", expr(expression)]
+    defp offset(offset), do: offset(offset, root_context(%Ecto.Query{}))
+    defp offset(nil, _context), do: []
+    defp offset(%{expr: expression}, context), do: [" OFFSET ", expr(expression, context)]
 
     defp combinations([]), do: []
 
@@ -474,6 +653,60 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp lock(nil), do: []
     defp lock(lock) when is_binary(lock), do: [" ", lock]
+
+    defp expr({{:., _meta, [{:&, _binding_meta, [binding]}, field]}, _call_meta, []}, context)
+         when is_integer(binding) and is_atom(field) do
+      [binding_alias(binding, context), ".", quote_identifier(field)]
+    end
+
+    defp expr(
+           {{:., _meta, [{:parent_as, _parent_meta, [alias]}, field]}, _call_meta, []},
+           context
+         )
+         when is_atom(alias) and is_atom(field) do
+      [parent_binding_alias(alias, context), ".", quote_identifier(field)]
+    end
+
+    defp expr({op, _meta, [left, right]}, context) when op in [:==, :!=, :>, :<, :>=, :<=] do
+      ["(", expr(left, context), " ", operator(op), " ", expr(right, context), ")"]
+    end
+
+    defp expr({op, _meta, [left, right]}, context) when op in [:and, :or] do
+      [
+        "(",
+        expr(left, context),
+        " ",
+        op |> Atom.to_string() |> String.upcase(),
+        " ",
+        expr(right, context),
+        ")"
+      ]
+    end
+
+    defp expr({:not, _meta, [{:is_nil, _is_nil_meta, [expression]}]}, context) do
+      ["(", expr(expression, context), " IS NOT NULL)"]
+    end
+
+    defp expr({:not, _meta, [expression]}, context), do: ["(NOT ", expr(expression, context), ")"]
+
+    defp expr({:is_nil, _meta, [expression]}, context),
+      do: ["(", expr(expression, context), " IS NULL)"]
+
+    defp expr({:fragment, _meta, parts}, context), do: fragment(parts, context)
+    defp expr({:in, _meta, [left, right]}, context), do: in_expr(left, right, context)
+    defp expr({:subquery, index}, context), do: subquery_expr(index, context)
+
+    defp expr({:type, _meta, [expression, type]}, context) do
+      ["CAST(", expr(expression, context), " AS ", ecto_cast_type!(type), ")"]
+    end
+
+    defp expr({:^, _meta, [_index]}, _context), do: "?"
+    defp expr({:^, _meta, [_index, _count]}, _context), do: "?"
+
+    defp expr(%Ecto.Query.Tagged{value: value, type: type}, context),
+      do: typed_expr(value, type, context)
+
+    defp expr(other, _context), do: expr(other)
 
     defp expr({{:., _meta, [{:&, _binding_meta, [binding]}, field]}, _call_meta, []})
          when is_integer(binding) and is_atom(field) do
@@ -590,7 +823,10 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp expr({:identifier, _meta, [value]}) when is_binary(value), do: quote_identifier(value)
     defp expr({:^, _meta, [_index]}), do: "?"
     defp expr({:^, _meta, [_index, _count]}), do: "?"
-    defp expr(%Ecto.Query.Tagged{value: value, type: type}), do: typed_expr(value, type)
+
+    defp expr(%Ecto.Query.Tagged{value: value, type: type}),
+      do: typed_expr(value, type, root_context(%Ecto.Query{}))
+
     defp expr(value) when is_binary(value), do: literal(value)
     defp expr(value) when is_integer(value) or is_float(value), do: to_string(value)
     defp expr(value) when is_boolean(value), do: if(value, do: "TRUE", else: "FALSE")
@@ -603,10 +839,12 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp over_expr(window) when is_atom(window), do: quote_identifier(window)
     defp over_expr(window) when is_list(window), do: ["(", window_expr(window), ")"]
 
-    defp fragment(parts) do
+    defp fragment(parts), do: fragment(parts, root_context(%Ecto.Query{}))
+
+    defp fragment(parts, context) do
       Enum.map(parts, fn
         {:raw, value} -> value
-        {:expr, expression} -> expr(expression)
+        {:expr, expression} -> expr(expression, context)
       end)
     end
 
@@ -634,28 +872,70 @@ if Code.ensure_loaded?(Ecto.Query) do
       unsupported!(:expression, "unsupported JSON path segment: #{inspect(segment)}")
     end
 
-    defp in_expr(left, %Ecto.Query.Tagged{value: values}) when is_list(values),
-      do: in_expr(left, values)
+    defp in_expr(left, expression), do: in_expr(left, expression, root_context(%Ecto.Query{}))
 
-    defp in_expr(left, {:^, _meta, [_index, count]}) when is_integer(count) and count > 0 do
+    defp in_expr(left, %Ecto.Query.Tagged{value: values}, context) when is_list(values),
+      do: in_expr(left, values, context)
+
+    defp in_expr(left, {:^, _meta, [_index, count]}, context)
+         when is_integer(count) and count > 0 do
       [
         "(",
-        expr(left),
+        expr(left, context),
         " IN (",
         1..count |> Enum.map(fn _ -> "?" end) |> Enum.intersperse(", "),
         "))"
       ]
     end
 
-    defp in_expr(left, values) when is_list(values) do
-      ["(", expr(left), " IN (", values |> Enum.map(&expr/1) |> Enum.intersperse(", "), "))"]
+    defp in_expr(left, values, context) when is_list(values) do
+      [
+        "(",
+        expr(left, context),
+        " IN (",
+        values |> Enum.map(&expr(&1, context)) |> Enum.intersperse(", "),
+        "))"
+      ]
     end
 
-    defp in_expr(left, expression), do: ["(", expr(left), " IN ", expr(expression), ")"]
+    defp in_expr(left, expression, context),
+      do: ["(", expr(left, context), " IN ", expr(expression, context), ")"]
 
-    defp typed_expr(value, {_source_index, _field}), do: expr(value)
-    defp typed_expr({:^, _meta, [_index]}, type), do: ["CAST(? AS ", ecto_cast_type!(type), ")"]
-    defp typed_expr(value, type), do: ["CAST(", expr(value), " AS ", ecto_cast_type!(type), ")"]
+    defp subquery_expr(index, %{subqueries: subqueries} = context) when is_integer(index) do
+      case Enum.at(subqueries, index) do
+        %Ecto.SubQuery{query: %Ecto.Query{} = query} ->
+          ["(", all(query, subquery_context(query, context, index)), ")"]
+
+        _other ->
+          unsupported!(:expression, "unknown Ecto subquery reference: #{inspect(index)}")
+      end
+    end
+
+    defp typed_expr(value, {source_index, field}, %{literal_tagged?: true})
+         when is_integer(source_index) and is_atom(field),
+         do: literal(value)
+
+    defp typed_expr(_value, {source_index, field}, _context)
+         when is_integer(source_index) and is_atom(field),
+         do: "?"
+
+    defp typed_expr(
+           {{:., _meta, [{:&, _binding_meta, [_binding]}, _field]}, _call_meta, []} = value,
+           type,
+           context
+         ),
+         do: ["CAST(", expr(value, context), " AS ", ecto_cast_type!(type), ")"]
+
+    defp typed_expr({:^, _meta, [_index]} = value, type, context),
+      do: ["CAST(", expr(value, context), " AS ", ecto_cast_type!(type), ")"]
+
+    defp typed_expr({:^, _meta, [_index, _count]} = value, type, context),
+      do: ["CAST(", expr(value, context), " AS ", ecto_cast_type!(type), ")"]
+
+    defp typed_expr(value, type, context) when is_tuple(value),
+      do: ["CAST(", expr(value, context), " AS ", ecto_cast_type!(type), ")"]
+
+    defp typed_expr(_value, type, _context), do: ["CAST(? AS ", ecto_cast_type!(type), ")"]
 
     defp literal(value) when is_binary(value), do: ["'", String.replace(value, "'", "''"), "'"]
     defp literal(%Date{} = value), do: ["DATE '", Date.to_iso8601(value), "'"]

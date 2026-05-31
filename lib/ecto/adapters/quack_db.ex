@@ -29,6 +29,15 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     def autogenerate(:embed_id), do: Ecto.UUID.generate()
     def autogenerate(:binary_id), do: Ecto.UUID.bingenerate()
 
+    def loaders({:map, _}, type), do: [&json_decode/1, &Ecto.Type.embedded_load(type, &1, :json)]
+    def loaders(:map, type), do: [&json_decode/1, type]
+    def loaders(:binary_id, type), do: [Ecto.UUID, type]
+    def loaders(_, type), do: [type]
+
+    def dumpers({:map, _}, type), do: [&Ecto.Type.embedded_dump(type, &1, :json)]
+    def dumpers(:binary_id, type), do: [type, Ecto.UUID]
+    def dumpers(_, type), do: [type]
+
     @impl Ecto.Adapter.Schema
     def insert_all(
           adapter_meta,
@@ -168,6 +177,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
         :error -> options
       end
     end
+
+    defp json_decode(value) when is_binary(value), do: Jason.decode(value)
+    defp json_decode(value), do: {:ok, value}
 
     defp unsupported!(feature, message) do
       raise QuackDB.Error.new(:ecto_feature_not_supported, message,

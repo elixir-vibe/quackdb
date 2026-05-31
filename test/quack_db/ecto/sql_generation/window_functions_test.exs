@@ -39,7 +39,7 @@ defmodule QuackDB.Ecto.SQLGeneration.WindowFunctionsTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT q0."id" AS "id", q0."rank" AS "rank" FROM (SELECT q0."id" AS "id", q0."category_id" AS "category_id", ROW_NUMBER() OVER "by_category" AS "rank" FROM "events" AS q0 WINDOW "by_category" AS (PARTITION BY q0."category_id" ORDER BY q0."score" DESC)) AS q0 WHERE (q0."rank" <= 3) ORDER BY q0."category_id" ASC, q0."rank" ASC]
+             ~S[SELECT q0."id" AS "id", q0."rank" AS "rank" FROM (SELECT q0."id" AS "id", q0."category_id" AS "category_id", ROW_NUMBER() OVER "by_category" AS "rank" FROM "events" AS q0 WINDOW "by_category" AS (PARTITION BY q0."category_id" ORDER BY q0."score" DESC)) AS q0 WHERE (q0."rank" <= ?) ORDER BY q0."category_id" ASC, q0."rank" ASC]
   end
 
   test "generates value window functions" do

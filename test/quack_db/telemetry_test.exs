@@ -41,7 +41,7 @@ defmodule QuackDB.TelemetryTest do
              )
 
     assert_received {:telemetry, [:quackdb, :query, :start], %{system_time: _}, metadata}
-    assert metadata.query == "SELECT 1"
+    assert metadata.query == "SELECT ?"
     assert metadata.params == [1]
     assert metadata.options == [request_id: "req-1"]
     assert metadata.connection_id == "conn-1"

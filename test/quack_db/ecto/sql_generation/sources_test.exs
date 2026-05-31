@@ -12,7 +12,7 @@ defmodule QuackDB.Ecto.SQLGeneration.SourcesTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT q0."id" AS "id", q0."name" AS "name" FROM read_csv('events.csv', header = TRUE) AS q0 WHERE (q0."id" > 1)]
+             ~S[SELECT q0."id" AS "id", q0."name" AS "name" FROM read_csv('events.csv', header = TRUE) AS q0 WHERE (q0."id" > ?)]
   end
 
   test "generates Ecto SQL from source fragments" do
@@ -23,7 +23,7 @@ defmodule QuackDB.Ecto.SQLGeneration.SourcesTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT q0."id" AS "id" FROM read_csv(?) AS q0 WHERE (q0."id" > 1)]
+             ~S[SELECT q0."id" AS "id" FROM read_csv(?) AS q0 WHERE (q0."id" > ?)]
   end
 
   test "generates Ecto SQL from subquery sources" do
@@ -31,6 +31,6 @@ defmodule QuackDB.Ecto.SQLGeneration.SourcesTest do
     query = from(event in subquery(inner_query), select: %{id: event.id})
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT q0."id" AS "id" FROM (SELECT q0."id" AS "id" FROM "events" AS q0 WHERE (q0."id" > 1)) AS q0]
+             ~S[SELECT q0."id" AS "id" FROM (SELECT q0."id" AS "id" FROM "events" AS q0 WHERE (q0."id" > ?)) AS q0]
   end
 end

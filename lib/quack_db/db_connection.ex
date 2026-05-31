@@ -208,18 +208,18 @@ defmodule QuackDB.DBConnection do
 
   defp declare_query(%Query{} = query, params, options, state) do
     with {:ok, statement} <- QuackDB.SQL.format(query.statement, params) do
-      do_declare_query(%{query | statement: statement}, options, state)
+      do_declare_query(query, statement, options, state)
     else
       {:error, error} -> {:error, error, state}
     end
   end
 
-  defp do_declare_query(%Query{} = query, options, state) do
+  defp do_declare_query(%Query{} = query, statement, options, state) do
     {query_id, state} = next_query_id(state)
     options = Keyword.put(options, :client_query_id, query_id)
 
     request =
-      %PrepareRequest{sql_query: query.statement}
+      %PrepareRequest{sql_query: statement}
       |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
 
     with {:ok, response} <- state.transport.(state.uri, request, options),
@@ -470,13 +470,13 @@ defmodule QuackDB.DBConnection do
 
   defp execute_statement(%Query{} = query, params, options, state) do
     with {:ok, statement} <- QuackDB.SQL.format(query.statement, params) do
-      do_execute_statement(%{query | statement: statement}, params, options, state)
+      do_execute_statement(query, statement, params, options, state)
     else
       {:error, error} -> {:error, error, state}
     end
   end
 
-  defp do_execute_statement(%Query{} = query, params, options, state) do
+  defp do_execute_statement(%Query{} = query, statement, params, options, state) do
     {query_id, state} = next_query_id(state)
     options = Keyword.put(options, :client_query_id, query_id)
 
@@ -486,7 +486,7 @@ defmodule QuackDB.DBConnection do
       query_metadata(query, params, options, state),
       fn ->
         request =
-          %PrepareRequest{sql_query: query.statement}
+          %PrepareRequest{sql_query: statement}
           |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
 
         result =

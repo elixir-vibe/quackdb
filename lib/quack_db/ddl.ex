@@ -100,7 +100,7 @@ defmodule QuackDB.DDL do
 
   defp table_query(%{__struct__: Ecto.Query} = query) do
     assert_unparameterized_query!(query)
-    apply(Ecto.Adapters.QuackDB.Query, :all, [query])
+    apply(Ecto.Adapters.QuackDB.Query, :all_literal, [query])
   end
 
   defp table_query(query), do: query
