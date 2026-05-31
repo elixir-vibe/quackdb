@@ -606,10 +606,15 @@ defmodule QuackDB.Protocol.Vector do
 
   defp decode_fixed_values(binary, type, physical_type, remaining, validity, values) do
     index = length(values)
+    size = LogicalType.fixed_size(physical_type)
 
-    with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
-      value = if valid?(validity, index), do: value, else: nil
-      decode_fixed_values(rest, type, physical_type, remaining - 1, validity, [value | values])
+    if valid?(validity, index) do
+      with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
+        decode_fixed_values(rest, type, physical_type, remaining - 1, validity, [value | values])
+      end
+    else
+      <<_ignored::binary-size(size), rest::binary>> = binary
+      decode_fixed_values(rest, type, physical_type, remaining - 1, validity, [nil | values])
     end
   end
 

@@ -79,6 +79,21 @@ defmodule QuackDB.Integration.TypeMatrixTest do
            ]
   end
 
+  test "decodes nullable floating point vectors with non-decodable null payloads" do
+    rows =
+      query_rows!("""
+      SELECT CASE WHEN i % 10 = 0 THEN NULL::DOUBLE ELSE i * 1.25 END AS nullable_amount
+      FROM range(0, 1000) AS t(i)
+      ORDER BY i
+      """)
+
+    assert Enum.count(rows) == 1000
+    assert Enum.at(rows, 0) == [nil]
+    assert Enum.at(rows, 1) == [1.25]
+    assert Enum.at(rows, 10) == [nil]
+    assert Enum.at(rows, 999) == [1248.75]
+  end
+
   test "decodes temporal values" do
     assert [row] =
              query_rows!("""

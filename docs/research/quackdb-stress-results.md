@@ -138,12 +138,11 @@ Findings:
 1. Large row materialization remains the clearest bottleneck. Streaming should be promoted in docs and examples for large result sets.
 2. Wide/nested result decoding is much slower than narrow scalar decoding. This points at protocol vector decode and nested value materialization as optimization targets.
 3. Larger `quack_fetch_batch_chunks` values can make streaming slower. This was counterintuitive and should be validated on larger row counts and remote networks before changing defaults.
-4. `CASE WHEN id % 10 = 0 THEN NULL::DOUBLE ELSE amount END` in the wide/nested stress query triggered `expected a 64-bit float` during decode. The stress query now avoids that expression, but the decode path should get a focused regression test.
+4. `CASE WHEN id % 10 = 0 THEN NULL::DOUBLE ELSE amount END` in the wide/nested stress query triggered `expected a 64-bit float` during decode. This was fixed by skipping physical payload decoding for invalid fixed-width vector slots; DuckDB can store non-decodable sentinel bytes in null `DOUBLE` slots.
 5. The benchmark still reports client-observed time only. We need server-side profiling (`EXPLAIN ANALYZE` or DuckDB profiling output) to split DuckDB execution from Quack transport/protocol/client materialization.
 
 ## Next actions
 
-- Add focused protocol coverage for nullable `DOUBLE` vectors produced by `CASE` expressions.
 - Add a profiling mode to `bench/stress.exs` that runs `EXPLAIN ANALYZE` for read scenarios and stores the plan text next to client timings.
 - Add larger analytical/file-backed sweeps before changing `threads` defaults.
 - Add payload-shape sweeps for append defaults: narrow scalar, wide scalar, nested, strings, blobs, and null-heavy batches.

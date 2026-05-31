@@ -209,6 +209,7 @@ defmodule QuackDB.Stress do
       samples,
       json_object('id', id, 'category', category, 'payload', payload) AS attrs_json,
       [category, category + 1, category + 2, category + 3] AS category_window,
+      CASE WHEN id % 10 = 0 THEN NULL::DOUBLE ELSE amount END AS nullable_amount,
       id % 2 = 0 AS even
     FROM #{@table}
     ORDER BY id
