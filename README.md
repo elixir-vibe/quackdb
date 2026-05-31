@@ -133,7 +133,7 @@ result.rows
 #=> [["duck", 42]]
 ```
 
-Use `QuackDB.stream/4` for large result sets, or `QuackDB.columns/4` when a column-oriented shape is more convenient for analytics tooling.
+Use `QuackDB.rows/4` or `QuackDB.maps/4` to stream large row-shaped results. Use `QuackDB.columnar_batches/4` or `QuackDB.column_batches/4` when analytics code can work with column-oriented batches without materializing the full result set.
 
 ## DuckDB workflows as Ecto queries
 

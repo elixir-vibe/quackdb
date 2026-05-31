@@ -108,5 +108,5 @@ Unsupported parameter values raise explicit errors rather than being formatted l
 ## Notes
 
 - Unsupported types should fail explicitly rather than silently returning lossy values.
-- Result decoding is row-friendly today, but the protocol modules keep room for future columnar or Arrow-facing APIs.
+- Result decoding supports row-shaped results and columnar fetch batches. Arrow IPC / zero-copy handoff remains future work.
 - Type behavior is validated with gated real DuckDB Quack integration tests where DuckDB currently exposes the type through the Quack extension.
