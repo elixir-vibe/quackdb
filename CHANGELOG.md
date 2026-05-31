@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.4.2 - 2026-05-31
+
 ### Added
 
 - Added `QuackDB.SQL.explain/2` for building `EXPLAIN` and `EXPLAIN ANALYZE` statements.
