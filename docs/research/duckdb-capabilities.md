@@ -35,7 +35,7 @@ QuackDB opportunity:
 
 - Add documentation examples for remote Parquet queries over Quack.
 - Add a small `QuackDB.Source.parquet/2` SQL-fragment builder that safely formats path/list/options rather than asking users to hand-build complex nested DuckDB option syntax.
-- Keep row streaming stable, but leave room for a future columnar/Arrow path because Parquet workloads can be large and column-oriented.
+- Keep row streaming stable and continue improving columnar batches; leave room for a future Arrow handoff because Parquet workloads can be large and column-oriented.
 
 ### CSV, including hostile/faulty CSVs
 
