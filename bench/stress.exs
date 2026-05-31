@@ -49,7 +49,9 @@ defmodule QuackDB.Stress do
       threads: env_int("QUACKDB_STRESS_THREADS", System.schedulers_online()),
       fetch_batch_chunks: env_int("QUACKDB_STRESS_FETCH_BATCH_CHUNKS", 12),
       timeout: env_int("QUACKDB_STRESS_TIMEOUT", 120_000),
-      scenarios: env_list("QUACKDB_STRESS_SCENARIOS")
+      scenarios: env_list("QUACKDB_STRESS_SCENARIOS"),
+      profile?: env_bool("QUACKDB_STRESS_PROFILE", false),
+      profile_dir: env("QUACKDB_STRESS_PROFILE_DIR") || "tmp/stress-profiles"
     }
   end
 
@@ -127,74 +129,111 @@ defmodule QuackDB.Stress do
   end
 
   defp materialized_result(connection, config) do
-    measure("materialized_result", config, fn ->
-      QuackDB.query!(
-        connection,
-        "SELECT id, category, amount, payload FROM #{@table} ORDER BY id",
-        [],
-        timeout: config.timeout
-      ).rows
-      |> length()
-    end)
+    sql = narrow_result_sql()
+
+    measure(
+      "materialized_result",
+      config,
+      profile_sql(connection, config, "materialized_result", sql),
+      fn ->
+        QuackDB.query!(connection, sql, [], timeout: config.timeout).rows
+        |> length()
+      end
+    )
   end
 
   defp streamed_rows(connection, config) do
-    measure("streamed_rows", config, fn ->
+    sql = narrow_result_sql()
+
+    measure("streamed_rows", config, profile_sql(connection, config, "streamed_rows", sql), fn ->
       {:ok, count} =
-        DBConnection.transaction(connection, fn tx ->
-          tx
-          |> QuackDB.rows(
-            "SELECT id, category, amount, payload FROM #{@table} ORDER BY id",
-            [],
-            max_rows: config.fetch_rows,
-            timeout: config.timeout
-          )
-          |> Enum.reduce(0, fn _row, count -> count + 1 end)
-        end)
+        DBConnection.transaction(
+          connection,
+          fn tx ->
+            tx
+            |> QuackDB.rows(sql, [],
+              max_rows: config.fetch_rows,
+              timeout: config.timeout
+            )
+            |> Enum.reduce(0, fn _row, count -> count + 1 end)
+          end,
+          timeout: config.timeout
+        )
 
       count
     end)
   end
 
   defp columnar_batches(connection, config) do
-    measure("columnar_batches", config, fn ->
-      {:ok, count} =
-        DBConnection.transaction(connection, fn tx ->
-          tx
-          |> QuackDB.columnar_batches(
-            "SELECT id, category, amount, payload FROM #{@table} ORDER BY id",
-            [],
-            max_rows: config.fetch_rows,
+    sql = narrow_result_sql()
+
+    measure(
+      "columnar_batches",
+      config,
+      profile_sql(connection, config, "columnar_batches", sql),
+      fn ->
+        {:ok, count} =
+          DBConnection.transaction(
+            connection,
+            fn tx ->
+              tx
+              |> QuackDB.columnar_batches(sql, [],
+                max_rows: config.fetch_rows,
+                timeout: config.timeout
+              )
+              |> Enum.reduce(0, fn batch, count -> count + batch.num_rows end)
+            end,
             timeout: config.timeout
           )
-          |> Enum.reduce(0, fn batch, count -> count + batch.num_rows end)
-        end)
 
-      count
-    end)
+        count
+      end
+    )
+  end
+
+  defp narrow_result_sql do
+    "SELECT id, category, amount, payload FROM #{@table} ORDER BY id"
   end
 
   defp wide_nested_materialized(connection, config) do
-    measure("wide_nested_materialized", config, fn ->
-      QuackDB.query!(connection, wide_nested_sql(), [], timeout: config.timeout).rows
-      |> length()
-    end)
+    sql = wide_nested_sql()
+
+    measure(
+      "wide_nested_materialized",
+      config,
+      profile_sql(connection, config, "wide_nested_materialized", sql),
+      fn ->
+        QuackDB.query!(connection, sql, [], timeout: config.timeout).rows
+        |> length()
+      end
+    )
   end
 
   defp wide_nested_columnar_batches(connection, config) do
-    measure("wide_nested_columnar_batches", config, fn ->
-      {:ok, count} =
-        DBConnection.transaction(connection, fn tx ->
-          tx
-          |> QuackDB.columnar_batches(wide_nested_sql(), [],
-            max_rows: config.fetch_rows,
+    sql = wide_nested_sql()
+
+    measure(
+      "wide_nested_columnar_batches",
+      config,
+      profile_sql(connection, config, "wide_nested_columnar_batches", sql),
+      fn ->
+        {:ok, count} =
+          DBConnection.transaction(
+            connection,
+            fn tx ->
+              tx
+              |> QuackDB.columnar_batches(sql, [],
+                max_rows: config.fetch_rows,
+                timeout: config.timeout
+              )
+              |> Enum.reduce(0, fn batch, count -> count + batch.num_rows end)
+            end,
             timeout: config.timeout
           )
-          |> Enum.reduce(0, fn batch, count -> count + batch.num_rows end)
-        end)
 
-      count
-    end)
+        count
+      end
+    )
   end
 
   defp wide_nested_sql do
@@ -301,7 +340,7 @@ defmodule QuackDB.Stress do
     end
   end
 
-  defp measure(name, config, fun) do
+  defp measure(name, config, extra_metrics \\ %{}, fun) do
     if skip?(config, name) do
       skipped(name)
     else
@@ -319,9 +358,56 @@ defmodule QuackDB.Stress do
         rate,
         memory_before,
         memory_after,
-        rss_stats(rss_before, rss_after)
+        rss_stats(rss_before, rss_after) |> Map.merge(extra_metrics)
       )
     end
+  end
+
+  defp profile_sql(_connection, %{profile?: false}, _name, _sql), do: %{}
+
+  defp profile_sql(connection, %{profile?: true} = config, name, sql) do
+    File.mkdir_p!(config.profile_dir)
+
+    {elapsed, result} =
+      timed(fn ->
+        QuackDB.query!(connection, ["EXPLAIN ANALYZE ", sql], [], timeout: config.timeout)
+      end)
+
+    text = explain_text(result)
+    path = Path.join(config.profile_dir, "#{safe_name(name)}.txt")
+    File.write!(path, text)
+
+    metrics = %{
+      profile_elapsed_ms: elapsed / 1_000,
+      profile_path: path
+    }
+
+    case total_time_ms(text) do
+      nil -> metrics
+      total_ms -> Map.put(metrics, :duckdb_total_ms, total_ms)
+    end
+  end
+
+  defp explain_text(%QuackDB.Result{columns: columns, rows: rows}) do
+    rows
+    |> Enum.map(fn row ->
+      columns
+      |> Enum.zip(row)
+      |> Enum.map_join("\t", fn {_column, value} -> to_string(value) end)
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp total_time_ms(text) do
+    case Regex.run(~r/Total Time:\s*([0-9.]+)\s*(s|ms)/, text) do
+      [_match, value, "s"] -> String.to_float(value) * 1_000
+      [_match, value, "ms"] -> String.to_float(value)
+      _other -> nil
+    end
+  end
+
+  defp safe_name(name) do
+    String.replace(name, ~r/[^A-Za-z0-9_.-]/, "_")
   end
 
   defp timed(fun) do
@@ -339,12 +425,19 @@ defmodule QuackDB.Stress do
         memory_delta_mb: (memory_after - memory_before) / 1_048_576
       }
       |> Map.merge(extra)
+      |> add_profile_overhead()
 
     print_metrics(name, metrics)
     %{name: name, metrics: metrics, skipped?: false}
   end
 
   defp skipped(name), do: %{name: name, metrics: %{}, skipped?: true}
+
+  defp add_profile_overhead(%{elapsed_ms: elapsed_ms, duckdb_total_ms: duckdb_total_ms} = metrics) do
+    Map.put(metrics, :client_overhead_ms, elapsed_ms - duckdb_total_ms)
+  end
+
+  defp add_profile_overhead(metrics), do: metrics
 
   defp latency_stats(samples) do
     sorted = Enum.sort(samples)
@@ -440,6 +533,8 @@ defmodule QuackDB.Stress do
       fetch_rows: config.fetch_rows,
       threads: config.threads,
       quack_fetch_batch_chunks: config.fetch_batch_chunks,
+      profile: config.profile?,
+      profile_dir: config.profile_dir,
       scenarios: Enum.join(config.scenarios, ",")
     ]
     |> Enum.map(fn {key, value} -> "#{key}=#{value}" end)
@@ -467,6 +562,14 @@ defmodule QuackDB.Stress do
     end
   end
 
+  defp env_bool(name, default) do
+    case System.get_env(name) do
+      nil -> default
+      "" -> default
+      value -> value in ["1", "true", "TRUE", "yes", "YES", "on", "ON"]
+    end
+  end
+
   defp stop_linked(pid) when is_pid(pid) do
     Process.unlink(pid)
     GenServer.stop(pid, :normal, 5_000)
@@ -476,6 +579,7 @@ defmodule QuackDB.Stress do
 
   defp format_metric(value) when is_integer(value), do: Integer.to_string(value)
   defp format_metric(value) when is_float(value), do: :erlang.float_to_binary(value, decimals: 2)
+  defp format_metric(value) when is_binary(value), do: value
 end
 
 QuackDB.Stress.main()

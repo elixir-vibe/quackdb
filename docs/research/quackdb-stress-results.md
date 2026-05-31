@@ -133,6 +133,34 @@ Findings:
 - `20,000` increased client memory pressure and reduced row append throughput; it remained close for column append but did not beat `5,000`.
 - The current `insert_stream/4` default of `1,000` is conservative. A higher default around `5,000` may be worth considering after more payload-shape testing.
 
+### Profiling split
+
+Command shape:
+
+```sh
+QUACKDB_STRESS_ROWS=50000 \
+QUACKDB_STRESS_PROFILE=1 \
+QUACKDB_STRESS_TIMEOUT=180000 \
+QUACKDB_STRESS_SCENARIOS=materialized_result,streamed_rows,columnar_batches,wide_nested_materialized,wide_nested_columnar_batches \
+mix run bench/stress.exs
+```
+
+`QUACKDB_STRESS_PROFILE=1` writes `EXPLAIN ANALYZE` output to `tmp/stress-profiles/*.txt` and emits DuckDB's reported total time when parseable. The client overhead estimate is `elapsed_ms - duckdb_total_ms`, so it includes Quack transport, protocol decode, result materialization, and profiling-vs-real-run mismatch.
+
+| Scenario | Rows | Client elapsed ms | DuckDB total ms | Client overhead ms | Rows/s |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `materialized_result` | 50,000 | 801.82 | 2.50 | 799.32 | 62,358 |
+| `streamed_rows` | 50,000 | 731.98 | 3.30 | 728.68 | 68,308 |
+| `columnar_batches` | 50,000 | 704.67 | 1.60 | 703.07 | 70,956 |
+| `wide_nested_materialized` | 50,000 | 5,688.66 | 10.50 | 5,678.16 | 8,789 |
+| `wide_nested_columnar_batches` | 50,000 | 5,697.78 | 8.60 | 5,689.18 | 8,775 |
+
+Findings:
+
+- DuckDB execution is not the bottleneck for these local read scenarios; client-observed time is overwhelmingly Quack transport/protocol decode/materialization.
+- Wide/nested results are especially decode/materialization-bound.
+- Columnar batches slightly improve narrow scalar reads but do not fix nested decode costs because nested vector decoding still creates Elixir values eagerly.
+
 ## Bugs and weak points surfaced
 
 1. Large row materialization remains the clearest bottleneck. Streaming should be promoted in docs and examples for large result sets.
