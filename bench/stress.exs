@@ -1,4 +1,6 @@
 defmodule QuackDB.Stress do
+  @moduledoc false
+
   @table "quackdb_stress_source"
   @append_rows_table "quackdb_stress_append_rows"
   @append_columns_table "quackdb_stress_append_columns"
@@ -51,8 +53,7 @@ defmodule QuackDB.Stress do
       timeout: env_int("QUACKDB_STRESS_TIMEOUT", 120_000),
       scenarios: env_list("QUACKDB_STRESS_SCENARIOS"),
       profile?: env_bool("QUACKDB_STRESS_PROFILE", false),
-      profile_dir: env("QUACKDB_STRESS_PROFILE_DIR") || "tmp/stress-profiles",
-      eprof?: env_bool("QUACKDB_STRESS_EPROF", false)
+      profile_dir: env("QUACKDB_STRESS_PROFILE_DIR") || "tmp/stress-profiles"
     }
   end
 
@@ -347,7 +348,7 @@ defmodule QuackDB.Stress do
     else
       memory_before = :erlang.memory(:total)
       rss_before = server_rss_mb(config.server_pid)
-      {elapsed, count} = timed(fn -> maybe_eprof(name, config, fun) end)
+      {elapsed, count} = timed(fun)
       memory_after = :erlang.memory(:total)
       rss_after = server_rss_mb(config.server_pid)
       rate = count / max(elapsed / 1_000_000, 1.0e-9)
@@ -361,39 +362,6 @@ defmodule QuackDB.Stress do
         memory_after,
         rss_stats(rss_before, rss_after) |> Map.merge(extra_metrics)
       )
-    end
-  end
-
-  defp maybe_eprof(name, %{eprof?: true}, fun) do
-    ensure_eprof!()
-    IO.puts("\n## #{name} eprof")
-
-    case apply(:eprof, :profile, [fun]) do
-      {:ok, value} ->
-        apply(:eprof, :analyze, [:total])
-        value
-
-      {:error, reason} ->
-        raise "#{name} eprof failed: #{inspect(reason)}"
-    end
-  end
-
-  defp maybe_eprof(_name, _config, fun), do: fun.()
-
-  defp ensure_eprof! do
-    case :code.which(:eprof) do
-      :non_existing ->
-        :code.root_dir()
-        |> to_string()
-        |> Path.join("lib/tools-*/ebin")
-        |> Path.wildcard()
-        |> case do
-          [path | _paths] -> Code.prepend_path(path)
-          [] -> raise "eprof is unavailable because the Erlang tools application is not installed"
-        end
-
-      _path ->
-        :ok
     end
   end
 
@@ -571,7 +539,6 @@ defmodule QuackDB.Stress do
       quack_fetch_batch_chunks: config.fetch_batch_chunks,
       profile: config.profile?,
       profile_dir: config.profile_dir,
-      eprof: config.eprof?,
       scenarios: Enum.join(config.scenarios, ",")
     ]
     |> Enum.map(fn {key, value} -> "#{key}=#{value}" end)

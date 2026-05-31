@@ -109,7 +109,7 @@ for threads in 1 2 4 8; do
     QUACKDB_STRESS_ROWS=250000 \
     mix run bench/stress.exs
   done
- done
+done
 
 # Append batch-size sweep
 for batch in 100 1000 5000 20000; do
@@ -117,16 +117,22 @@ for batch in 100 1000 5000 20000; do
   QUACKDB_STRESS_SCENARIOS=append_rows,append_columns \
   QUACKDB_STRESS_ROWS=250000 \
   mix run bench/stress.exs
- done
+done
 ```
 
-The harness emits `METRIC scenario.key=value` lines so results can later be parsed into CSV or autoresearch-style logs.
+The harness emits `METRIC scenario.key=value` lines so results can be parsed into CSV or benchmark dashboards.
 
-## Next instrumentation to add after baseline
+## Harness instrumentation
 
-- Server RSS sampling is now built into `bench/stress.exs` by summing the MuonTrap wrapper process and its DuckDB descendants.
-- `QUACKDB_STRESS_PROFILE=1` now runs `EXPLAIN ANALYZE` for read scenarios, writes plans to `tmp/stress-profiles/`, and emits `duckdb_total_ms` plus a client-overhead estimate.
-- `QUACKDB_STRESS_EPROF=1` runs Erlang `:eprof` around measured read scenarios to identify Elixir protocol/materialization hot spots.
+`bench/stress.exs` includes the instrumentation that proved useful during tuning:
+
+- BEAM memory delta per scenario.
+- DuckDB server RSS sampling for local supervised server runs.
+- Optional `EXPLAIN ANALYZE` plans for read scenarios via `QUACKDB_STRESS_PROFILE=1`.
+
+## Remaining benchmark gaps
+
 - File-backed database runs to observe checkpoint/WAL behavior.
-- Nested-heavy decode scenarios: LIST/STRUCT/MAP/JSON/null-heavy columns.
-- A mixed workload scenario with reads and appends running simultaneously.
+- Remote-network fetch-batch sweeps.
+- Append sweeps for nested, wide, string-heavy, blob-heavy, and null-heavy payloads.
+- Mixed read/write workloads.
