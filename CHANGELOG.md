@@ -2,9 +2,20 @@
 
 ## Unreleased
 
+## 0.4.1 - 2026-05-31
+
 ### Added
 
 - Added direct SQL and Ecto LIST helpers for `list_contains`, `list_has_any`, `list_has_all`, and `unnest`.
+- Added Ecto SQL generation support for nested map/tuple select expressions and `IN (subquery(...))` predicates.
+
+### Fixed
+
+- Fixed Ecto nil insert values so `nil` is sent as a parameterized `NULL` instead of emitting `DEFAULT`.
+- Fixed Ecto tagged source-field parameters in query predicates.
+- Fixed Ecto lateral joins with `parent_as/1` by threading explicit source context through query rendering.
+- Fixed DBConnection query caching and telemetry to preserve the original parameterized SQL while sending formatted SQL to DuckDB.
+- Fixed Ecto map loading/dumping for JSON-backed map fields.
 
 ## 0.4.0 - 2026-05-29
 
