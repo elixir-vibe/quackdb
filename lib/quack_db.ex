@@ -246,6 +246,9 @@ defmodule QuackDB do
 
   @doc """
   Streams query results as `QuackDB.Columns` batches.
+
+  This uses a columnar cursor path so large analytical results can stay
+  vector-shaped instead of being materialized as row lists first.
   """
   @spec columnar_batches(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: Enumerable.t()
   def columnar_batches(connection, statement, params \\ [], options \\ []) do

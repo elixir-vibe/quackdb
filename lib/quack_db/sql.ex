@@ -74,7 +74,11 @@ defmodule QuackDB.SQL do
   def set_global(name, value),
     do: ["SET GLOBAL ", identifier!(name, :setting), " = ", literal!(value), ";"]
 
-  @doc "Builds an `EXPLAIN ...` or `EXPLAIN ANALYZE ...` statement."
+  @doc """
+  Builds an `EXPLAIN ...` or `EXPLAIN ANALYZE ...` statement.
+
+  Pass `analyze: true` to run the query and include DuckDB execution timings.
+  """
   @spec explain(iodata(), keyword()) :: iodata()
   def explain(statement, options \\ []) when is_list(options) do
     if Keyword.get(options, :analyze, false) do

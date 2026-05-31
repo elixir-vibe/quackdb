@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- Added `QuackDB.SQL.explain/2` for building `EXPLAIN` and `EXPLAIN ANALYZE` statements.
+- Added a development stress benchmark for local read, stream, columnar, and append scenarios.
+
+### Changed
+
+- Improved row and nested-list materialization performance for large result sets.
+- Streamed `QuackDB.columnar_batches/4` through a columnar cursor path instead of materializing rows first.
+- Updated large-result documentation to recommend row streaming or columnar batches for analytical results.
+
+### Fixed
+
+- Fixed nullable fixed-width vector decoding when DuckDB stores non-decodable bytes in invalid/null slots.
+
 ## 0.4.1 - 2026-05-31
 
 ### Added
