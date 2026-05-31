@@ -1,0 +1,376 @@
+defmodule QuackDB.Stress do
+  @table "quackdb_stress_source"
+  @append_rows_table "quackdb_stress_append_rows"
+  @append_columns_table "quackdb_stress_append_columns"
+
+  def main do
+    Process.flag(:trap_exit, true)
+    config = config()
+    {connection, cleanup, server} = connect(config)
+
+    try do
+      IO.puts("# QuackDB stress run")
+      IO.puts("started_at=#{DateTime.utc_now() |> DateTime.to_iso8601()}")
+      IO.puts("server=#{server}")
+      IO.puts("#{config_line(config)}\n")
+
+      setup_source!(connection, config.rows)
+
+      results = [
+        small_query_latency(connection, config),
+        concurrent_aggregate_latency(connection, config),
+        materialized_result(connection, config),
+        streamed_rows(connection, config),
+        columnar_batches(connection, config),
+        append_rows(connection, config),
+        append_columns(connection, config)
+      ]
+
+      IO.puts("\n## Summary")
+      Enum.each(results, &print_summary/1)
+    after
+      cleanup.()
+    end
+  end
+
+  defp config do
+    %{
+      uri: env("QUACKDB_STRESS_URI") || env("QUACKDB_TEST_URI"),
+      token: env("QUACKDB_STRESS_TOKEN") || env("QUACKDB_TEST_TOKEN") || "quackdb_stress",
+      port: env_int("QUACKDB_STRESS_PORT", 9495),
+      rows: env_int("QUACKDB_STRESS_ROWS", 100_000),
+      queries: env_int("QUACKDB_STRESS_QUERIES", 200),
+      concurrency: env_int("QUACKDB_STRESS_CONCURRENCY", System.schedulers_online()),
+      batch_size: env_int("QUACKDB_STRESS_BATCH_SIZE", 5_000),
+      fetch_rows: env_int("QUACKDB_STRESS_FETCH_ROWS", 10_000),
+      threads: env_int("QUACKDB_STRESS_THREADS", System.schedulers_online()),
+      fetch_batch_chunks: env_int("QUACKDB_STRESS_FETCH_BATCH_CHUNKS", 12),
+      timeout: env_int("QUACKDB_STRESS_TIMEOUT", 120_000),
+      scenarios: env_list("QUACKDB_STRESS_SCENARIOS")
+    }
+  end
+
+  defp connect(%{uri: uri} = config) when is_binary(uri) and uri != "" do
+    {:ok, connection} =
+      QuackDB.start_link(uri: uri, token: config.token, pool_size: config.concurrency)
+
+    {connection, fn -> stop_linked(connection) end, uri}
+  end
+
+  defp connect(config) do
+    endpoint = "quack:127.0.0.1:#{config.port}"
+
+    {:ok, server} =
+      QuackDB.Server.start_link(
+        endpoint: endpoint,
+        token: config.token,
+        settings: [threads: config.threads],
+        global_settings: [quack_fetch_batch_chunks: config.fetch_batch_chunks],
+        wait_timeout: config.timeout
+      )
+
+    {:ok, connection} =
+      QuackDB.start_link(
+        uri: QuackDB.Server.uri(server),
+        token: config.token,
+        pool_size: config.concurrency
+      )
+
+    cleanup = fn ->
+      stop_linked(connection)
+      stop_linked(server)
+    end
+
+    {connection, cleanup, QuackDB.Server.uri(server)}
+  end
+
+  defp setup_source!(connection, rows) do
+    QuackDB.query!(connection, "DROP TABLE IF EXISTS #{@table}")
+
+    QuackDB.query!(
+      connection,
+      """
+      CREATE TABLE #{@table} AS
+      SELECT
+        i::BIGINT AS id,
+        (i % 128)::INTEGER AS category,
+        (i * 1.25)::DOUBLE AS amount,
+        ('payload-' || i::VARCHAR) AS payload,
+        [i::INTEGER, (i + 1)::INTEGER, (i + 2)::INTEGER] AS samples,
+        {'id': i::BIGINT, 'category': (i % 128)::INTEGER} AS attrs
+      FROM range(0, ?) AS t(i)
+      """,
+      [rows]
+    )
+  end
+
+  defp small_query_latency(connection, config) do
+    run_latency_scenario("small_query", config, fn i ->
+      QuackDB.query!(connection, "SELECT ?::INTEGER + 1", [i], timeout: config.timeout)
+    end)
+  end
+
+  defp concurrent_aggregate_latency(connection, config) do
+    run_latency_scenario("concurrent_aggregate", config, fn i ->
+      divisor = rem(i, 17) + 2
+
+      QuackDB.query!(
+        connection,
+        "SELECT category, count(*), sum(amount) FROM #{@table} WHERE id % ? = 0 GROUP BY category",
+        [divisor],
+        timeout: config.timeout
+      )
+    end)
+  end
+
+  defp materialized_result(connection, config) do
+    measure("materialized_result", config, fn ->
+      QuackDB.query!(
+        connection,
+        "SELECT id, category, amount, payload FROM #{@table} ORDER BY id",
+        [],
+        timeout: config.timeout
+      ).rows
+      |> length()
+    end)
+  end
+
+  defp streamed_rows(connection, config) do
+    measure("streamed_rows", config, fn ->
+      {:ok, count} =
+        DBConnection.transaction(connection, fn tx ->
+          tx
+          |> QuackDB.rows(
+            "SELECT id, category, amount, payload FROM #{@table} ORDER BY id",
+            [],
+            max_rows: config.fetch_rows,
+            timeout: config.timeout
+          )
+          |> Enum.reduce(0, fn _row, count -> count + 1 end)
+        end)
+
+      count
+    end)
+  end
+
+  defp columnar_batches(connection, config) do
+    measure("columnar_batches", config, fn ->
+      {:ok, count} =
+        DBConnection.transaction(connection, fn tx ->
+          tx
+          |> QuackDB.columnar_batches(
+            "SELECT id, category, amount, payload FROM #{@table} ORDER BY id",
+            [],
+            max_rows: config.fetch_rows,
+            timeout: config.timeout
+          )
+          |> Enum.reduce(0, fn batch, count -> count + batch.num_rows end)
+        end)
+
+      count
+    end)
+  end
+
+  defp append_rows(connection, config) do
+    measure("append_rows", config, fn ->
+      QuackDB.query!(connection, "DROP TABLE IF EXISTS #{@append_rows_table}")
+
+      QuackDB.query!(
+        connection,
+        "CREATE TABLE #{@append_rows_table} (id BIGINT, category INTEGER, amount DOUBLE, payload VARCHAR)"
+      )
+
+      rows =
+        Stream.map(0..(config.rows - 1), fn i ->
+          [id: i, category: rem(i, 128), amount: i * 1.25, payload: "payload-#{i}"]
+        end)
+
+      QuackDB.insert_stream!(connection, @append_rows_table, rows,
+        chunk_every: config.batch_size,
+        columns: [id: :bigint, category: :integer, amount: :double, payload: :varchar],
+        timeout: config.timeout
+      ).num_rows
+    end)
+  end
+
+  defp append_columns(connection, config) do
+    measure("append_columns", config, fn ->
+      QuackDB.query!(connection, "DROP TABLE IF EXISTS #{@append_columns_table}")
+
+      QuackDB.query!(
+        connection,
+        "CREATE TABLE #{@append_columns_table} (id BIGINT, category INTEGER, amount DOUBLE, payload VARCHAR)"
+      )
+
+      0..(config.rows - 1)
+      |> Stream.chunk_every(config.batch_size)
+      |> Enum.reduce(0, fn indexes, total ->
+        columns = [
+          id: indexes,
+          category: Enum.map(indexes, &rem(&1, 128)),
+          amount: Enum.map(indexes, &(&1 * 1.25)),
+          payload: Enum.map(indexes, &"payload-#{&1}")
+        ]
+
+        result =
+          QuackDB.insert_columns!(connection, @append_columns_table, columns,
+            columns: [id: :bigint, category: :integer, amount: :double, payload: :varchar],
+            timeout: config.timeout
+          )
+
+        total + result.num_rows
+      end)
+    end)
+  end
+
+  defp run_latency_scenario(name, config, fun) do
+    if skip?(config, name) do
+      skipped(name)
+    else
+      memory_before = :erlang.memory(:total)
+      started = System.monotonic_time(:microsecond)
+
+      samples =
+        1..config.queries
+        |> Task.async_stream(
+          fn i ->
+            timed(fn -> fun.(i) end)
+          end,
+          max_concurrency: config.concurrency,
+          timeout: config.timeout,
+          ordered: false
+        )
+        |> Enum.map(fn
+          {:ok, {duration, _result}} -> duration
+          {:exit, reason} -> raise "#{name} task failed: #{inspect(reason)}"
+        end)
+
+      elapsed = System.monotonic_time(:microsecond) - started
+      memory_after = :erlang.memory(:total)
+      stats = latency_stats(samples)
+      rate = config.queries / max(elapsed / 1_000_000, 1.0e-9)
+
+      result(name, config.queries, elapsed, rate, memory_before, memory_after, stats)
+    end
+  end
+
+  defp measure(name, config, fun) do
+    if skip?(config, name) do
+      skipped(name)
+    else
+      memory_before = :erlang.memory(:total)
+      {elapsed, count} = timed(fun)
+      memory_after = :erlang.memory(:total)
+      rate = count / max(elapsed / 1_000_000, 1.0e-9)
+      result(name, count, elapsed, rate, memory_before, memory_after, %{})
+    end
+  end
+
+  defp timed(fun) do
+    started = System.monotonic_time(:microsecond)
+    value = fun.()
+    {System.monotonic_time(:microsecond) - started, value}
+  end
+
+  defp result(name, count, elapsed, rate, memory_before, memory_after, extra) do
+    metrics =
+      %{
+        count: count,
+        elapsed_ms: elapsed / 1_000,
+        rate_per_s: rate,
+        memory_delta_mb: (memory_after - memory_before) / 1_048_576
+      }
+      |> Map.merge(extra)
+
+    print_metrics(name, metrics)
+    %{name: name, metrics: metrics, skipped?: false}
+  end
+
+  defp skipped(name), do: %{name: name, metrics: %{}, skipped?: true}
+
+  defp latency_stats(samples) do
+    sorted = Enum.sort(samples)
+
+    %{
+      p50_us: percentile(sorted, 0.50),
+      p95_us: percentile(sorted, 0.95),
+      p99_us: percentile(sorted, 0.99),
+      max_us: List.last(sorted) || 0
+    }
+  end
+
+  defp percentile([], _percentile), do: 0
+
+  defp percentile(sorted, percentile) do
+    index = min(length(sorted) - 1, max(0, ceil(length(sorted) * percentile) - 1))
+    Enum.at(sorted, index)
+  end
+
+  defp print_metrics(name, metrics) do
+    IO.puts("## #{name}")
+
+    metrics
+    |> Enum.sort_by(fn {key, _value} -> key end)
+    |> Enum.each(fn {key, value} ->
+      IO.puts("METRIC #{name}.#{key}=#{format_metric(value)}")
+    end)
+
+    IO.puts("")
+  end
+
+  defp print_summary(%{name: name, skipped?: true}), do: IO.puts("- #{name}: skipped")
+
+  defp print_summary(%{name: name, metrics: metrics}) do
+    IO.puts(
+      "- #{name}: #{format_metric(metrics.count)} rows/ops in #{format_metric(metrics.elapsed_ms)} ms (#{format_metric(metrics.rate_per_s)}/s)"
+    )
+  end
+
+  defp config_line(config) do
+    [
+      rows: config.rows,
+      queries: config.queries,
+      concurrency: config.concurrency,
+      batch_size: config.batch_size,
+      fetch_rows: config.fetch_rows,
+      threads: config.threads,
+      quack_fetch_batch_chunks: config.fetch_batch_chunks,
+      scenarios: Enum.join(config.scenarios, ",")
+    ]
+    |> Enum.map(fn {key, value} -> "#{key}=#{value}" end)
+    |> Enum.join(" ")
+  end
+
+  defp skip?(%{scenarios: []}, _name), do: false
+  defp skip?(%{scenarios: scenarios}, name), do: name not in scenarios
+
+  defp env(name), do: System.get_env(name)
+
+  defp env_int(name, default) do
+    case System.get_env(name) do
+      nil -> default
+      "" -> default
+      value -> String.to_integer(value)
+    end
+  end
+
+  defp env_list(name) do
+    case System.get_env(name) do
+      nil -> []
+      "" -> []
+      value -> value |> String.split(",", trim: true) |> Enum.map(&String.trim/1)
+    end
+  end
+
+  defp stop_linked(pid) when is_pid(pid) do
+    Process.unlink(pid)
+    GenServer.stop(pid, :normal, 5_000)
+  catch
+    :exit, _reason -> :ok
+  end
+
+  defp format_metric(value) when is_integer(value), do: Integer.to_string(value)
+  defp format_metric(value) when is_float(value), do: :erlang.float_to_binary(value, decimals: 2)
+end
+
+QuackDB.Stress.main()
