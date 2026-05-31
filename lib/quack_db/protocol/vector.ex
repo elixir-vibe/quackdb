@@ -583,31 +583,92 @@ defmodule QuackDB.Protocol.Vector do
     error(:struct_child_mismatch, "struct has more child vectors than child types")
   end
 
-  defp decode_fixed_values(blob, type, physical_type, row_count, validity) do
+  defp decode_fixed_values(blob, type, physical_type, row_count, nil) do
     with {:ok, values, <<>>} <-
-           decode_fixed_values(blob, type, physical_type, row_count, validity, 0, []) do
+           decode_present_fixed_values(blob, type, physical_type, row_count, []) do
       {:ok, Enum.reverse(values)}
     end
   end
 
-  defp decode_fixed_values(rest, _type, _physical_type, 0, _validity, _index, values),
-    do: {:ok, values, rest}
-
-  defp decode_fixed_values(binary, type, physical_type, remaining, validity, index, values) do
+  defp decode_fixed_values(blob, type, physical_type, row_count, validity) do
     size = LogicalType.fixed_size(physical_type)
 
+    with {:ok, values, <<>>} <-
+           decode_nullable_fixed_values(
+             blob,
+             type,
+             physical_type,
+             row_count,
+             validity,
+             size,
+             0,
+             []
+           ) do
+      {:ok, Enum.reverse(values)}
+    end
+  end
+
+  defp decode_present_fixed_values(rest, _type, _physical_type, 0, values),
+    do: {:ok, values, rest}
+
+  defp decode_present_fixed_values(binary, type, physical_type, remaining, values) do
+    with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
+      decode_present_fixed_values(rest, type, physical_type, remaining - 1, [value | values])
+    end
+  end
+
+  defp decode_nullable_fixed_values(
+         rest,
+         _type,
+         _physical_type,
+         0,
+         _validity,
+         _size,
+         _index,
+         values
+       ),
+       do: {:ok, values, rest}
+
+  defp decode_nullable_fixed_values(
+         binary,
+         type,
+         physical_type,
+         remaining,
+         validity,
+         size,
+         index,
+         values
+       ) do
     if valid?(validity, index) do
       with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
-        decode_fixed_values(rest, type, physical_type, remaining - 1, validity, index + 1, [
-          value | values
-        ])
+        decode_nullable_fixed_values(
+          rest,
+          type,
+          physical_type,
+          remaining - 1,
+          validity,
+          size,
+          index + 1,
+          [
+            value | values
+          ]
+        )
       end
     else
       <<_ignored::binary-size(size), rest::binary>> = binary
 
-      decode_fixed_values(rest, type, physical_type, remaining - 1, validity, index + 1, [
-        nil | values
-      ])
+      decode_nullable_fixed_values(
+        rest,
+        type,
+        physical_type,
+        remaining - 1,
+        validity,
+        size,
+        index + 1,
+        [
+          nil | values
+        ]
+      )
     end
   end
 

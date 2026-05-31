@@ -136,6 +136,12 @@ defmodule QuackDB.Result do
     columns
   end
 
+  defp columnar_chunk_values([chunk], keys) do
+    keys
+    |> Enum.zip(chunk.columns)
+    |> Map.new(fn {key, column} -> {key, column.values} end)
+  end
+
   defp columnar_chunk_values(chunks, keys) do
     initial = Map.new(keys, &{&1, []})
 
