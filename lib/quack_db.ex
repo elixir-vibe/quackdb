@@ -249,6 +249,8 @@ defmodule QuackDB do
   """
   @spec columnar_batches(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: Enumerable.t()
   def columnar_batches(connection, statement, params \\ [], options \\ []) do
+    options = Keyword.put(options, :result_format, :columnar)
+
     connection
     |> stream(statement, params, options)
     |> Elixir.Stream.map(&QuackDB.Result.to_columnar/1)

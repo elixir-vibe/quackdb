@@ -165,25 +165,10 @@ defmodule QuackDB.DBConnection do
   def handle_fetch(_query, %QuackDB.Cursor{} = cursor, options, state) do
     cursor_state = Map.fetch!(state.cursors, cursor.ref)
 
-    cond do
-      cursor_state.queued_rows != [] ->
-        {rows, cursor_state} =
-          take_cursor_rows(cursor_state, Keyword.get(options, :max_rows, 500))
-
-        status = if cursor_state.done? and cursor_state.queued_rows == [], do: :halt, else: :cont
-        state = put_cursor_state(state, cursor.ref, cursor_state)
-        {status, cursor_result(cursor, rows), state}
-
-      cursor_state.done? ->
-        {:halt, cursor_result(cursor, []), state}
-
-      true ->
-        with {:ok, cursor_state} <- fetch_cursor_state(cursor_state, cursor, options, state) do
-          state = put_cursor_state(state, cursor.ref, cursor_state)
-          handle_fetch(nil, cursor, options, state)
-        else
-          {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
-        end
+    if cursor_state.mode == :columnar do
+      handle_fetch_columnar(cursor_state, cursor, options, state)
+    else
+      handle_fetch_rows(cursor_state, cursor, options, state)
     end
   end
 
@@ -224,7 +209,8 @@ defmodule QuackDB.DBConnection do
 
     with {:ok, response} <- state.transport.(state.uri, request, options),
          {:ok, decoded} <- Codec.decode(response),
-         {:ok, query, cursor, cursor_state} <- normalize_declare_response(decoded, query, state) do
+         {:ok, query, cursor, cursor_state} <-
+           normalize_declare_response(decoded, query, options, state) do
       state = put_cursor_state(state, cursor.ref, cursor_state)
       {:ok, query, cursor, state}
     else
@@ -234,11 +220,16 @@ defmodule QuackDB.DBConnection do
     end
   end
 
-  defp normalize_declare_response({_header, %ErrorResponse{message: message}}, _query, _state) do
+  defp normalize_declare_response(
+         {_header, %ErrorResponse{message: message}},
+         _query,
+         _options,
+         _state
+       ) do
     {:error, Error.new(:server_error, message, source: :server)}
   end
 
-  defp normalize_declare_response({_header, %PrepareResponse{} = response}, query, state) do
+  defp normalize_declare_response({_header, %PrepareResponse{} = response}, query, options, state) do
     ref = make_ref()
 
     query = %{
@@ -257,15 +248,25 @@ defmodule QuackDB.DBConnection do
       statement: query.statement
     }
 
-    cursor_state = %{
-      queued_rows: materialize_rows(response.results, response.result_names),
-      done?: not response.needs_more_fetch
-    }
+    cursor_state =
+      if Keyword.get(options, :result_format) == :columnar do
+        %{
+          mode: :columnar,
+          queued_chunks: response.results,
+          done?: not response.needs_more_fetch
+        }
+      else
+        %{
+          mode: :rows,
+          queued_rows: materialize_rows(response.results, response.result_names),
+          done?: not response.needs_more_fetch
+        }
+      end
 
     {:ok, query, cursor, cursor_state}
   end
 
-  defp normalize_declare_response({header, _body}, _query, _state) do
+  defp normalize_declare_response({header, _body}, _query, _options, _state) do
     {:error,
      Error.new(:unexpected_message, "expected prepare response, got #{header.type}",
        source: :protocol
@@ -615,6 +616,54 @@ defmodule QuackDB.DBConnection do
      )}
   end
 
+  defp handle_fetch_rows(cursor_state, cursor, options, state) do
+    cond do
+      cursor_state.queued_rows != [] ->
+        {rows, cursor_state} =
+          take_cursor_rows(cursor_state, Keyword.get(options, :max_rows, 500))
+
+        status = if cursor_state.done? and cursor_state.queued_rows == [], do: :halt, else: :cont
+        state = put_cursor_state(state, cursor.ref, cursor_state)
+        {status, cursor_result(cursor, rows), state}
+
+      cursor_state.done? ->
+        {:halt, cursor_result(cursor, []), state}
+
+      true ->
+        with {:ok, cursor_state} <- fetch_cursor_state(cursor_state, cursor, options, state) do
+          state = put_cursor_state(state, cursor.ref, cursor_state)
+          handle_fetch(nil, cursor, options, state)
+        else
+          {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
+        end
+    end
+  end
+
+  defp handle_fetch_columnar(cursor_state, cursor, options, state) do
+    cond do
+      cursor_state.queued_chunks != [] ->
+        {chunks, cursor_state} =
+          take_cursor_chunks(cursor_state, Keyword.get(options, :max_rows, 500))
+
+        status =
+          if cursor_state.done? and cursor_state.queued_chunks == [], do: :halt, else: :cont
+
+        state = put_cursor_state(state, cursor.ref, cursor_state)
+        {status, cursor_result(cursor, nil, chunks), state}
+
+      cursor_state.done? ->
+        {:halt, cursor_result(cursor, nil, []), state}
+
+      true ->
+        with {:ok, cursor_state} <- fetch_cursor_state(cursor_state, cursor, options, state) do
+          state = put_cursor_state(state, cursor.ref, cursor_state)
+          handle_fetch(nil, cursor, options, state)
+        else
+          {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
+        end
+    end
+  end
+
   defp fetch_cursor_state(cursor_state, cursor, options, state) do
     request =
       Codec.encode(%FetchRequest{uuid: cursor.result_uuid}, connection_id: state.connection_id)
@@ -627,6 +676,14 @@ defmodule QuackDB.DBConnection do
 
   defp update_cursor_from_fetch({_header, %FetchResponse{results: []}}, cursor_state, _cursor) do
     {:ok, %{cursor_state | done?: true}}
+  end
+
+  defp update_cursor_from_fetch(
+         {_header, %FetchResponse{} = response},
+         %{mode: :columnar} = cursor_state,
+         _cursor
+       ) do
+    {:ok, %{cursor_state | queued_chunks: cursor_state.queued_chunks ++ response.results}}
   end
 
   defp update_cursor_from_fetch({_header, %FetchResponse{} = response}, cursor_state, cursor) do
@@ -757,6 +814,54 @@ defmodule QuackDB.DBConnection do
     {rows, %{cursor | queued_rows: remaining}}
   end
 
+  defp take_cursor_chunks(cursor, max_rows) do
+    {chunks, remaining, row_count} = take_chunks(cursor.queued_chunks, max_rows, [], 0)
+    {chunks, cursor |> Map.put(:queued_chunks, remaining) |> Map.put(:row_count, row_count)}
+  end
+
+  defp take_chunks(chunks, remaining_rows, selected, row_count)
+       when remaining_rows <= 0 or chunks == [] do
+    {Enum.reverse(selected), chunks, row_count}
+  end
+
+  defp take_chunks([chunk | chunks], remaining_rows, selected, row_count) do
+    if chunk.row_count <= remaining_rows do
+      take_chunks(
+        chunks,
+        remaining_rows - chunk.row_count,
+        [chunk | selected],
+        row_count + chunk.row_count
+      )
+    else
+      {selected_chunk, remaining_chunk} = split_chunk(chunk, remaining_rows)
+
+      {Enum.reverse([selected_chunk | selected]), [remaining_chunk | chunks],
+       row_count + remaining_rows}
+    end
+  end
+
+  defp split_chunk(chunk, row_count) do
+    {selected_columns, remaining_columns} =
+      Enum.map_reduce(chunk.columns, [], fn column, remaining_columns ->
+        {selected_values, remaining_values} = Enum.split(column.values, row_count)
+
+        selected_column = %{column | values: selected_values}
+        remaining_column = %{column | values: remaining_values}
+
+        {selected_column, [remaining_column | remaining_columns]}
+      end)
+
+    selected = %{chunk | row_count: row_count, columns: selected_columns}
+
+    remaining = %{
+      chunk
+      | row_count: chunk.row_count - row_count,
+        columns: Enum.reverse(remaining_columns)
+    }
+
+    {selected, remaining}
+  end
+
   defp cursor_result(cursor, rows) do
     %Result{
       command: :fetch,
@@ -765,6 +870,18 @@ defmodule QuackDB.DBConnection do
       num_rows: length(rows),
       connection_id: cursor.connection_id,
       messages: []
+    }
+  end
+
+  defp cursor_result(cursor, nil, chunks) do
+    %Result{
+      command: :fetch,
+      columns: cursor.columns,
+      rows: nil,
+      num_rows: Enum.reduce(chunks, 0, &(&2 + &1.row_count)),
+      connection_id: cursor.connection_id,
+      messages: [],
+      metadata: %{columnar_chunks: chunks}
     }
   end
 

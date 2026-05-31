@@ -178,6 +178,8 @@ After replacing row materialization with head/tail traversal and list slicing wi
 | `wide_nested_materialized` | 5,688.66 | 239.21 | 8,789 | 209,025 |
 | `wide_nested_columnar_batches` | 5,697.78 | 302.41 | 8,775 | 165,339 |
 
+A follow-up true-columnar streaming path avoids row materialization before `QuackDB.columnar_batches/4`. On the same 50,000-row stress shape, `wide_nested_columnar_batches` improved again to 257.97 ms / 193,822 rows/s, with narrow `columnar_batches` at 41.44 ms / 1,206,622 rows/s.
+
 ## Bugs and weak points surfaced
 
 1. Large row materialization remains the clearest bottleneck. Streaming should be promoted in docs and examples for large result sets.

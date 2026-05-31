@@ -68,6 +68,23 @@ defmodule QuackDB.Result do
   Converts a row-oriented result into a `QuackDB.Columns` struct.
   """
   @spec to_columnar(t()) :: QuackDB.Columns.t()
+  def to_columnar(%__MODULE__{metadata: %{columnar_chunks: chunks}, columns: columns} = result)
+      when is_list(columns) do
+    keys = disambiguate_columns(columns)
+    column_values = columnar_chunk_values(chunks, keys)
+
+    %QuackDB.Columns{
+      names: keys,
+      original_names: result.columns,
+      columns: column_values,
+      num_rows: result.num_rows,
+      command: result.command,
+      connection_id: result.connection_id,
+      messages: result.messages,
+      metadata: Map.delete(result.metadata, :columnar_chunks)
+    }
+  end
+
   def to_columnar(%__MODULE__{columns: columns, rows: rows} = result)
       when is_list(columns) and is_list(rows) do
     keys = disambiguate_columns(columns)
@@ -117,6 +134,22 @@ defmodule QuackDB.Result do
       end)
 
     columns
+  end
+
+  defp columnar_chunk_values(chunks, keys) do
+    initial = Map.new(keys, &{&1, []})
+
+    chunks
+    |> Enum.reduce(initial, fn chunk, acc ->
+      keys
+      |> Enum.zip(chunk.columns)
+      |> Enum.reduce(acc, fn {key, column}, acc ->
+        Map.update!(acc, key, &[column.values | &1])
+      end)
+    end)
+    |> Map.new(fn {key, value_groups} ->
+      {key, value_groups |> Enum.reverse() |> List.flatten()}
+    end)
   end
 
   defp raw_count_metadata(result) do
