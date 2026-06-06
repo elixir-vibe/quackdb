@@ -114,6 +114,219 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 1}}}
   end
 
+  test "Repo.insert_all/3 append supports returning through temp insert" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1, 2])
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk], names: ["id"])}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {2, [%{id: 1}, %{id: 2}]} =
+             QuackDB.EctoRepo.insert_all(
+               QuackDB.TestSchemas.RenamedEvent,
+               [[id: 1, name: "duck"], [id: 2, name: "goose"]],
+               insert_method: :append,
+               returning: [:id]
+             )
+
+    assert_receive {:statement, "BEGIN"}
+    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 2}}}
+
+    assert_receive {:statement, insert_statement}
+    assert insert_statement =~ ~s|INSERT INTO "renamed_events" ("id", "event_name")|
+    assert insert_statement =~ ~s| RETURNING "id"|
+    assert_receive {:statement, "DROP TABLE IF EXISTS " <> _}
+    assert_receive {:statement, "COMMIT"}
+  end
+
+  test "Repo.insert_all/3 append returning reuses an existing transaction" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk], names: ["id"])}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {:ok, {1, [%{id: 1}]}} =
+             QuackDB.EctoRepo.transaction(fn ->
+               QuackDB.EctoRepo.insert_all(
+                 QuackDB.TestSchemas.RenamedEvent,
+                 [[id: 1, name: "duck"]],
+                 insert_method: :append,
+                 returning: [:id]
+               )
+             end)
+
+    assert_receive {:statement, "BEGIN"}
+    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 1}}}
+    assert_receive {:statement, insert_statement}
+    assert insert_statement =~ ~s|INSERT INTO "renamed_events" ("id", "event_name")|
+    assert_receive {:statement, "DROP TABLE IF EXISTS " <> _}
+    assert_receive {:statement, "COMMIT"}
+    refute_received {:statement, "BEGIN"}
+  end
+
+  test "Repo.insert_all/3 append returning rolls back temp-table flow on failure" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+
+          if String.starts_with?(statement, ~s|INSERT INTO "renamed_events"|) do
+            {:ok, QuackDB.ProtocolFixtures.error_response("insert-select failed")}
+          else
+            {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [], names: [])}
+          end
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise QuackDB.Error, ~r/insert-select failed/, fn ->
+      QuackDB.EctoRepo.insert_all(
+        QuackDB.TestSchemas.RenamedEvent,
+        [[id: 1, name: "duck"]],
+        insert_method: :append,
+        returning: [:id]
+      )
+    end
+
+    assert_receive {:statement, "BEGIN"}
+    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 1}}}
+    assert_receive {:statement, ~s|INSERT INTO "renamed_events"| <> _}
+    assert_receive {:statement, "DROP TABLE IF EXISTS " <> _}
+    assert_receive {:statement, "ROLLBACK"}
+  end
+
+  test "Repo.insert_all/3 append uses schema types for all-nil columns" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+          chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk], names: ["Count"])}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(
+               QuackDB.TestSchemas.TypedEvent,
+               [[id: nil, event_date: nil, occurred_at: nil, tags: nil]],
+               insert_method: :append
+             )
+
+    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:append, %{append_chunk: chunk}}
+    assert_receive {:statement, "INSERT INTO " <> _}
+
+    assert chunk.types |> Enum.map(& &1.name) |> Enum.sort() == [
+             :date,
+             :integer,
+             :list,
+             :timestamp
+           ]
+  end
+
+  test "QuackDB.insert_stream/4 can use the Ecto repo pool" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {:ok, %QuackDB.Result{num_rows: 2}} =
+             QuackDB.insert_stream(
+               QuackDB.EctoRepo,
+               "events",
+               [%{id: 1, name: "duck"}, %{id: 2, name: "goose"}],
+               chunk_every: 2
+             )
+
+    assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 2}}}
+  end
+
   test "Repo.insert_all/3 uses schema field source names" do
     parent = self()
     chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
@@ -130,6 +343,15 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
                      ~s|INSERT INTO "renamed_events" ("id", "event_name") VALUES (1, 'duck')|}
   end
 
+  test "Repo.insert_all/3 rejects quoted identifier characters" do
+    put_repo_env(transport(prepare: []))
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise ArgumentError, ~r/bad literal\/field\/table name/, fn ->
+      QuackDB.EctoRepo.insert_all(~s|bad"events|, [[id: 1]])
+    end
+  end
+
   test "Repo.insert_all/3 rejects unknown insert methods" do
     put_repo_env(transport(prepare: []))
     start_supervised!(QuackDB.EctoRepo)
@@ -139,11 +361,11 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     end
   end
 
-  test "Repo.insert_all/3 append method rejects returning" do
+  test "Repo.insert_all/3 append method rejects schemaless returning without explicit types" do
     put_repo_env(transport(prepare: []))
     start_supervised!(QuackDB.EctoRepo)
 
-    assert_raise QuackDB.Error, ~r/without returning/, fn ->
+    assert_raise QuackDB.Error, ~r/requires a schema or explicit append columns/, fn ->
       QuackDB.EctoRepo.insert_all("events", [[id: 1]], insert_method: :append, returning: [:id])
     end
   end

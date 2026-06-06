@@ -95,14 +95,50 @@ Import `QuackDB.Ecto.FTS` or `use QuackDB.Ecto`:
 import Ecto.Query
 import QuackDB.Ecto.FTS
 
-query =
+scored =
   from doc in "documents",
-    where: match_bm25("fts_main_documents", doc.id, ^"duckdb analytics") > 0,
-    order_by: [desc: match_bm25("fts_main_documents", doc.id, ^"duckdb analytics")],
     select: %{
       id: doc.id,
       title: doc.title,
       score: match_bm25("fts_main_documents", doc.id, ^"duckdb analytics")
+    }
+
+query =
+  from doc in subquery(scored),
+    where: doc.score > 0,
+    order_by: [desc: doc.score],
+    limit: 50,
+    select: %{id: doc.id, title: doc.title, score: doc.score}
+
+MyApp.AnalyticsRepo.all(query)
+```
+
+The subquery shape keeps the BM25 expression named once and lets the outer query filter, order, and limit by `score` without repeating the helper call. For large source-text tables, use the same Ecto pattern at a coarser grain first, then join the top matches to detailed rows:
+
+```elixir
+file_scores =
+  from file in "files",
+    select: %{
+      file_id: file.file_id,
+      score: match_bm25("fts_main_files", file.file_id, ^"duckdb analytics")
+    }
+
+top_files =
+  from file in subquery(file_scores),
+    where: file.score > 0,
+    order_by: [desc: file.score],
+    limit: 25
+
+query =
+  from fragment in "fragments",
+    join: file in subquery(top_files),
+    on: fragment.file_id == file.file_id,
+    order_by: [desc: file.score, asc: fragment.path],
+    select: %{
+      file_id: fragment.file_id,
+      path: fragment.path,
+      content: fragment.content,
+      file_score: file.score
     }
 
 MyApp.AnalyticsRepo.all(query)

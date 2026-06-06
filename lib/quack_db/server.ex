@@ -23,7 +23,12 @@ defmodule QuackDB.Server do
   By default the server runs DuckDB directly under MuonTrap with `-interactive`
   so the process stays alive after `quack_serve/2` starts:
 
-      duckdb :memory: -interactive -init /dev/null -cmd "LOAD quack; ..."
+      duckdb :memory: -csv -noheader -interactive -init /dev/null -cmd "LOAD quack; ..."
+
+  Startup waits until the Quack endpoint is ready. For the default DuckDB CLI
+  command, readiness is detected from the `quack_serve/2` result row printed to
+  stdout. `:poll_interval` is only the fallback probe interval for custom daemon
+  output handling or custom commands that do not expose that row.
 
   """
 
@@ -166,6 +171,9 @@ defmodule QuackDB.Server do
   def handle_call(:statistics, _from, state), do: {:reply, daemon_statistics(state.daemon), state}
 
   @impl true
+  def handle_info({:quackdb_server_output, _line}, state), do: {:noreply, state}
+
+  @impl true
   def terminate(_reason, %{daemon: daemon}) when is_pid(daemon) do
     Process.exit(daemon, :shutdown)
     :ok
@@ -215,12 +223,40 @@ defmodule QuackDB.Server do
   end
 
   defp daemon_command(duckdb, database, boot_sql) do
-    {duckdb, [database, "-interactive", "-init", "/dev/null", "-cmd", boot_sql]}
+    {duckdb,
+     [database, "-csv", "-noheader", "-interactive", "-init", "/dev/null", "-cmd", boot_sql]}
   end
 
   defp start_daemon(state) do
-    MuonTrap.Daemon.start_link(state.daemon_command, state.daemon_args, state.daemon_options)
+    MuonTrap.Daemon.start_link(
+      state.daemon_command,
+      state.daemon_args,
+      daemon_options_with_ready_signal(state.daemon_options, self())
+    )
   end
+
+  defp daemon_options_with_ready_signal(options, parent) do
+    cond do
+      Keyword.has_key?(options, :logger_fun) ->
+        logger_fun = Keyword.fetch!(options, :logger_fun)
+
+        Keyword.put(options, :logger_fun, fn line ->
+          send(parent, {:quackdb_server_output, line})
+          call_logger_fun(logger_fun, line)
+        end)
+
+      Keyword.has_key?(options, :log_output) ->
+        options
+
+      true ->
+        Keyword.put(options, :logger_fun, fn line ->
+          send(parent, {:quackdb_server_output, line})
+        end)
+    end
+  end
+
+  defp call_logger_fun(fun, line) when is_function(fun, 1), do: fun.(line)
+  defp call_logger_fun({module, function, args}, line), do: apply(module, function, [line | args])
 
   defp wait_ready!(state, timeout, poll_interval) do
     deadline = System.monotonic_time(:millisecond) + timeout
@@ -228,24 +264,38 @@ defmodule QuackDB.Server do
   end
 
   defp do_wait_ready!(state, deadline, poll_interval, last_error) do
-    case check_ready(state) do
-      :ok ->
-        :ok
+    remaining = deadline - System.monotonic_time(:millisecond)
 
-      {:error, error} ->
-        if System.monotonic_time(:millisecond) >= deadline do
-          raise QuackDB.Error.new(
-                  :server_start_timeout,
-                  "DuckDB Quack server did not become ready",
-                  source: :client,
-                  metadata: %{last_error: error, uri: state.uri}
-                )
+    if remaining <= 0 do
+      raise QuackDB.Error.new(
+              :server_start_timeout,
+              "DuckDB Quack server did not become ready",
+              source: :client,
+              metadata: %{last_error: last_error, uri: state.uri}
+            )
+    end
+
+    receive do
+      {:quackdb_server_output, line} ->
+        if ready_output?(line, state) do
+          :ok
         else
-          Process.sleep(poll_interval)
-          do_wait_ready!(state, deadline, poll_interval, error || last_error)
+          do_wait_ready!(state, deadline, poll_interval, last_error)
+        end
+    after
+      min(poll_interval, remaining) ->
+        case check_ready(state) do
+          :ok -> :ok
+          {:error, error} -> do_wait_ready!(state, deadline, poll_interval, error || last_error)
         end
     end
   end
+
+  defp ready_output?(line, state) when is_binary(line) do
+    String.starts_with?(line, state.endpoint <> ",")
+  end
+
+  defp ready_output?(_line, _state), do: false
 
   defp check_ready(state) do
     with {:ok, uri} <- QuackDB.URI.normalize(state.uri),

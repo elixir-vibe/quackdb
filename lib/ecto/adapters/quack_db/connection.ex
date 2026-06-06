@@ -91,7 +91,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
       [
         "INSERT INTO ",
-        quote_table(prefix, table),
+        quote_name(prefix, table),
         insert_columns(header),
         " ",
         insert_rows(rows),
@@ -104,12 +104,12 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     def update(prefix, table, fields, filters, returning) do
       [
         "UPDATE ",
-        quote_table(prefix, table),
+        quote_name(prefix, table),
         " SET ",
         fields
         |> Enum.map(fn
-          {field, _value} -> [quote_identifier(field), " = ?"]
-          field -> [quote_identifier(field), " = ?"]
+          {field, _value} -> [quote_name(field), " = ?"]
+          field -> [quote_name(field), " = ?"]
         end)
         |> Enum.intersperse(", "),
         " WHERE ",
@@ -122,7 +122,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     def delete(prefix, table, filters, returning) do
       [
         "DELETE FROM ",
-        quote_table(prefix, table),
+        quote_name(prefix, table),
         " WHERE ",
         filters(filters),
         returning(returning, [])
@@ -147,7 +147,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       table_ddl = [
         "CREATE TABLE ",
         if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
-        quote_table(table.prefix, table.name),
+        quote_name(table.prefix, table.name),
         " (",
         column_definitions(table, columns),
         pk_definition(columns, ", "),
@@ -164,14 +164,14 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         [
           "DROP TABLE ",
           if_do(command == :drop_if_exists, "IF EXISTS "),
-          quote_table(table.prefix, table.name)
+          quote_name(table.prefix, table.name)
         ]
       ]
     end
 
     def execute_ddl({:alter, %Table{} = table, changes}) do
       Enum.map(changes, fn change ->
-        ["ALTER TABLE ", quote_table(table.prefix, table.name), " ", column_change(change)]
+        ["ALTER TABLE ", quote_name(table.prefix, table.name), " ", column_change(change)]
       end)
     end
 
@@ -185,9 +185,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
           if_do(index.unique, "UNIQUE "),
           "INDEX ",
           if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
-          quote_identifier(index.name),
+          quote_name(index.name),
           " ON ",
-          quote_table(index.prefix, index.table),
+          quote_name(index.prefix, index.table),
           " (",
           index.columns |> Enum.map(&index_expr/1) |> Enum.intersperse(", "),
           ")",
@@ -204,9 +204,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         [
           [
             "ALTER TABLE ",
-            quote_table(constraint.prefix, constraint.table),
+            quote_name(constraint.prefix, constraint.table),
             " ADD CONSTRAINT ",
-            quote_identifier(constraint.name),
+            quote_name(constraint.name),
             " CHECK (",
             constraint.check,
             ")"
@@ -225,10 +225,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       [
         [
           "ALTER TABLE ",
-          quote_table(constraint.prefix, constraint.table),
+          quote_name(constraint.prefix, constraint.table),
           " DROP CONSTRAINT ",
           if_do(command == :drop_if_exists, "IF EXISTS "),
-          quote_identifier(constraint.name)
+          quote_name(constraint.name)
         ]
       ]
     end
@@ -240,7 +240,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         [
           "DROP INDEX ",
           if_do(command == :drop_if_exists, "IF EXISTS "),
-          quote_identifier(index.name)
+          quote_name(index.name)
         ]
       ]
     end
@@ -254,9 +254,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       [
         [
           "ALTER TABLE ",
-          quote_table(table.prefix, table.name),
+          quote_name(table.prefix, table.name),
           " RENAME TO ",
-          quote_identifier(new_table.name)
+          quote_name(new_table.name)
         ]
       ]
     end
@@ -265,11 +265,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       [
         [
           "ALTER TABLE ",
-          quote_table(table.prefix, table.name),
+          quote_name(table.prefix, table.name),
           " RENAME COLUMN ",
-          quote_identifier(old_column),
+          quote_name(old_column),
           " TO ",
-          quote_identifier(new_column)
+          quote_name(new_column)
         ]
       ]
     end
@@ -387,7 +387,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp insert_columns([]), do: []
 
     defp insert_columns(header) do
-      [" (", header |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "), ")"]
+      [" (", header |> Enum.map(&quote_name/1) |> Enum.intersperse(", "), ")"]
     end
 
     defp insert_rows(%Ecto.Query{} = query),
@@ -410,8 +410,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp filters(filters) do
       filters
       |> Enum.map(fn
-        {field, nil} -> [quote_identifier(field), " IS NULL"]
-        {field, _value} -> [quote_identifier(field), " = ?"]
+        {field, nil} -> [quote_name(field), " IS NULL"]
+        {field, _value} -> [quote_name(field), " = ?"]
       end)
       |> Enum.intersperse(" AND ")
     end
@@ -442,7 +442,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp conflict_target([]), do: []
 
     defp conflict_target(targets) when is_list(targets) do
-      ["(", targets |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "), ") "]
+      ["(", targets |> Enum.map(&quote_name/1) |> Enum.intersperse(", "), ") "]
     end
 
     defp conflict_target({:unsafe_fragment, fragment}), do: [fragment, " "]
@@ -452,11 +452,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       |> Enum.flat_map(fn %Ecto.Query.QueryExpr{expr: expressions} ->
         Enum.flat_map(expressions, fn
           {:set, fields} ->
-            Enum.map(fields, fn {field, _expression} -> [quote_identifier(field), " = ?"] end)
+            Enum.map(fields, fn {field, _expression} -> [quote_name(field), " = ?"] end)
 
           {:inc, fields} ->
             Enum.map(fields, fn {field, _expression} ->
-              quoted = quote_identifier(field)
+              quoted = quote_name(field)
               [quoted, " = ", quoted, " + ?"]
             end)
         end)
@@ -468,11 +468,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       fields
       |> Enum.map(fn
         field when is_atom(field) ->
-          quoted = quote_identifier(field)
+          quoted = quote_name(field)
           [quoted, " = EXCLUDED.", quoted]
 
         {field, _value} ->
-          quoted = quote_identifier(field)
+          quoted = quote_name(field)
           [quoted, " = ?"]
       end)
       |> Enum.intersperse(", ")
@@ -481,7 +481,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp returning([], _placeholders), do: []
 
     defp returning(returning, []),
-      do: [" RETURNING ", returning |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", ")]
+      do: [" RETURNING ", returning |> Enum.map(&quote_name/1) |> Enum.intersperse(", ")]
 
     defp returning(_returning, _placeholders) do
       unsupported_iodata!(:placeholders, ":placeholders with RETURNING are unsupported")
@@ -497,7 +497,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         [
           "CREATE SEQUENCE ",
           if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
-          quote_identifier(serial_sequence_name(table, name))
+          quote_name(serial_sequence_name(table, name))
         ]
       end)
     end
@@ -516,7 +516,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
           [
             prefix,
             "PRIMARY KEY (",
-            pks |> Enum.map(&quote_identifier/1) |> Enum.intersperse(", "),
+            pks |> Enum.map(&quote_name/1) |> Enum.intersperse(", "),
             ")"
           ]
       end
@@ -528,7 +528,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     defp column_definition(_table, {:add, name, %Reference{} = reference, options}) do
       [
-        quote_identifier(name),
+        quote_name(name),
         " ",
         column_type(reference.type),
         column_options(options),
@@ -539,7 +539,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp column_definition(table, {:add, name, type, options})
          when type in [:serial, :bigserial] do
       [
-        quote_identifier(name),
+        quote_name(name),
         " ",
         column_type(type),
         " DEFAULT nextval('",
@@ -550,13 +550,13 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     defp column_definition(_table, {:add, name, type, options}) do
-      [quote_identifier(name), " ", column_type(type), column_options(options)]
+      [quote_name(name), " ", column_type(type), column_options(options)]
     end
 
     defp column_change({:add, name, %Reference{} = reference, options}) do
       [
         "ADD COLUMN ",
-        quote_identifier(name),
+        quote_name(name),
         " ",
         column_type(reference.type),
         column_options(options),
@@ -565,20 +565,20 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     defp column_change({:add, name, type, options}) do
-      ["ADD COLUMN ", quote_identifier(name), " ", column_type(type), column_options(options)]
+      ["ADD COLUMN ", quote_name(name), " ", column_type(type), column_options(options)]
     end
 
     defp column_change({:modify, name, type, options}) do
       [
         "ALTER COLUMN ",
-        quote_identifier(name),
+        quote_name(name),
         " TYPE ",
         column_type(type),
         column_options(options)
       ]
     end
 
-    defp column_change({:remove, name}), do: ["DROP COLUMN ", quote_identifier(name)]
+    defp column_change({:remove, name}), do: ["DROP COLUMN ", quote_name(name)]
     defp column_change({:remove, name, _type, _options}), do: column_change({:remove, name})
 
     defp column_options(options) do
@@ -645,9 +645,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp reference_expr(%Reference{} = reference) do
       [
         " REFERENCES ",
-        quote_table(reference.prefix, reference.table),
+        quote_name(reference.prefix, reference.table),
         "(",
-        quote_identifier(reference.column),
+        quote_name(reference.column),
         ")",
         reference_action(:delete, reference.on_delete),
         reference_action(:update, reference.on_update)
@@ -663,48 +663,27 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     defp column_type(type) do
       type
-      |> ecto_type_to_duckdb()
+      |> QuackDB.Ecto.Type.column_type!(:migration)
       |> QuackDB.Type.to_sql()
     end
-
-    defp ecto_type_to_duckdb(:id), do: :bigint
-    defp ecto_type_to_duckdb(:bigserial), do: :bigint
-    defp ecto_type_to_duckdb(:serial), do: :integer
-    defp ecto_type_to_duckdb(:binary_id), do: :uuid
-    defp ecto_type_to_duckdb(:integer), do: :integer
-    defp ecto_type_to_duckdb(:bigint), do: :bigint
-    defp ecto_type_to_duckdb(:float), do: :double
-    defp ecto_type_to_duckdb(:boolean), do: :boolean
-    defp ecto_type_to_duckdb(:string), do: :varchar
-    defp ecto_type_to_duckdb(:text), do: :varchar
-    defp ecto_type_to_duckdb(:binary), do: :blob
-    defp ecto_type_to_duckdb(:map), do: :json
-    defp ecto_type_to_duckdb(:decimal), do: :decimal
-    defp ecto_type_to_duckdb(:date), do: :date
-    defp ecto_type_to_duckdb(type) when type in [:time, :time_usec], do: :time
-
-    defp ecto_type_to_duckdb(type) when type in [:naive_datetime, :naive_datetime_usec],
-      do: :timestamp
-
-    defp ecto_type_to_duckdb(type) when type in [:utc_datetime, :utc_datetime_usec],
-      do: :timestamptz
-
-    defp ecto_type_to_duckdb({:array, type}), do: {:list, ecto_type_to_duckdb(type)}
-    defp ecto_type_to_duckdb(type), do: type
 
     defp table_options(nil), do: []
 
     defp index_expr(expression) when is_binary(expression), do: expression
-    defp index_expr(expression), do: quote_identifier(expression)
+    defp index_expr(expression), do: quote_name(expression)
 
     defp if_do(condition, value), do: if(condition, do: value, else: [])
 
-    defp quote_table(nil, table), do: quote_identifier(table)
-    defp quote_table(prefix, table), do: [quote_identifier(prefix), ".", quote_identifier(table)]
+    defp quote_name(nil, name), do: quote_name(name)
+    defp quote_name(prefix, name), do: [quote_name(prefix), ?., quote_name(name)]
+    defp quote_name(name) when is_atom(name), do: name |> Atom.to_string() |> quote_name()
 
-    defp quote_identifier(value) do
-      value = value |> to_string() |> String.replace("\"", "\"\"")
-      ["\"", value, "\""]
+    defp quote_name(name) when is_binary(name) do
+      if String.contains?(name, "\"") do
+        raise ArgumentError, "bad literal/field/table name #{inspect(name)} (\" is not permitted)"
+      end
+
+      [?\", name, ?\"]
     end
 
     defp normalize_result(%QuackDB.Result{} = result) do

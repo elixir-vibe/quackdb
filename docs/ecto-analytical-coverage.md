@@ -40,6 +40,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Inserts | `Repo.insert/2`, `Repo.insert_all/3` | Ecto-native | yes | yes | covered |
 | Upserts | `DO NOTHING`, `set`, `inc`, replacement fields | Ecto-native | yes | yes | covered |
 | Native append | `insert_all(..., insert_method: :append)` | Adapter option | yes | yes | covered |
+| Native append | schema types, subset columns/defaults, `RETURNING` | Adapter option | yes | partial | covered |
 | Mutations | `update_all` / `delete_all` | Ecto-native | yes | yes | covered |
 | Schema lifecycle | `Repo.update/2` / `Repo.delete/2` | Ecto-native | yes | yes | covered |
 | Migrations | create/drop/alter table, rename table/column, indexes, references | Ecto migration DDL | yes | yes | covered |

@@ -51,10 +51,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
         ) do
       case Keyword.get(opts, :insert_method, :sql) do
         :sql ->
-          Ecto.Adapters.SQL.insert_all(
+          sql_insert_all(
             adapter_meta,
             schema_meta,
-            @conn,
             header,
             rows,
             on_conflict,
@@ -64,7 +63,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
           )
 
         :append ->
-          append_insert_all(
+          Ecto.Adapters.QuackDB.AppendInsert.run(
             adapter_meta,
             schema_meta,
             header,
@@ -83,7 +82,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       end
     end
 
-    defp append_insert_all(
+    defp sql_insert_all(
            adapter_meta,
            schema_meta,
            header,
@@ -93,89 +92,17 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
            placeholders,
            opts
          ) do
-      with :ok <- assert_append_insert_all!(rows, on_conflict, returning, placeholders),
-           conn <- ecto_connection(adapter_meta),
-           insert_rows <- ecto_append_rows(header, rows),
-           options <- ecto_append_options(schema_meta, opts),
-           {:ok, %QuackDB.Result{} = result} <-
-             QuackDB.insert_rows(conn, schema_meta.source, insert_rows, options) do
-        {result.num_rows, nil}
-      else
-        {:error, %QuackDB.Error{} = error} -> raise error
-      end
-    end
-
-    defp assert_append_insert_all!(
-           {%Ecto.Query{}, _params},
-           _on_conflict,
-           _returning,
-           _placeholders
-         ) do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append does not support insert_all from queries"
+      Ecto.Adapters.SQL.insert_all(
+        adapter_meta,
+        schema_meta,
+        @conn,
+        header,
+        rows,
+        on_conflict,
+        returning,
+        placeholders,
+        opts
       )
-    end
-
-    defp assert_append_insert_all!(%Ecto.Query{}, _on_conflict, _returning, _placeholders) do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append does not support insert_all from queries"
-      )
-    end
-
-    defp assert_append_insert_all!(_rows, {_kind, _params, targets}, _returning, _placeholders)
-         when targets != [] do
-      unsupported!(:schema_inserts, "insert_method: :append does not support conflict targets")
-    end
-
-    defp assert_append_insert_all!(_rows, {:raise, _params, []}, [], []), do: :ok
-
-    defp assert_append_insert_all!(_rows, _on_conflict, _returning, _placeholders) do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append only supports plain insert_all without returning, placeholders, or upserts"
-      )
-    end
-
-    defp ecto_connection(%{pid: pool} = adapter_meta) do
-      case Process.get({Ecto.Adapters.SQL, pool}) do
-        :undefined -> ecto_pool(adapter_meta)
-        nil -> ecto_pool(adapter_meta)
-        conn -> conn
-      end
-    end
-
-    defp ecto_pool(%{partition_supervisor: {name, _}}),
-      do: {:via, PartitionSupervisor, {name, self()}}
-
-    defp ecto_pool(%{pid: pool}), do: pool
-
-    defp ecto_append_rows(header, rows) do
-      Enum.map(rows, fn row ->
-        Enum.map(header, fn field -> {field, Keyword.fetch!(row, field)} end)
-      end)
-    end
-
-    defp ecto_append_options(%{prefix: nil}, opts), do: append_options(opts)
-
-    defp ecto_append_options(%{prefix: prefix}, opts) do
-      opts
-      |> append_options()
-      |> Keyword.put(:schema, prefix)
-    end
-
-    defp append_options(opts) do
-      opts
-      |> Keyword.take([:timeout])
-      |> maybe_put_batch_size(opts)
-    end
-
-    defp maybe_put_batch_size(options, opts) do
-      case Keyword.fetch(opts, :chunk_every) do
-        {:ok, chunk_every} -> Keyword.put(options, :batch_size, chunk_every)
-        :error -> options
-      end
     end
 
     defp json_decode(value) when is_binary(value), do: Jason.decode(value)

@@ -1,6 +1,8 @@
 defmodule QuackDB.Integration.TypeMatrixTest do
   use ExUnit.Case, async: false
 
+  import QuackDB.QuackServerCase
+
   @moduletag :integration
 
   test "decodes standalone null and boolean values" do
@@ -196,12 +198,5 @@ defmodule QuackDB.Integration.TypeMatrixTest do
   defp query_rows!(sql) do
     connection = start_connection!()
     QuackDB.query!(connection, sql).rows
-  end
-
-  defp start_connection! do
-    uri = System.fetch_env!("QUACKDB_TEST_URI")
-    token = System.get_env("QUACKDB_TEST_TOKEN", "")
-
-    start_supervised!({QuackDB, uri: uri, token: token})
   end
 end

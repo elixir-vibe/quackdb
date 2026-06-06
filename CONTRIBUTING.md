@@ -15,16 +15,30 @@ rm -rf doc && mix docs
 
 Changes that affect protocol decoding/encoding, DBConnection behavior, Ecto SQL semantics, local server supervision, DuckDB helper SQL, or example workflows should also run against a real DuckDB Quack server.
 
-Start or reuse a server:
+`mix ci` runs integration tests automatically when a local DuckDB executable is available. If no executable is found, integration tests are excluded by default. To skip them explicitly:
 
 ```sh
-duckdb -interactive -init /dev/null \
-  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
+QUACKDB_SKIP_INTEGRATION=1 mix ci
 ```
 
-Then run:
+To force the managed DuckDB binary path:
 
 ```sh
+QUACKDB_TEST_DUCKDB=managed mix test --include integration
+```
+
+To use a specific executable:
+
+```sh
+QUACKDB_TEST_DUCKDB=/path/to/duckdb mix test --include integration
+```
+
+To reuse an already-running server instead of starting one from the test helper:
+
+```sh
+duckdb -csv -noheader -interactive -init /dev/null \
+  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
+
 QUACKDB_TEST_URI='http://[::1]:9494' \
 QUACKDB_TEST_TOKEN=super_secret \
 mix test --include integration

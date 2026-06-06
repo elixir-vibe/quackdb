@@ -390,7 +390,7 @@ The adapter currently covers:
 - schema-backed full selects and `Repo.get!/2`;
 - analytical reads with joins, filters, grouping, windows, CTEs, combinations, locks, fragments, and QuackDB helper macros;
 - `Repo.insert/2`, `Repo.insert_all/3`, `RETURNING`, `ON CONFLICT DO NOTHING`, and common `DO UPDATE` upserts;
-- explicit native append fast path via `insert_method: :append`;
+- explicit native append fast path via `insert_method: :append`, including schema-backed subset columns/defaults and `RETURNING`;
 - `update_all`, `delete_all`, schema `update/delete`, and transaction usage;
 - `Ecto.Adapters.SQL.explain/4`;
 - basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames.

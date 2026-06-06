@@ -149,32 +149,11 @@ defmodule QuackDB.DDL do
 
   defp schema_field_type!(schema, field) do
     schema.__schema__(:type, field)
-    |> ecto_type_to_duckdb()
+    |> QuackDB.Ecto.Type.column_type!(:schema)
   rescue
     error in ArgumentError ->
       raise ArgumentError,
             "unsupported Ecto schema type for #{inspect(schema)}.#{field}: #{Exception.message(error)}"
-  end
-
-  defp ecto_type_to_duckdb(:id), do: :bigint
-  defp ecto_type_to_duckdb(:binary_id), do: :uuid
-  defp ecto_type_to_duckdb(:integer), do: :integer
-  defp ecto_type_to_duckdb(:float), do: :double
-  defp ecto_type_to_duckdb(:boolean), do: :boolean
-  defp ecto_type_to_duckdb(:string), do: :varchar
-  defp ecto_type_to_duckdb(:binary), do: :blob
-  defp ecto_type_to_duckdb(:decimal), do: :decimal
-  defp ecto_type_to_duckdb(:date), do: :date
-  defp ecto_type_to_duckdb(:time), do: :time
-  defp ecto_type_to_duckdb(:time_usec), do: :time
-  defp ecto_type_to_duckdb(:naive_datetime), do: :timestamp
-  defp ecto_type_to_duckdb(:naive_datetime_usec), do: :timestamp
-  defp ecto_type_to_duckdb(:utc_datetime), do: :timestamptz
-  defp ecto_type_to_duckdb(:utc_datetime_usec), do: :timestamptz
-  defp ecto_type_to_duckdb({:array, type}), do: {:list, ecto_type_to_duckdb(type)}
-
-  defp ecto_type_to_duckdb(type) do
-    raise ArgumentError, inspect(type)
   end
 
   defp temporary(options) do

@@ -60,12 +60,17 @@ defmodule QuackDB do
   @spec insert_rows(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
   def insert_rows(connection, table, rows, options \\ []) when is_list(rows) do
-    query = %Query{statement: "APPEND #{table}", operation: {:insert_rows, table, rows, options}}
+    with_connection(connection, options, fn conn ->
+      query = %Query{
+        statement: "APPEND #{table}",
+        operation: {:insert_rows, table, rows, options}
+      }
 
-    case DBConnection.prepare_execute(connection, query, [], options) do
-      {:ok, _query, result} -> {:ok, result}
-      {:error, _error} = error -> error
-    end
+      case DBConnection.prepare_execute(conn, query, [], options) do
+        {:ok, _query, result} -> {:ok, result}
+        {:error, _error} = error -> error
+      end
+    end)
   end
 
   @spec insert_rows!(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
@@ -88,15 +93,17 @@ defmodule QuackDB do
   @spec insert_columns(DBConnection.conn(), String.t() | atom(), [insert_column()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
   def insert_columns(connection, table, columns, options \\ []) when is_list(columns) do
-    query = %Query{
-      statement: "APPEND #{table}",
-      operation: {:insert_columns, table, columns, options}
-    }
+    with_connection(connection, options, fn conn ->
+      query = %Query{
+        statement: "APPEND #{table}",
+        operation: {:insert_columns, table, columns, options}
+      }
 
-    case DBConnection.prepare_execute(connection, query, [], options) do
-      {:ok, _query, result} -> {:ok, result}
-      {:error, _error} = error -> error
-    end
+      case DBConnection.prepare_execute(conn, query, [], options) do
+        {:ok, _query, result} -> {:ok, result}
+        {:error, _error} = error -> error
+      end
+    end)
   end
 
   @spec insert_columns!(DBConnection.conn(), String.t() | atom(), [insert_column()], Keyword.t()) ::
@@ -164,12 +171,14 @@ defmodule QuackDB do
   @spec query(DBConnection.conn(), iodata(), [term()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
   def query(connection, statement, params \\ [], options \\ []) do
-    query = %Query{statement: statement}
+    with_connection(connection, options, fn conn ->
+      query = %Query{statement: statement}
 
-    case DBConnection.prepare_execute(connection, query, params, options) do
-      {:ok, _query, result} -> {:ok, result}
-      {:error, _error} = error -> error
-    end
+      case DBConnection.prepare_execute(conn, query, params, options) do
+        {:ok, _query, result} -> {:ok, result}
+        {:error, _error} = error -> error
+      end
+    end)
   end
 
   @spec query!(DBConnection.conn(), iodata(), [term()], Keyword.t()) :: QuackDB.Result.t()
@@ -302,6 +311,47 @@ defmodule QuackDB do
     connection
     |> stream(statement, params, options)
     |> Elixir.Stream.flat_map(&result_maps/1)
+  end
+
+  defp with_connection(connection, options, fun) when is_atom(connection) do
+    cond do
+      not function_exported?(connection, :__adapter__, 0) ->
+        fun.(connection)
+
+      not Code.ensure_loaded?(Ecto.Repo.Registry) or
+          not Code.ensure_loaded?(Ecto.Adapters.SQL) ->
+        fun.(connection)
+
+      connection.__adapter__() != Ecto.Adapters.QuackDB ->
+        raise ArgumentError,
+              "expected a QuackDB connection or Ecto.Adapters.QuackDB repo, got: #{inspect(connection)}"
+
+      true ->
+        connection.checkout(
+          fn ->
+            connection
+            |> ecto_adapter_meta()
+            |> checked_out_ecto_connection()
+            |> fun.()
+          end,
+          options
+        )
+    end
+  end
+
+  defp with_connection(connection, _options, fun), do: fun.(connection)
+
+  defp ecto_adapter_meta(repo) do
+    repo.get_dynamic_repo()
+    |> Ecto.Repo.Registry.lookup()
+  end
+
+  defp checked_out_ecto_connection(%{pid: pool}) do
+    case Process.get({Ecto.Adapters.SQL, pool}) do
+      nil -> raise ArgumentError, "Ecto repo checkout did not provide a QuackDB connection"
+      :undefined -> raise ArgumentError, "Ecto repo checkout did not provide a QuackDB connection"
+      connection -> connection
+    end
   end
 
   defp result_maps(%QuackDB.Result{columns: columns, rows: rows})

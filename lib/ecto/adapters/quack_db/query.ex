@@ -96,7 +96,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       ctes =
         Enum.map(queries, fn
           {name, %{operation: :all}, %Ecto.Query{} = query} ->
-            [quote_identifier(name), " AS (", all(query), ")"]
+            [quote_name(name), " AS (", all(query), ")"]
 
           {name, operation, %Ecto.Query{}} ->
             unsupported!(
@@ -165,7 +165,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp selected_fields(binding, fields, context) do
       fields
-      |> Enum.map(fn field -> [binding_alias(binding, context), ".", quote_identifier(field)] end)
+      |> Enum.map(fn field -> [binding_alias(binding, context), ".", quote_name(field)] end)
       |> Enum.intersperse(", ")
     end
 
@@ -180,7 +180,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         fields when is_list(fields) ->
           fields
           |> Enum.map(fn field ->
-            [binding_alias(binding, context), ".", quote_identifier(field)]
+            [binding_alias(binding, context), ".", quote_name(field)]
           end)
           |> Enum.intersperse(", ")
 
@@ -199,7 +199,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         field = schema_field(schema, field, binding, source, context)
 
         if field.alias? do
-          [field.expression, " AS ", quote_identifier(field.name)]
+          [field.expression, " AS ", quote_name(field.name)]
         else
           field.expression
         end
@@ -219,7 +219,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp subquery_select_fields(_subquery), do: nil
 
     defp schema_field(schema, field, binding, source, context) do
-      expression = [binding_alias(binding, context), ".", quote_identifier(source)]
+      expression = [binding_alias(binding, context), ".", quote_name(source)]
 
       case schema.__schema__(:type, field) do
         :binary_id ->
@@ -238,10 +238,10 @@ if Code.ensure_loaded?(Ecto.Query) do
       fields
       |> Enum.map(fn
         {_alias_name, {:selected_as, _meta, [expression, name]}} ->
-          [select_value_expr(expression, from, context), " AS ", quote_identifier(name)]
+          [select_value_expr(expression, from, context), " AS ", quote_name(name)]
 
         {alias_name, expression} ->
-          [select_value_expr(expression, from, context), " AS ", quote_identifier(alias_name)]
+          [select_value_expr(expression, from, context), " AS ", quote_name(alias_name)]
       end)
       |> Enum.intersperse(", ")
     end
@@ -410,7 +410,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       if QuackDB.Source.source?(table) do
         table
       else
-        quote_identifier(table)
+        quote_name(table)
       end
     end
 
@@ -480,12 +480,12 @@ if Code.ensure_loaded?(Ecto.Query) do
       Enum.flat_map(expressions, fn
         {:set, fields} ->
           Enum.map(fields, fn {field, expression} ->
-            [quote_identifier(field), " = ", expr(expression)]
+            [quote_name(field), " = ", expr(expression)]
           end)
 
         {:inc, fields} ->
           Enum.map(fields, fn {field, expression} ->
-            quoted = quote_identifier(field)
+            quoted = quote_name(field)
             [quoted, " = ", quoted, " + ", expr(expression)]
           end)
 
@@ -589,7 +589,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp windows(windows, context) do
       definitions =
         Enum.map(windows, fn {name, window} ->
-          [quote_identifier(name), " AS (", window_expr(window.expr, context), ")"]
+          [quote_name(name), " AS (", window_expr(window.expr, context), ")"]
         end)
 
       [" WINDOW ", Enum.intersperse(definitions, ", ")]
@@ -656,7 +656,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr({{:., _meta, [{:&, _binding_meta, [binding]}, field]}, _call_meta, []}, context)
          when is_integer(binding) and is_atom(field) do
-      [binding_alias(binding, context), ".", quote_identifier(field)]
+      [binding_alias(binding, context), ".", quote_name(field)]
     end
 
     defp expr(
@@ -664,7 +664,7 @@ if Code.ensure_loaded?(Ecto.Query) do
            context
          )
          when is_atom(alias) and is_atom(field) do
-      [parent_binding_alias(alias, context), ".", quote_identifier(field)]
+      [parent_binding_alias(alias, context), ".", quote_name(field)]
     end
 
     defp expr({op, _meta, [left, right]}, context) when op in [:==, :!=, :>, :<, :>=, :<=] do
@@ -710,7 +710,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr({{:., _meta, [{:&, _binding_meta, [binding]}, field]}, _call_meta, []})
          when is_integer(binding) and is_atom(field) do
-      ["q", to_string(binding), ".", quote_identifier(field)]
+      ["q", to_string(binding), ".", quote_name(field)]
     end
 
     defp expr({aggregate, _meta, [expression]})
@@ -775,10 +775,10 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr({:fragment, _meta, parts}), do: fragment(parts)
 
-    defp expr({:selected_as, _meta, [name]}) when is_atom(name), do: quote_identifier(name)
+    defp expr({:selected_as, _meta, [name]}) when is_atom(name), do: quote_name(name)
 
     defp expr({:selected_as, _meta, [expression, name]}) when is_atom(name),
-      do: [expr(expression), " AS ", quote_identifier(name)]
+      do: [expr(expression), " AS ", quote_name(name)]
 
     defp expr({:type, _meta, [expression, type]}) do
       ["CAST(", expr(expression), " AS ", ecto_cast_type!(type), ")"]
@@ -820,7 +820,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       ["(", expr(expression), " IS NULL)"]
     end
 
-    defp expr({:identifier, _meta, [value]}) when is_binary(value), do: quote_identifier(value)
+    defp expr({:identifier, _meta, [value]}) when is_binary(value), do: quote_name(value)
     defp expr({:^, _meta, [_index]}), do: "?"
     defp expr({:^, _meta, [_index, _count]}), do: "?"
 
@@ -836,7 +836,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       unsupported!(:expression, "unsupported Ecto query expression: #{inspect(other)}")
     end
 
-    defp over_expr(window) when is_atom(window), do: quote_identifier(window)
+    defp over_expr(window) when is_atom(window), do: quote_name(window)
     defp over_expr(window) when is_list(window), do: ["(", window_expr(window), ")"]
 
     defp fragment(parts), do: fragment(parts, root_context(%Ecto.Query{}))
@@ -1003,9 +1003,14 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp order_direction(:desc_nulls_last), do: "DESC NULLS LAST"
     defp order_direction(:desc_nulls_first), do: "DESC NULLS FIRST"
 
-    defp quote_identifier(value) do
-      value = value |> to_string() |> String.replace("\"", "\"\"")
-      ["\"", value, "\""]
+    defp quote_name(name) when is_atom(name), do: name |> Atom.to_string() |> quote_name()
+
+    defp quote_name(name) when is_binary(name) do
+      if String.contains?(name, "\"") do
+        raise ArgumentError, "bad literal/field/table name #{inspect(name)} (\" is not permitted)"
+      end
+
+      [?\", name, ?\"]
     end
 
     defp unsupported!(feature, message) do

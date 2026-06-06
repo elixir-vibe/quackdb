@@ -629,16 +629,29 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-Use `insert_method: :append` to opt into Quack's native append protocol for plain `insert_all` workloads. This fast path does not support query inserts, streams, `:returning`, placeholders, or upserts; use `QuackDB.insert_stream!/4` for streaming rows.
+Use `insert_method: :append` to opt into Quack's native append protocol for bulk `insert_all` workloads. This path is explicit: ordinary `insert_all` keeps using Ecto SQL generation unless you pass the option.
 
 ```elixir
 MyApp.AnalyticsRepo.insert_all(
-  "events",
-  [[id: 1, name: "duck"], [id: 2, name: "goose"]],
+  Event,
+  [[name: "duck"], [name: "goose"]],
   insert_method: :append,
   chunk_every: 10_000
 )
 ```
+
+For schema-backed inserts, QuackDB derives append types from the Ecto schema. That means nullable columns can be all `nil` in a batch without passing manual `:columns`, and omitted schema fields can be filled by DuckDB defaults or generated values. `RETURNING` is supported through a temporary append table followed by `INSERT ... RETURNING`:
+
+```elixir
+MyApp.AnalyticsRepo.insert_all(
+  Event,
+  [[name: "duck"], [name: "goose"]],
+  insert_method: :append,
+  returning: [:id]
+)
+```
+
+The append insert path does not support query inserts, placeholders, or upserts/conflict targets. For streaming rows outside Ecto, use `QuackDB.insert_stream!/4`; it can take either a QuackDB connection or a QuackDB-backed Ecto repo.
 
 For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` and `CREATE TABLE AS` statements:
 

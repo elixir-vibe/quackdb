@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Added schema-backed Ecto append support for subset columns/defaulted values and `RETURNING` through a temporary append table plus Ecto insert-from-query SQL generation.
+- Added support for using a QuackDB-backed Ecto repo directly with public `QuackDB` query and native append helpers.
+
+### Changed
+
+- Integration tests now auto-start a shared local Quack server when DuckDB is available, while still honoring explicit `QUACKDB_TEST_URI`/`QUACKDB_TEST_TOKEN` configuration.
+- Improved `QuackDB.Server` startup readiness by detecting the `quack_serve` result row from DuckDB stdout, with HTTP polling retained as a fallback.
+- Consolidated Ecto type-to-DuckDB type mapping for migration DDL, schema DDL helpers, and native append inference.
+
 ## 0.4.2 - 2026-05-31
 
 ### Added

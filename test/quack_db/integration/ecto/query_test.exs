@@ -520,6 +520,54 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto append insert_all can omit defaulted schema columns" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "typed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "typed_events",
+      id: "INTEGER DEFAULT 42",
+      event_date: :date,
+      tags: {:list, :varchar}
+    )
+
+    assert {1, [%{id: 42}]} =
+             QuackDB.IntegrationRepo.insert_all(
+               QuackDB.TestSchemas.TypedEvent,
+               [[event_date: nil, tags: nil]],
+               insert_method: :append,
+               returning: [:id]
+             )
+
+    assert %{rows: [[42, nil, nil]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, event_date, tags FROM typed_events")
+  end
+
+  test "Ecto append returning works inside transactions" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "typed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "typed_events",
+      id: "INTEGER DEFAULT 42",
+      event_date: :date,
+      tags: {:list, :varchar}
+    )
+
+    assert {:ok, {1, [%{id: 42}]}} =
+             QuackDB.IntegrationRepo.transaction(fn ->
+               QuackDB.IntegrationRepo.insert_all(
+                 QuackDB.TestSchemas.TypedEvent,
+                 [[event_date: nil, tags: nil]],
+                 insert_method: :append,
+                 returning: [:id]
+               )
+             end)
+
+    assert %{rows: [[42, nil, nil]]} =
+             QuackDB.IntegrationRepo.query!("SELECT id, event_date, tags FROM typed_events")
+  end
+
   test "Ecto Repo.all/2 executes simple read-only queries against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_all")
