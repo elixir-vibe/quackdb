@@ -25,6 +25,9 @@ if Code.ensure_loaded?(Ecto.Query.API) do
 
       assert Code.ensure_loaded?(QuackDB.Ecto.Predicates)
       assert {:docs_v1, _, :elixir, _, :hidden, _, _} = Code.fetch_docs(QuackDB.Ecto.Predicates)
+
+      assert Code.ensure_loaded?(QuackDB.Ecto.Lambda)
+      assert {:docs_v1, _, :elixir, _, :hidden, _, _} = Code.fetch_docs(QuackDB.Ecto.Lambda)
     end
 
     test "accepted helper names remain available" do

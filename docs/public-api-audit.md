@@ -1,6 +1,30 @@
-# Public API audit for 0.4.0
+# Public API audit
 
-This audit tracks public API added after `0.3.0` and records the accepted naming decisions for `0.4.0`. No open naming decisions remain for this release.
+This audit tracks public API added after `0.3.0` and records accepted naming decisions before release cuts. No open naming decisions remain for the current unreleased changes.
+
+## Unreleased API additions after 0.4.2
+
+New public surfaces since `0.4.2`:
+
+- Ecto append behavior: `Repo.insert_all(..., insert_method: :append)` explicitly opts into native append, including schema-backed subset/default columns and `returning` support through an internal temporary-table path.
+- Repo-backed public helpers: `QuackDB.query/4`, `insert_rows/4`, `insert_columns/4`, and `insert_stream/4` accept a QuackDB-backed Ecto repo as the connection argument.
+- Direct SQL helpers: `QuackDB.SQL.star/1`, `columns/1,2`, `unpack_columns/1,2`, `pivot/2`, `unpivot/2`, `grouping_sets/1`, `rollup/1`, and `cube/1`.
+- Ecto star helpers: `QuackDB.Ecto.Star.star/1`, `columns/1,2`, and `unpack_columns/1,2`.
+- Direct LIST helpers: `QuackDB.List.length/1`, `extract/2`, `slice/3,4`, `sort/1`, `reverse_sort/1`, `distinct/1`, `unique/1`, `position/2`, `intersect/2`, and `concat/2`.
+- Ecto LIST helpers: `QuackDB.Ecto.List.list_length/1`, `extract/2`, `slice/3,4`, `sort/1`, `reverse_sort/1`, `distinct/1`, `unique/1`, `position/2`, `intersect_list/2`, `concat/2`, `list_filter/2`, `list_transform/2`, and `list_reduce/2,3`.
+- Direct MAP and STRUCT helpers: `QuackDB.Map` and `QuackDB.Struct`.
+- Ecto MAP and STRUCT helpers: `QuackDB.Ecto.Map` and `QuackDB.Ecto.Struct` focused imports plus explicit aliases for broad `use QuackDB.Ecto` imports.
+
+Accepted naming decisions for unreleased changes:
+
+- Keep append opt-in explicit with `insert_method: :append`; do not add `insert_method: :auto`.
+- Keep temporary append/returning internals private; do not add a public `append_insert_all` helper.
+- Keep the LIST lambda AST translator hidden. LIST lambda macros are public; the translator is an implementation detail.
+- Render DuckDB's Python-style lambda syntax (`lambda x : ...`) instead of deprecated arrow syntax.
+- Keep LIST/MAP/STRUCT natural names in focused modules, but use explicit aliases such as `contains_list/2`, `intersect_list/2`, `contains_map/2`, `map_extract_value/2`, `contains_struct/2`, and `struct_extract/2` for broad `use QuackDB.Ecto` imports where names would conflict.
+- Keep broad `contains/2` dispatch limited to obvious text/spatial cases until LIST/MAP/STRUCT expression typing is reliable enough to dispatch without surprises.
+- Keep PIVOT, UNPIVOT, and GROUPING helpers as `QuackDB.SQL` builders rather than Ecto query DSL extensions.
+
 
 ## Ecto analytical helpers
 
