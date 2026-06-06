@@ -107,11 +107,11 @@ children =
 You can also start DuckDB manually:
 
 ```sh
-duckdb -interactive -init /dev/null \
+duckdb -csv -noheader -interactive -init /dev/null \
   -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
 ```
 
-`quack:localhost` often binds on IPv6 localhost, so examples use `http://[::1]:9494`.
+`quack:localhost` often binds on IPv6 localhost, so examples use `http://[::1]:9494`. The supervised server detects readiness from the `quack_serve` result row printed by the DuckDB CLI and falls back to HTTP probes for custom daemon commands or output handling.
 
 ## DBConnection client
 
@@ -339,12 +339,12 @@ frame = DataFrame.new(id: [1, 2], name: ["duck", "goose"])
 QuackExplorer.insert_dataframe!(conn, "events", frame)
 ```
 
-Enumerable rows can be streamed into native append batches:
+Enumerable rows can be streamed into native append batches. The connection can be a QuackDB connection or a QuackDB-backed Ecto repo:
 
 ```elixir
 File.stream!("events.ndjson")
 |> Stream.map(&Jason.decode!/1)
-|> QuackDB.insert_stream!(conn, "events", chunk_every: 10_000)
+|> QuackDB.insert_stream!(MyApp.AnalyticsRepo, "events", chunk_every: 10_000)
 ```
 
 Any `Table.Reader`-compatible data can be appended through the same column append path:
@@ -353,7 +353,7 @@ Any `Table.Reader`-compatible data can be appended through the same column appen
 QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
 ```
 
-Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. See the [type support guide](guides/type-support.md) and the [Explorer guide](guides/explorer.md).
+Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Ecto `insert_all(..., insert_method: :append)` can use schema types for nullable batches, omitted/defaulted columns, and `RETURNING` through a temporary append table. See the [type support guide](guides/type-support.md), [getting started guide](guides/getting-started.md), and the [Explorer guide](guides/explorer.md).
 
 ## Results, Livebook, and telemetry
 
@@ -451,10 +451,4 @@ mix ci
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks, example smoke tests, package audit steps, and release dry-run notes.
 
-Integration tests are skipped by default. To run them against a Quack server:
-
-```sh
-QUACKDB_TEST_URI='http://[::1]:9494' \
-QUACKDB_TEST_TOKEN=super_secret \
-mix test --include integration
-```
+Integration tests run automatically when a local DuckDB executable is available. Set `QUACKDB_SKIP_INTEGRATION=1` to skip them, `QUACKDB_TEST_DUCKDB=managed` to force the managed binary path, or `QUACKDB_TEST_URI` / `QUACKDB_TEST_TOKEN` to reuse an external Quack server.
