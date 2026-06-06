@@ -11,6 +11,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
         QuackDB.Ecto.Regex,
         QuackDB.Ecto.Series,
         QuackDB.Ecto.Spatial,
+        QuackDB.Ecto.Star,
         QuackDB.Ecto.Text,
         QuackDB.Ecto.WindowFrames
       ]
@@ -36,7 +37,14 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       assert exported_macro?(QuackDB.Ecto.List, :contains_list, 2)
       assert exported_macro?(QuackDB.Ecto.List, :has_any, 2)
       assert exported_macro?(QuackDB.Ecto.List, :has_all, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :list_length, 1)
+      assert exported_macro?(QuackDB.Ecto.List, :extract, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :slice, 3)
+      assert exported_macro?(QuackDB.Ecto.List, :slice, 4)
+      assert exported_macro?(QuackDB.Ecto.List, :sort, 1)
+      assert exported_macro?(QuackDB.Ecto.List, :intersect_list, 2)
       assert exported_macro?(QuackDB.Ecto.List, :unnest, 1)
+      assert exported_macro?(QuackDB.Ecto.Star, :columns, 1)
     end
 
     defp exported_macro?(module, name, arity) do

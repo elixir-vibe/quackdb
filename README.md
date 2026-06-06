@@ -269,14 +269,20 @@ DuckDB regexes use RE2, so `~r` literals are intended for the syntax subset shar
 
 ### List predicates
 
-DuckDB LIST/ARRAY helpers map directly to `list_contains`, `list_has_any`, `list_has_all`, and `unnest`. `use QuackDB.Ecto` imports non-conflicting list helpers by default; use `contains_list/2` to avoid ambiguity with text/spatial `contains/2`.
+DuckDB LIST/ARRAY helpers map directly to common list functions such as `list_contains`, `list_has_any`, `list_has_all`, `len`, `list_extract`, `list_sort`, `list_intersect`, and `unnest`. `use QuackDB.Ecto` imports non-conflicting list helpers by default; use `contains_list/2` and `intersect_list/2` to avoid ambiguity with text/spatial `contains/2` and Ecto set-operation `intersect/2`.
 
 ```elixir
 use QuackDB.Ecto
 
 from fragment in "fragments",
   where: contains_list(fragment.terms, ^term_id) and has_any(fragment.terms, ^optional_term_ids),
-  select: %{id: fragment.id, term: unnest(fragment.terms)}
+  select: %{
+    id: fragment.id,
+    term_count: list_length(fragment.terms),
+    first_term: extract(fragment.terms, 1),
+    matching_terms: intersect_list(fragment.terms, ^optional_term_ids),
+    term: unnest(fragment.terms)
+  }
 ```
 
 ### Spatial queries

@@ -515,7 +515,7 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-LIST columns can use helpers for containment, intersection, all-required matching, and unnesting. `use QuackDB.Ecto` imports `contains_list/2`, `has_any/2`, `has_all/2`, and `unnest/1` by default:
+LIST columns can use helpers for containment, intersection, all-required matching, extraction, sorting, slicing, and unnesting. `use QuackDB.Ecto` imports list helpers by default; `contains_list/2` and `intersect_list/2` avoid ambiguity with shared predicate/set-operation names:
 
 ```elixir
 use QuackDB.Ecto
@@ -523,7 +523,13 @@ use QuackDB.Ecto
 MyApp.AnalyticsRepo.all(
   from fragment in "fragments",
     where: contains_list(fragment.terms, ^term_id) and has_any(fragment.terms, ^optional_term_ids),
-    select: %{id: fragment.id, term: unnest(fragment.terms)}
+    select: %{
+      id: fragment.id,
+      term_count: list_length(fragment.terms),
+      first_term: extract(fragment.terms, 1),
+      matching_terms: intersect_list(fragment.terms, ^optional_term_ids),
+      term: unnest(fragment.terms)
+    }
 )
 ```
 
