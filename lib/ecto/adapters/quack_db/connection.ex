@@ -87,8 +87,27 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     @impl true
     def delete_all(%Ecto.Query{} = query), do: Ecto.Adapters.QuackDB.Query.delete_all(query)
 
-    @impl true
-    def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
+    if {:insert, 8} in Ecto.Adapters.SQL.Connection.behaviour_info(:callbacks) do
+      def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
+        insert(prefix, table, header, rows, on_conflict, returning, placeholders, [])
+      end
+
+      @impl true
+      def insert(prefix, table, header, rows, on_conflict, returning, placeholders, _options) do
+        insert_sql(prefix, table, header, rows, on_conflict, returning, placeholders)
+      end
+    else
+      @impl true
+      def insert(prefix, table, header, rows, on_conflict, returning, placeholders) do
+        insert_sql(prefix, table, header, rows, on_conflict, returning, placeholders)
+      end
+
+      def insert(prefix, table, header, rows, on_conflict, returning, placeholders, _options) do
+        insert_sql(prefix, table, header, rows, on_conflict, returning, placeholders)
+      end
+    end
+
+    defp insert_sql(prefix, table, header, rows, on_conflict, returning, placeholders) do
       [
         "INSERT INTO ",
         quote_name(prefix, table),

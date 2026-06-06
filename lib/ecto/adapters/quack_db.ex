@@ -105,7 +105,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       )
     end
 
-    defp json_decode(value) when is_binary(value), do: Jason.decode(value)
+    defp json_decode(value) when is_binary(value), do: JSON.decode(value)
     defp json_decode(value), do: {:ok, value}
 
     defp unsupported!(feature, message) do

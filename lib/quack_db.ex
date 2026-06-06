@@ -343,7 +343,7 @@ defmodule QuackDB do
 
   defp ecto_adapter_meta(repo) do
     repo.get_dynamic_repo()
-    |> Ecto.Repo.Registry.lookup()
+    |> then(&apply(Ecto.Repo.Registry, :lookup, [&1]))
   end
 
   defp checked_out_ecto_connection(%{pid: pool}) do

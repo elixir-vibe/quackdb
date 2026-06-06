@@ -149,7 +149,7 @@ defmodule QuackDB.DDL do
 
   defp schema_field_type!(schema, field) do
     schema.__schema__(:type, field)
-    |> QuackDB.Ecto.Type.column_type!(:schema)
+    |> then(&apply(QuackDB.Ecto.Type, :column_type!, [&1, :schema]))
   rescue
     error in ArgumentError ->
       raise ArgumentError,
