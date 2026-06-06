@@ -26,6 +26,45 @@ defmodule QuackDB.SQLTest do
              "CALL quack_serve('quack:localhost', token = 'super_secret');"
   end
 
+  test "builds DuckDB pivoting and grouping SQL" do
+    assert QuackDB.SQL.pivot(:events, on: :kind, using: [sum: :n])
+           |> IO.iodata_to_binary() ==
+             ~S[PIVOT "events" ON "kind" USING sum("n")]
+
+    assert QuackDB.SQL.pivot(:events,
+             on: [:year, :kind],
+             using: [sum: :n, count: {:expr, "*"}],
+             group_by: [:region]
+           )
+           |> IO.iodata_to_binary() ==
+             ~S[PIVOT "events" ON "year", "kind" USING sum("n"), count(*) GROUP BY "region"]
+
+    assert QuackDB.SQL.unpivot(:events, on: [:duck, :goose], name: :kind, value: :n)
+           |> IO.iodata_to_binary() ==
+             ~S[UNPIVOT "events" ON "duck", "goose" INTO NAME "kind" VALUE "n"]
+
+    assert QuackDB.SQL.grouping_sets([[:category, :kind], [:category], []])
+           |> IO.iodata_to_binary() ==
+             ~S[GROUPING SETS (("category", "kind"), ("category"), ())]
+
+    assert QuackDB.SQL.rollup([:category, :kind]) |> IO.iodata_to_binary() ==
+             ~S[ROLLUP ("category", "kind")]
+
+    assert QuackDB.SQL.cube([:category, {:expr, "date_trunc('day', ts)"}])
+           |> IO.iodata_to_binary() ==
+             ~S[CUBE ("category", date_trunc('day', ts))]
+  end
+
+  test "rejects missing pivoting options" do
+    assert_raise ArgumentError, ~r/missing required option :on/, fn ->
+      QuackDB.SQL.pivot("events", using: ["sum(n)"]) |> IO.iodata_to_binary()
+    end
+
+    assert_raise ArgumentError, ~r/missing required option :using/, fn ->
+      QuackDB.SQL.pivot("events", on: :kind) |> IO.iodata_to_binary()
+    end
+  end
+
   test "builds DuckDB star and columns expressions" do
     assert QuackDB.SQL.star(exclude: [:payload, "debug flag"]) |> IO.iodata_to_binary() ==
              ~S[* EXCLUDE ("payload", "debug flag")]

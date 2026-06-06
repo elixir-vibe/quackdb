@@ -101,6 +101,64 @@ defmodule QuackDB.SQL do
     ]
   end
 
+  @doc "Builds a DuckDB `PIVOT` statement."
+  @spec pivot(iodata(), keyword()) :: iodata()
+  def pivot(source, options) when is_list(options) do
+    on = required_option!(options, :on)
+    using = required_option!(options, :using)
+
+    [
+      "PIVOT ",
+      source_expr(source),
+      " ON ",
+      on |> List.wrap() |> Enum.map(&projection_expr/1) |> Enum.intersperse(", "),
+      " USING ",
+      using |> List.wrap() |> Enum.map(&aggregate_expr/1) |> Enum.intersperse(", "),
+      pivot_group_by(options)
+    ]
+  end
+
+  @doc "Builds a DuckDB `UNPIVOT` statement."
+  @spec unpivot(iodata(), keyword()) :: iodata()
+  def unpivot(source, options) when is_list(options) do
+    on = required_option!(options, :on)
+    name = Keyword.get(options, :name, :name)
+    value = Keyword.get(options, :value, :value)
+
+    [
+      "UNPIVOT ",
+      source_expr(source),
+      " ON ",
+      on |> List.wrap() |> Enum.map(&projection_expr/1) |> Enum.intersperse(", "),
+      " INTO NAME ",
+      QuackDB.Type.quote_identifier(name),
+      " VALUE ",
+      QuackDB.Type.quote_identifier(value)
+    ]
+  end
+
+  @doc "Builds a DuckDB `GROUPING SETS (...)` grouping expression."
+  @spec grouping_sets([[atom() | String.t() | {:expr, iodata()}]]) :: iodata()
+  def grouping_sets(sets) when is_list(sets) do
+    [
+      "GROUPING SETS (",
+      sets |> Enum.map(&grouping_set/1) |> Enum.intersperse(", "),
+      ")"
+    ]
+  end
+
+  @doc "Builds a DuckDB `ROLLUP (...)` grouping expression."
+  @spec rollup([atom() | String.t() | {:expr, iodata()}]) :: iodata()
+  def rollup(columns) when is_list(columns) do
+    ["ROLLUP (", columns |> Enum.map(&projection_expr/1) |> Enum.intersperse(", "), ")"]
+  end
+
+  @doc "Builds a DuckDB `CUBE (...)` grouping expression."
+  @spec cube([atom() | String.t() | {:expr, iodata()}]) :: iodata()
+  def cube(columns) when is_list(columns) do
+    ["CUBE (", columns |> Enum.map(&projection_expr/1) |> Enum.intersperse(", "), ")"]
+  end
+
   @doc "Builds a DuckDB star expression such as `* EXCLUDE (...)` or `table.* REPLACE (...)`."
   @spec star(keyword()) :: iodata()
   def star(options \\ []) when is_list(options) do
@@ -276,6 +334,47 @@ defmodule QuackDB.SQL do
   end
 
   def literal(value), do: unsupported_parameter(value)
+
+  defp required_option!(options, key) do
+    case Keyword.fetch(options, key) do
+      {:ok, value} -> value
+      :error -> raise ArgumentError, "missing required option #{inspect(key)}"
+    end
+  end
+
+  defp pivot_group_by(options) do
+    case Keyword.get(options, :group_by, []) |> List.wrap() do
+      [] -> []
+      columns -> [" GROUP BY ", columns |> Enum.map(&projection_expr/1) |> Enum.intersperse(", ")]
+    end
+  end
+
+  defp grouping_set(columns) when is_list(columns) do
+    ["(", columns |> Enum.map(&projection_expr/1) |> Enum.intersperse(", "), ")"]
+  end
+
+  defp source_expr({:expr, expression}), do: expression
+  defp source_expr(value), do: QuackDB.Type.quote_identifier(value)
+
+  defp projection_expr({:expr, expression}), do: expression
+  defp projection_expr(value), do: QuackDB.Type.quote_identifier(value)
+
+  defp aggregate_expr({function, column}) when is_atom(function) do
+    [identifier!(function, :aggregate), "(", projection_expr(column), ")"]
+  end
+
+  defp aggregate_expr({function, column, alias_name}) when is_atom(function) do
+    [
+      identifier!(function, :aggregate),
+      "(",
+      projection_expr(column),
+      ") AS ",
+      QuackDB.Type.quote_identifier(alias_name)
+    ]
+  end
+
+  defp aggregate_expr({:expr, expression}), do: expression
+  defp aggregate_expr(expression), do: expression
 
   defp star_base(options) do
     case Keyword.fetch(options, :qualifier) do

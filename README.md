@@ -267,6 +267,21 @@ from event in "events",
 
 DuckDB regexes use RE2, so `~r` literals are intended for the syntax subset shared with Elixir regexes.
 
+### Pivoting and grouping extensions
+
+DuckDB statement-level syntax such as `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` is best handled with small SQL builders rather than raw strings:
+
+```elixir
+MyApp.AnalyticsRepo.query!(QuackDB.SQL.pivot(:events,
+  on: :kind,
+  using: [sum: :n]
+))
+
+QuackDB.SQL.grouping_sets([[:category, :kind], [:category], []])
+QuackDB.SQL.rollup([:category, :kind])
+QuackDB.SQL.cube([:category, :kind])
+```
+
 ### List predicates
 
 DuckDB LIST/ARRAY helpers map directly to common list functions such as `list_contains`, `list_has_any`, `list_has_all`, `len`, `list_extract`, `list_sort`, `list_intersect`, and `unnest`. `use QuackDB.Ecto` imports non-conflicting list helpers by default; use `contains_list/2` and `intersect_list/2` to avoid ambiguity with text/spatial `contains/2` and Ecto set-operation `intersect/2`.

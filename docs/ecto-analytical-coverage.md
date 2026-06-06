@@ -32,9 +32,9 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Regular expressions | regexp_extract/matches/replace/split helpers | Helper | yes | yes | covered |
 | Text helpers | contains/starts_with/split_part/string_split | Helper | yes | yes | covered |
 | Time series | date_trunc/time_bucket/generate_series | Helper/raw | yes | yes | partial |
-| Grouping extensions | grouping sets/rollup/cube | Raw SQL | no | yes | partial |
+| Grouping extensions | grouping sets/rollup/cube | Raw SQL helper | yes | yes | partial |
 | QUALIFY | window filtering | Ecto subquery or raw SQL | yes | yes | partial |
-| Pivoting | pivot/unpivot | Raw SQL | no | yes | partial |
+| Pivoting | pivot/unpivot | Raw SQL helper | yes | yes | partial |
 | Sampling | using sample | Raw SQL | no | yes | partial |
 | Set operations | union/intersect/except | Ecto combinations | yes | yes | covered |
 | Inserts | `Repo.insert/2`, `Repo.insert_all/3` | Ecto-native | yes | yes | covered |
@@ -243,6 +243,31 @@ Use `QuackDB.Ecto.List` for common LIST/ARRAY operations such as `contains_list/
 Use `QuackDB.Ecto.Map` and `QuackDB.Ecto.Struct` for common MAP/STRUCT operations. Focused imports expose natural helper names such as `contains/2`, `extract/2`, `values/1`, and `concat/2`. Broad `use QuackDB.Ecto` imports exclude those ambiguous names and expose explicit aliases such as `contains_map/2`, `map_extract_value/2`, `map_keys/1`, `contains_struct/2`, `struct_extract/2`, and `struct_values/1`.
 
 Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until QuackDB depends on an Ecto release that includes macro-expanded frame helper support.
+
+`QuackDB.SQL` provides small builders for DuckDB statement/clause syntax that is clearer as SQL-builder composition than as Ecto AST.
+
+```elixir
+Repo.query!(QuackDB.SQL.pivot(:events,
+  on: :kind,
+  using: [sum: :n]
+))
+
+Repo.query!(QuackDB.SQL.unpivot(:wide_events,
+  on: [:duck, :goose],
+  name: :kind,
+  value: :n
+))
+```
+
+Grouping extensions keep identifier quoting centralized and can be composed into larger query builders or setup statements.
+
+```elixir
+QuackDB.SQL.grouping_sets([[:category, :kind], [:category], []])
+QuackDB.SQL.rollup([:category, :kind])
+QuackDB.SQL.cube([:category, :kind])
+```
+
+Use explicit `{:expr, sql}` only when the expression cannot be represented by identifiers or aggregate tuples.
 
 ## Boundaries
 

@@ -22,14 +22,21 @@ defmodule QuackDB.Integration.AnalyticalSQLTest do
   test "raw SQL supports PIVOT" do
     start_repo!()
 
+    source = """
+    (
+      SELECT 'duck' AS kind, 2 AS n
+      UNION ALL
+      SELECT 'goose' AS kind, 3 AS n
+    )
+    """
+
     assert {:ok, %{rows: rows} = result} =
-             QuackDB.IntegrationRepo.query("""
-             PIVOT (
-               SELECT 'duck' AS kind, 2 AS n
-               UNION ALL
-               SELECT 'goose' AS kind, 3 AS n
-             ) ON kind USING sum(n)
-             """)
+             QuackDB.IntegrationRepo.query(
+               QuackDB.SQL.pivot({:expr, source},
+                 on: :kind,
+                 using: [sum: :n]
+               )
+             )
 
     assert result.columns == ["duck", "goose"]
     assert rows == [[2, 3]]
@@ -38,13 +45,17 @@ defmodule QuackDB.Integration.AnalyticalSQLTest do
   test "raw SQL supports UNPIVOT" do
     start_repo!()
 
+    statement = [
+      QuackDB.SQL.unpivot({:expr, "(SELECT 2 AS duck, 3 AS goose)"},
+        on: [:duck, :goose],
+        name: :kind,
+        value: :n
+      ),
+      " ORDER BY kind"
+    ]
+
     assert {:ok, %{columns: ["kind", "n"], rows: rows}} =
-             QuackDB.IntegrationRepo.query("""
-             UNPIVOT (SELECT 2 AS duck, 3 AS goose)
-             ON duck, goose
-             INTO NAME kind VALUE n
-             ORDER BY kind
-             """)
+             QuackDB.IntegrationRepo.query(statement)
 
     assert rows == [["duck", 2], ["goose", 3]]
   end
@@ -52,13 +63,16 @@ defmodule QuackDB.Integration.AnalyticalSQLTest do
   test "raw SQL supports GROUPING SETS" do
     start_repo!()
 
+    statement = [
+      "SELECT category, kind, sum(n)::INTEGER AS total ",
+      "FROM (VALUES ('bird', 'duck', 2), ('bird', 'goose', 3), ('fish', 'salmon', 5)) AS events(category, kind, n) ",
+      "GROUP BY ",
+      QuackDB.SQL.grouping_sets([[:category, :kind], [:category], []]),
+      " ORDER BY category NULLS LAST, kind NULLS LAST"
+    ]
+
     assert {:ok, %{columns: ["category", "kind", "total"], rows: rows}} =
-             QuackDB.IntegrationRepo.query("""
-             SELECT category, kind, sum(n)::INTEGER AS total
-             FROM (VALUES ('bird', 'duck', 2), ('bird', 'goose', 3), ('fish', 'salmon', 5)) AS events(category, kind, n)
-             GROUP BY GROUPING SETS ((category, kind), (category), ())
-             ORDER BY category NULLS LAST, kind NULLS LAST
-             """)
+             QuackDB.IntegrationRepo.query(statement)
 
     assert rows == [
              ["bird", "duck", 2],

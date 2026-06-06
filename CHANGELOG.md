@@ -10,6 +10,7 @@
 - Added DuckDB star/columns SQL expression helpers and Ecto macros for `* EXCLUDE`, `* REPLACE`, `* RENAME`, pattern stars, `COLUMNS(...)`, and `*COLUMNS(...)`, including pinned dynamic `COLUMNS(?)` selectors.
 - Added direct SQL and Ecto helpers for common DuckDB LIST operations including length, extraction, slicing, sorting, distinct/unique counts, position, intersection, and concatenation.
 - Added direct SQL and Ecto helpers for common DuckDB MAP and STRUCT operations with focused natural names plus explicit aliases for broad `use QuackDB.Ecto` imports.
+- Added raw SQL builders for DuckDB `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` syntax.
 
 ### Changed
 
