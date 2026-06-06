@@ -60,108 +60,56 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     @doc false
     defmacro __using__(options) do
-      query? = Keyword.get(options, :query, true)
-      analytics? = Keyword.get(options, :analytics, true)
-      spatial? = Keyword.get(options, :spatial, true)
-      full_text_search? = Keyword.get(options, :full_text_search, true)
-      series? = Keyword.get(options, :series, true)
-      regex? = Keyword.get(options, :regex, true)
-      text? = Keyword.get(options, :text, true)
-      conditionals? = Keyword.get(options, :conditionals, true)
-      predicates? = Keyword.get(options, :predicates, true)
-      list? = Keyword.get(options, :list, true)
-      map? = Keyword.get(options, :map, true)
-      struct? = Keyword.get(options, :struct, true)
-      star? = Keyword.get(options, :star, true)
-      window_frames? = Keyword.get(options, :window_frames, true)
-
-      imports = []
-      imports = if query?, do: [quote(do: import(Ecto.Query)) | imports], else: imports
-
-      shared_predicates? = predicates? and spatial? and text?
+      enabled? = fn key -> Keyword.get(options, key, true) end
+      shared_predicates? = enabled?.(:predicates) and enabled?.(:spatial) and enabled?.(:text)
 
       imports =
-        if analytics?, do: [quote(do: import(QuackDB.Ecto.Analytics)) | imports], else: imports
-
-      imports =
-        if spatial? and shared_predicates?,
-          do: [quote(do: import(QuackDB.Ecto.Spatial, except: [contains: 2])) | imports],
-          else: imports
-
-      imports =
-        if spatial? and not shared_predicates?,
-          do: [quote(do: import(QuackDB.Ecto.Spatial)) | imports],
-          else: imports
-
-      imports =
-        if full_text_search?,
-          do: [quote(do: import(QuackDB.Ecto.FTS)) | imports],
-          else: imports
-
-      imports = if series?, do: [quote(do: import(QuackDB.Ecto.Series)) | imports], else: imports
-      imports = if star?, do: [quote(do: import(QuackDB.Ecto.Star)) | imports], else: imports
-
-      imports =
-        if list?,
-          do: [quote(do: import(QuackDB.Ecto.List, except: [contains: 2])) | imports],
-          else: imports
-
-      imports =
-        if map?,
-          do: [
-            quote(
-              do:
-                import(QuackDB.Ecto.Map,
-                  except: [contains: 2, extract: 2, values: 1, concat: 2]
-                )
-            )
-            | imports
-          ],
-          else: imports
-
-      imports =
-        if struct?,
-          do: [
-            quote(
-              do:
-                import(QuackDB.Ecto.Struct,
-                  except: [contains: 2, extract: 2, values: 1, position: 2, concat: 2]
-                )
-            )
-            | imports
-          ],
-          else: imports
-
-      imports =
-        if window_frames?,
-          do: [quote(do: import(QuackDB.Ecto.WindowFrames)) | imports],
-          else: imports
-
-      imports = if regex?, do: [quote(do: import(QuackDB.Ecto.Regex)) | imports], else: imports
-
-      imports =
-        if text? and shared_predicates?,
-          do: [quote(do: import(QuackDB.Ecto.Text, except: [contains: 2])) | imports],
-          else: imports
-
-      imports =
-        if text? and not shared_predicates?,
-          do: [quote(do: import(QuackDB.Ecto.Text)) | imports],
-          else: imports
-
-      imports =
-        if shared_predicates?,
-          do: [quote(do: import(QuackDB.Ecto.Predicates)) | imports],
-          else: imports
-
-      imports =
-        if conditionals?,
-          do: [quote(do: import(QuackDB.Ecto.Conditionals)) | imports],
-          else: imports
+        [
+          maybe_import(enabled?.(:query), Ecto.Query),
+          maybe_import(enabled?.(:analytics), QuackDB.Ecto.Analytics),
+          spatial_import(enabled?.(:spatial), shared_predicates?),
+          maybe_import(enabled?.(:full_text_search), QuackDB.Ecto.FTS),
+          maybe_import(enabled?.(:series), QuackDB.Ecto.Series),
+          maybe_import(enabled?.(:star), QuackDB.Ecto.Star),
+          maybe_import(enabled?.(:list), QuackDB.Ecto.List, except: [contains: 2]),
+          maybe_import(enabled?.(:map), QuackDB.Ecto.Map,
+            except: [contains: 2, extract: 2, values: 1, concat: 2]
+          ),
+          maybe_import(enabled?.(:struct), QuackDB.Ecto.Struct,
+            except: [contains: 2, extract: 2, values: 1, position: 2, concat: 2]
+          ),
+          maybe_import(enabled?.(:window_frames), QuackDB.Ecto.WindowFrames),
+          maybe_import(enabled?.(:regex), QuackDB.Ecto.Regex),
+          text_import(enabled?.(:text), shared_predicates?),
+          maybe_import(shared_predicates?, QuackDB.Ecto.Predicates),
+          maybe_import(enabled?.(:conditionals), QuackDB.Ecto.Conditionals)
+        ]
+        |> Enum.reject(&is_nil/1)
 
       quote do
-        (unquote_splicing(Enum.reverse(imports)))
+        (unquote_splicing(imports))
       end
     end
+
+    defp spatial_import(false, _shared_predicates?), do: nil
+
+    defp spatial_import(true, true),
+      do: import_quoted(QuackDB.Ecto.Spatial, except: [contains: 2])
+
+    defp spatial_import(true, false), do: import_quoted(QuackDB.Ecto.Spatial)
+
+    defp text_import(false, _shared_predicates?), do: nil
+    defp text_import(true, true), do: import_quoted(QuackDB.Ecto.Text, except: [contains: 2])
+    defp text_import(true, false), do: import_quoted(QuackDB.Ecto.Text)
+
+    defp maybe_import(enabled?, module, options \\ [])
+    defp maybe_import(false, _module, _options), do: nil
+    defp maybe_import(true, module, options), do: import_quoted(module, options)
+
+    defp import_quoted(module, options \\ [])
+    defp import_quoted(module, []), do: quote(do: import(unquote(module)))
+
+    defp import_quoted(module, options),
+      do: quote(do: import(unquote(module), unquote(options)))
   end
 end
