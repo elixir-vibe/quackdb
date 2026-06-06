@@ -31,6 +31,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.Text`.
     - `QuackDB.Ecto.List`.
     - `QuackDB.Ecto.Series`.
+    - `QuackDB.Ecto.Star`.
     - `QuackDB.Ecto.WindowFrames`.
 
     `QuackDB.Ecto.Conditionals.case_when/1` is also imported for multi-branch
@@ -48,6 +49,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, text: false
         use QuackDB.Ecto, list: false
         use QuackDB.Ecto, series: false
+        use QuackDB.Ecto, star: false
         use QuackDB.Ecto, window_frames: false
         use QuackDB.Ecto, query: false
     """
@@ -64,6 +66,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       conditionals? = Keyword.get(options, :conditionals, true)
       predicates? = Keyword.get(options, :predicates, true)
       list? = Keyword.get(options, :list, true)
+      star? = Keyword.get(options, :star, true)
       window_frames? = Keyword.get(options, :window_frames, true)
 
       imports = []
@@ -90,6 +93,7 @@ if Code.ensure_loaded?(Ecto.Query) do
           else: imports
 
       imports = if series?, do: [quote(do: import(QuackDB.Ecto.Series)) | imports], else: imports
+      imports = if star?, do: [quote(do: import(QuackDB.Ecto.Star)) | imports], else: imports
 
       imports =
         if list?,

@@ -755,6 +755,29 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              ])
   end
 
+  test "Ecto star macros execute in columns predicates against a real Quack server" do
+    start_repo!()
+    import QuackDB.Ecto.Star
+
+    table = unique_table("quackdb_ecto_star_columns")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: :integer,
+      score: :integer,
+      payload: :varchar
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, 2, "debug"], [2, 0, "debug"]])
+
+    query =
+      from(event in table,
+        where: columns([:score]) > 1,
+        select: event.id
+      )
+
+    assert [1] = QuackDB.IntegrationRepo.all(query)
+  end
+
   test "raw SQL positional join executes against a real Quack server" do
     start_repo!()
 

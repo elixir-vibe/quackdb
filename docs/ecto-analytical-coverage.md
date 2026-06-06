@@ -163,7 +163,7 @@ POSITIONAL JOIN read_csv('labels.csv')
 
 ## DuckDB star and columns expressions
 
-DuckDB's star expression extensions are useful for exploratory analytics and wide tables, but they do not fit Ecto's ordinary select AST. Use `QuackDB.SQL` expression helpers when the query is clearer as DuckDB SQL.
+DuckDB's star expression extensions are useful for exploratory analytics and wide tables, but they do not always fit Ecto's ordinary select result loading. Use `QuackDB.SQL` expression helpers when the query is clearer as DuckDB SQL.
 
 ```elixir
 star = QuackDB.SQL.star(exclude: [:payload, :debug])
@@ -173,6 +173,16 @@ Repo.query!([
   star,
   " FROM events"
 ])
+```
+
+`QuackDB.Ecto.Star` also exposes `star/1`, `columns/1,2`, and `unpack_columns/1,2` macros for Ecto SQL generation. These macros are imported by `use QuackDB.Ecto`.
+
+```elixir
+use QuackDB.Ecto
+
+from event in "events",
+  where: columns([:score]) > 0,
+  select: event.id
 ```
 
 `star/1` supports table-qualified stars, exclusion, replacement, rename, and one pattern filter.
@@ -204,6 +214,8 @@ Repo.query!([
 ```
 
 Replacement expressions are explicit `{:expr, sql}` values because they are DuckDB SQL snippets. Prefer ordinary Ecto selects when the selected columns are known and not using DuckDB star syntax.
+
+DuckDB can expand one star or `COLUMNS(...)` expression into multiple result columns. That is safe for raw `Repo.query!/2`, `Ecto.Adapters.SQL.to_sql/3`, and predicates that keep the outer select shape normal. Be careful with ordinary `Repo.all/2` select lists that use expanding star expressions, because Ecto's result loader expects the selected Ecto expression shape to match the returned columns.
 
 ## Query style
 
