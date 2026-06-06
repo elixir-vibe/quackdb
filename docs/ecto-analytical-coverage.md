@@ -47,7 +47,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Explain | `Ecto.Adapters.SQL.explain/4` | Ecto SQL | yes | yes | covered |
 | Full-text search | BM25 ranking and stemming | Ecto helper fragments | yes | yes | covered |
 | Advanced joins | semi/anti via `exists`, ASOF-style lateral top-one, positional raw SQL | Ecto-native/raw | yes | yes | partial |
-| DuckDB select extensions | `* EXCLUDE`, `* REPLACE`, `COLUMNS(*)` | Raw SQL | no | no | missing |
+| DuckDB select extensions | `* EXCLUDE`, `* REPLACE`, `* RENAME`, pattern stars, `COLUMNS(...)`, `*COLUMNS(...)` | Raw SQL helper | yes | yes | partial |
 | Introspection | summarize/describe/pragma | Direct SQL helper/raw | partial | partial | partial |
 
 ## Migration boundaries
@@ -160,6 +160,50 @@ FROM read_csv('ids.csv')
 POSITIONAL JOIN read_csv('labels.csv')
 """)
 ```
+
+## DuckDB star and columns expressions
+
+DuckDB's star expression extensions are useful for exploratory analytics and wide tables, but they do not fit Ecto's ordinary select AST. Use `QuackDB.SQL` expression helpers when the query is clearer as DuckDB SQL.
+
+```elixir
+star = QuackDB.SQL.star(exclude: [:payload, :debug])
+
+Repo.query!([
+  "SELECT ",
+  star,
+  " FROM events"
+])
+```
+
+`star/1` supports table-qualified stars, exclusion, replacement, rename, and one pattern filter.
+
+```elixir
+QuackDB.SQL.star(
+  qualifier: :events,
+  replace: [score: {:expr, "coalesce(score, 0)"}],
+  rename: [old_name: :name]
+)
+
+QuackDB.SQL.star(like: "metric_%")
+```
+
+Use `columns/1,2` for DuckDB `COLUMNS(...)` expressions and `unpack_columns/1,2` for `*COLUMNS(...)`.
+
+```elixir
+Repo.query!([
+  "SELECT min(",
+  QuackDB.SQL.columns(exclude: [:payload]),
+  ") FROM events"
+])
+
+Repo.query!([
+  "SELECT ",
+  QuackDB.SQL.unpack_columns("^metric_"),
+  " FROM events"
+])
+```
+
+Replacement expressions are explicit `{:expr, sql}` values because they are DuckDB SQL snippets. Prefer ordinary Ecto selects when the selected columns are known and not using DuckDB star syntax.
 
 ## Query style
 

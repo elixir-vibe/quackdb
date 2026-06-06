@@ -7,6 +7,7 @@
 - Added schema-backed Ecto append support for subset columns/defaulted values and `RETURNING` through a temporary append table plus Ecto insert-from-query SQL generation.
 - Added support for using a QuackDB-backed Ecto repo directly with public `QuackDB` query and native append helpers.
 - Added Ecto `exists/1` SQL generation and documented advanced join patterns for semi, anti, ASOF-style lateral, and positional joins.
+- Added DuckDB star/columns SQL expression helpers for `* EXCLUDE`, `* REPLACE`, `* RENAME`, pattern stars, `COLUMNS(...)`, and `*COLUMNS(...)`.
 
 ### Changed
 

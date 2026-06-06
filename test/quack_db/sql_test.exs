@@ -26,6 +26,44 @@ defmodule QuackDB.SQLTest do
              "CALL quack_serve('quack:localhost', token = 'super_secret');"
   end
 
+  test "builds DuckDB star and columns expressions" do
+    assert QuackDB.SQL.star(exclude: [:payload, "debug flag"]) |> IO.iodata_to_binary() ==
+             ~S[* EXCLUDE ("payload", "debug flag")]
+
+    assert QuackDB.SQL.star(
+             qualifier: :events,
+             replace: [score: {:expr, ~S[coalesce("score", 0)]}],
+             rename: [old_name: :name]
+           )
+           |> IO.iodata_to_binary() ==
+             ~S["events".* REPLACE (coalesce("score", 0) AS "score") RENAME ("old_name" AS "name")]
+
+    assert QuackDB.SQL.star(like: "metric_%") |> IO.iodata_to_binary() ==
+             ~S[* LIKE 'metric_%']
+
+    assert QuackDB.SQL.columns(exclude: [:id]) |> IO.iodata_to_binary() ==
+             ~S[COLUMNS(* EXCLUDE ("id"))]
+
+    assert QuackDB.SQL.columns("^(id|score)$") |> IO.iodata_to_binary() ==
+             ~S[COLUMNS('^(id|score)$')]
+
+    assert QuackDB.SQL.columns([:id, :score]) |> IO.iodata_to_binary() ==
+             "COLUMNS(['id', 'score'])"
+
+    assert QuackDB.SQL.unpack_columns("^metric_") |> IO.iodata_to_binary() ==
+             ~S[*COLUMNS('^metric_')]
+  end
+
+  test "rejects invalid star expression combinations" do
+    assert_raise ArgumentError, ~r/pattern filters cannot be combined/, fn ->
+      QuackDB.SQL.star(like: "id%", exclude: [:name]) |> IO.iodata_to_binary()
+    end
+
+    assert_raise ArgumentError, ~r/expected replacement/, fn ->
+      QuackDB.SQL.star(replace: [score: "score + 1"]) |> IO.iodata_to_binary()
+    end
+  end
+
   test "rejects invalid statement identifiers" do
     assert_raise ArgumentError, ~r/invalid SQL function identifier/, fn ->
       QuackDB.SQL.call("bad-name", [])

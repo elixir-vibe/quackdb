@@ -723,6 +723,38 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert [{1, 100}, {2, 110}] = QuackDB.IntegrationRepo.all(query)
   end
 
+  test "DuckDB star and columns expression helpers execute against a real Quack server" do
+    start_repo!()
+    table = unique_table("quackdb_star_columns")
+
+    create_table!(QuackDB.IntegrationRepo, table,
+      id: :integer,
+      score: :integer,
+      payload: :varchar
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, table, [[1, 2, "debug"]])
+
+    star = QuackDB.SQL.star(exclude: [:payload])
+    columns = QuackDB.SQL.columns(exclude: [:payload])
+
+    assert %{columns: ["id", "score"], rows: [[1, 2]]} =
+             QuackDB.IntegrationRepo.query!([
+               "SELECT ",
+               star,
+               " FROM ",
+               QuackDB.Type.quote_identifier(table)
+             ])
+
+    assert %{columns: ["id", "score"], rows: [[1, 2]]} =
+             QuackDB.IntegrationRepo.query!([
+               "SELECT min(",
+               columns,
+               ") FROM ",
+               QuackDB.Type.quote_identifier(table)
+             ])
+  end
+
   test "raw SQL positional join executes against a real Quack server" do
     start_repo!()
 

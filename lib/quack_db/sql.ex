@@ -101,6 +101,42 @@ defmodule QuackDB.SQL do
     ]
   end
 
+  @doc "Builds a DuckDB star expression such as `* EXCLUDE (...)` or `table.* REPLACE (...)`."
+  @spec star(keyword()) :: iodata()
+  def star(options \\ []) when is_list(options) do
+    validate_star_filters!(options)
+
+    [
+      star_base(options),
+      star_filter(options),
+      star_exclude(options),
+      star_replace(options),
+      star_rename(options)
+    ]
+  end
+
+  @doc "Builds a DuckDB `COLUMNS(...)` expression."
+  @spec columns(:star | String.t() | [atom() | String.t()] | keyword(), keyword()) :: iodata()
+  def columns(selector \\ :star, options \\ [])
+  def columns(:star, options) when is_list(options), do: ["COLUMNS(", star(options), ")"]
+
+  def columns(options, []) when is_list(options) do
+    if Keyword.keyword?(options) do
+      columns(:star, options)
+    else
+      ["COLUMNS(", literal!(Enum.map(options, &to_string/1)), ")"]
+    end
+  end
+
+  def columns(pattern, []) when is_binary(pattern), do: ["COLUMNS(", literal!(pattern), ")"]
+
+  @doc "Builds a DuckDB `*COLUMNS(...)` unpacked columns expression."
+  @spec unpack_columns(:star | String.t() | [atom() | String.t()] | keyword(), keyword()) ::
+          iodata()
+  def unpack_columns(selector \\ :star, options \\ []) do
+    ["*", columns(selector, options)]
+  end
+
   @doc "Builds a DuckDB SQL literal or raises `QuackDB.Error` for unsupported values."
   @spec literal!(parameter()) :: iodata()
   def literal!(value) do
@@ -240,6 +276,85 @@ defmodule QuackDB.SQL do
   end
 
   def literal(value), do: unsupported_parameter(value)
+
+  defp star_base(options) do
+    case Keyword.fetch(options, :qualifier) do
+      {:ok, qualifier} -> [QuackDB.Type.quote_identifier(qualifier), ".*"]
+      :error -> "*"
+    end
+  end
+
+  defp star_filter(options) do
+    filters = Enum.filter([:like, :glob, :similar_to], &Keyword.has_key?(options, &1))
+
+    case filters do
+      [] ->
+        []
+
+      [filter] ->
+        [" ", star_filter_operator(filter), " ", literal!(Keyword.fetch!(options, filter))]
+
+      [_first | _rest] ->
+        raise ArgumentError, "expected at most one star pattern filter"
+    end
+  end
+
+  defp star_filter_operator(:like), do: "LIKE"
+  defp star_filter_operator(:glob), do: "GLOB"
+  defp star_filter_operator(:similar_to), do: "SIMILAR TO"
+
+  defp star_exclude(options) do
+    case Keyword.get(options, :exclude, []) |> List.wrap() do
+      [] ->
+        []
+
+      names ->
+        [
+          " EXCLUDE (",
+          names |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", "),
+          ")"
+        ]
+    end
+  end
+
+  defp star_replace(options) do
+    case Keyword.get(options, :replace, []) do
+      [] ->
+        []
+
+      replacements ->
+        [
+          " REPLACE (",
+          replacements |> Enum.map(&replacement_expr/1) |> Enum.intersperse(", "),
+          ")"
+        ]
+    end
+  end
+
+  defp replacement_expr({name, {:expr, expression}}),
+    do: [expression, " AS ", QuackDB.Type.quote_identifier(name)]
+
+  defp replacement_expr({name, value}) do
+    raise ArgumentError,
+          "expected replacement for #{inspect(name)} to be {:expr, sql}, got: #{inspect(value)}"
+  end
+
+  defp star_rename(options) do
+    case Keyword.get(options, :rename, []) do
+      [] -> []
+      renames -> [" RENAME (", renames |> Enum.map(&rename_expr/1) |> Enum.intersperse(", "), ")"]
+    end
+  end
+
+  defp rename_expr({from, to}),
+    do: [QuackDB.Type.quote_identifier(from), " AS ", QuackDB.Type.quote_identifier(to)]
+
+  defp validate_star_filters!(options) do
+    if Enum.any?([:like, :glob, :similar_to], &Keyword.has_key?(options, &1)) and
+         Keyword.has_key?(options, :exclude) do
+      raise ArgumentError, "star pattern filters cannot be combined with :exclude"
+    end
+  end
 
   defp duration_to_interval(%Duration{} = duration) do
     months = duration.year * 12 + duration.month
