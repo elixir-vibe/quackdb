@@ -285,6 +285,20 @@ from fragment in "fragments",
   }
 ```
 
+MAP and STRUCT helpers follow the same pattern: natural names are available from focused imports, while `use QuackDB.Ecto` exposes explicit aliases for ambiguous helpers.
+
+```elixir
+use QuackDB.Ecto
+
+from event in "events",
+  where: contains_map(event.labels, ^"env") and contains_struct(event.metadata_tuple, ^"duck"),
+  select: %{
+    label_keys: map_keys(event.labels),
+    env: map_extract_value(event.labels, ^"env"),
+    name: struct_extract(event.metadata, ^"name")
+  }
+```
+
 ### Spatial queries
 
 DuckDB Spatial works with Ecto queries and `%Geo.*{}` structs when the optional `:geo` package is installed.

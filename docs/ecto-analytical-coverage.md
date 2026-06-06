@@ -27,7 +27,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Sources | CSV/Parquet helpers | Source helpers | yes | yes | covered |
 | Sources | JSON/XLSX helpers | Source helpers/raw | partial | partial | partial |
 | Source analytics | source helper + aggregate/window | Ecto-native/source | yes | partial | partial |
-| Nested analytics | common LIST helpers; struct/map functions | Helper/fragment/raw | partial | partial | partial |
+| Nested analytics | common LIST/MAP/STRUCT helpers | Helper/fragment/raw | partial | partial | partial |
 | JSON analytics | json_extract/path queries | Helper/source/raw | yes | yes | partial |
 | Regular expressions | regexp_extract/matches/replace/split helpers | Helper | yes | yes | covered |
 | Text helpers | contains/starts_with/split_part/string_split | Helper | yes | yes | covered |
@@ -239,6 +239,8 @@ Use `QuackDB.Ecto.Regex` for DuckDB's `regexp_*` expression functions. DuckDB us
 Use `QuackDB.Ecto.Text` for common text predicates and splitting functions (`contains/2`, `starts_with/2`, `ends_with/2`, `split_part/3`, `string_split/2`) when they read better than fragments. With `use QuackDB.Ecto`, shared `contains/2` routes obvious text calls to DuckDB `contains` and spatial helper expressions to `ST_Contains`; ambiguous calls raise so use `contains_text/2` or `st_contains/2` when you want to be explicit.
 
 Use `QuackDB.Ecto.List` for common LIST/ARRAY operations such as `contains_list/2`, `has_any/2`, `has_all/2`, `list_length/1`, `extract/2`, `slice/3,4`, `sort/1`, `distinct/1`, `unique/1`, `position/2`, `intersect_list/2`, `concat/2`, and `unnest/1`. Names follow DuckDB concepts where they do not conflict with Ecto or Kernel imports; `list_length/1` and `intersect_list/2` are explicit to avoid those conflicts.
+
+Use `QuackDB.Ecto.Map` and `QuackDB.Ecto.Struct` for common MAP/STRUCT operations. Focused imports expose natural helper names such as `contains/2`, `extract/2`, `values/1`, and `concat/2`. Broad `use QuackDB.Ecto` imports exclude those ambiguous names and expose explicit aliases such as `contains_map/2`, `map_extract_value/2`, `map_keys/1`, `contains_struct/2`, `struct_extract/2`, and `struct_values/1`.
 
 Keep raw SQL for syntax Ecto cannot represent well, including `PIVOT`, `UNPIVOT`, `QUALIFY`, `GROUPING SETS`, `ROLLUP`, and `CUBE`. Window frames should use `fragment(...)` until QuackDB depends on an Ecto release that includes macro-expanded frame helper support.
 

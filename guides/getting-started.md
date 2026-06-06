@@ -533,6 +533,22 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+MAP and STRUCT columns can use focused helpers for key/value inspection and field extraction. With `use QuackDB.Ecto`, use explicit aliases for helpers that would otherwise conflict with list/text/spatial helpers.
+
+```elixir
+use QuackDB.Ecto
+
+MyApp.AnalyticsRepo.all(
+  from event in "events",
+    where: contains_map(event.labels, ^"env") and contains_struct(event.metadata_tuple, ^"duck"),
+    select: %{
+      label_keys: map_keys(event.labels),
+      env: map_extract_value(event.labels, ^"env"),
+      name: struct_extract(event.metadata, ^"name")
+    }
+)
+```
+
 JSON columns can use Ecto access syntax for string extraction, `type/2` for numeric/boolean casts, or explicit DuckDB JSON helpers:
 
 ```elixir

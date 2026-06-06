@@ -30,6 +30,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.Regex`.
     - `QuackDB.Ecto.Text`.
     - `QuackDB.Ecto.List`.
+    - `QuackDB.Ecto.Map`.
+    - `QuackDB.Ecto.Struct`.
     - `QuackDB.Ecto.Series`.
     - `QuackDB.Ecto.Star`.
     - `QuackDB.Ecto.WindowFrames`.
@@ -48,6 +50,8 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, regex: false
         use QuackDB.Ecto, text: false
         use QuackDB.Ecto, list: false
+        use QuackDB.Ecto, map: false
+        use QuackDB.Ecto, struct: false
         use QuackDB.Ecto, series: false
         use QuackDB.Ecto, star: false
         use QuackDB.Ecto, window_frames: false
@@ -66,6 +70,8 @@ if Code.ensure_loaded?(Ecto.Query) do
       conditionals? = Keyword.get(options, :conditionals, true)
       predicates? = Keyword.get(options, :predicates, true)
       list? = Keyword.get(options, :list, true)
+      map? = Keyword.get(options, :map, true)
+      struct? = Keyword.get(options, :struct, true)
       star? = Keyword.get(options, :star, true)
       window_frames? = Keyword.get(options, :window_frames, true)
 
@@ -98,6 +104,32 @@ if Code.ensure_loaded?(Ecto.Query) do
       imports =
         if list?,
           do: [quote(do: import(QuackDB.Ecto.List, except: [contains: 2])) | imports],
+          else: imports
+
+      imports =
+        if map?,
+          do: [
+            quote(
+              do:
+                import(QuackDB.Ecto.Map,
+                  except: [contains: 2, extract: 2, values: 1, concat: 2]
+                )
+            )
+            | imports
+          ],
+          else: imports
+
+      imports =
+        if struct?,
+          do: [
+            quote(
+              do:
+                import(QuackDB.Ecto.Struct,
+                  except: [contains: 2, extract: 2, values: 1, position: 2, concat: 2]
+                )
+            )
+            | imports
+          ],
           else: imports
 
       imports =
