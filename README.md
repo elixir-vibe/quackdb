@@ -284,7 +284,7 @@ QuackDB.SQL.cube([:category, :kind])
 
 ### List predicates
 
-DuckDB LIST/ARRAY helpers map directly to common list functions such as `list_contains`, `list_has_any`, `list_has_all`, `len`, `list_extract`, `list_sort`, `list_intersect`, and `unnest`. `use QuackDB.Ecto` imports non-conflicting list helpers by default; use `contains_list/2` and `intersect_list/2` to avoid ambiguity with text/spatial `contains/2` and Ecto set-operation `intersect/2`.
+DuckDB LIST/ARRAY helpers map directly to common list functions such as `list_contains`, `list_has_any`, `list_has_all`, `len`, `list_extract`, `list_sort`, `list_intersect`, `list_filter`, `list_transform`, `list_reduce`, and `unnest`. `use QuackDB.Ecto` imports non-conflicting list helpers by default; use `contains_list/2` and `intersect_list/2` to avoid ambiguity with text/spatial `contains/2` and Ecto set-operation `intersect/2`.
 
 ```elixir
 use QuackDB.Ecto
@@ -296,6 +296,9 @@ from fragment in "fragments",
     term_count: list_length(fragment.terms),
     first_term: extract(fragment.terms, 1),
     matching_terms: intersect_list(fragment.terms, ^optional_term_ids),
+    large_terms: list_filter(fragment.terms, fn term -> term > ^min_term_id end),
+    doubled_terms: list_transform(fragment.terms, fn term -> term * 2 end),
+    term_total: list_reduce(fragment.terms, fn total, term -> total + term end, 0),
     term: unnest(fragment.terms)
   }
 ```

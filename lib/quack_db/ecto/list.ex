@@ -76,6 +76,38 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    @doc "Builds `list_filter(list, lambda x : ...)`."
+    defmacro list_filter(list, lambda) do
+      lambda_fragment("list_filter", list, lambda, "list_filter/2", [1, 2])
+    end
+
+    @doc "Builds `list_transform(list, lambda x : ...)`."
+    defmacro list_transform(list, lambda) do
+      lambda_fragment("list_transform", list, lambda, "list_transform/2", [1, 2])
+    end
+
+    @doc "Builds `list_reduce(list, lambda acc, x : ...)`."
+    defmacro list_reduce(list, lambda) do
+      lambda_fragment("list_reduce", list, lambda, "list_reduce/2", [2, 3])
+    end
+
+    @doc "Builds `list_reduce(list, lambda acc, x : ..., initial_value)`."
+    defmacro list_reduce(list, lambda, initial_value) do
+      {lambda_sql, params} =
+        QuackDB.Ecto.Lambda.to_sql!(lambda, function: "list_reduce/3", arities: [2, 3])
+
+      fragment_sql = "list_reduce(?, #{lambda_sql}, ?)"
+
+      quote do
+        fragment(
+          unquote(fragment_sql),
+          unquote(list),
+          unquote_splicing(params),
+          unquote(initial_value)
+        )
+      end
+    end
+
     @doc "Builds `list_contains(list, value)`."
     defmacro contains(list, value) do
       quote do
@@ -122,6 +154,17 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     defmacro unnest(list) do
       quote do
         fragment("unnest(?)", unquote(list))
+      end
+    end
+
+    defp lambda_fragment(function_name, list, lambda, label, arities) do
+      {lambda_sql, params} =
+        QuackDB.Ecto.Lambda.to_sql!(lambda, function: label, arities: arities)
+
+      fragment_sql = "#{function_name}(?, #{lambda_sql})"
+
+      quote do
+        fragment(unquote(fragment_sql), unquote(list), unquote_splicing(params))
       end
     end
   end

@@ -11,6 +11,7 @@
 - Added direct SQL and Ecto helpers for common DuckDB LIST operations including length, extraction, slicing, sorting, distinct/unique counts, position, intersection, and concatenation.
 - Added direct SQL and Ecto helpers for common DuckDB MAP and STRUCT operations with focused natural names plus explicit aliases for broad `use QuackDB.Ecto` imports.
 - Added raw SQL builders for DuckDB `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` syntax.
+- Added Ecto LIST lambda helpers for DuckDB `list_filter`, `list_transform`, and `list_reduce` using constrained Elixir `fn` syntax with clear macro-time errors.
 
 ### Changed
 
