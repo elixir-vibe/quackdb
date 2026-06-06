@@ -32,12 +32,20 @@ defmodule QuackDB.Ecto.LambdaTest do
           quotient: list_transform(event.scores, fn x -> x / 2 end),
           modulo: list_filter(event.scores, fn x -> rem(x, 2) == 0 end),
           nils: list_filter(event.scores, fn x -> is_nil(x) or x != 0 end),
-          strings: list_filter(event.names, fn name -> name == "duck" end)
+          strings: list_filter(event.names, fn name -> name == "duck" end),
+          tiers:
+            list_transform(event.scores, fn x ->
+              case_when do
+                x >= 90 -> "high"
+                x >= 50 -> "medium"
+                true -> "low"
+              end
+            end)
         }
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT list_transform(q0."scores", lambda x : (-x)) AS "negative", list_transform(q0."scores", lambda x : (x / 2)) AS "quotient", list_filter(q0."scores", lambda x : ((x % 2) = 0)) AS "modulo", list_filter(q0."scores", lambda x : ((x IS NULL) OR (x != 0))) AS "nils", list_filter(q0."names", lambda name : (name = 'duck')) AS "strings" FROM "events" AS q0]
+             ~S[SELECT list_transform(q0."scores", lambda x : (-x)) AS "negative", list_transform(q0."scores", lambda x : (x / 2)) AS "quotient", list_filter(q0."scores", lambda x : ((x % 2) = 0)) AS "modulo", list_filter(q0."scores", lambda x : ((x IS NULL) OR (x != 0))) AS "nils", list_filter(q0."names", lambda name : (name = 'duck')) AS "strings", list_transform(q0."scores", lambda x : CASE WHEN (x >= 90) THEN 'high' WHEN (x >= 50) THEN 'medium' ELSE 'low' END) AS "tiers" FROM "events" AS q0]
   end
 
   test "raises clear errors for unsupported lambda forms" do

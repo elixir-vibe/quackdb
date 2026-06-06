@@ -66,6 +66,14 @@ defmodule QuackDB.Integration.ListTest do
           above_index: list_filter(row.scores, fn x, i -> not is_nil(x) and x > i end),
           doubled: list_transform(row.scores, fn x -> x * 2 end),
           shifted: list_transform(row.scores, fn x, i -> x + i end),
+          tiers:
+            list_transform(row.scores, fn x ->
+              case_when do
+                x >= 5 -> "high"
+                x >= 3 -> "medium"
+                true -> "low"
+              end
+            end),
           total: list_reduce(row.scores, fn acc, x -> acc + x end),
           initial_total: list_reduce(row.scores, fn acc, x -> acc + x end, 10)
         }
@@ -79,6 +87,7 @@ defmodule QuackDB.Integration.ListTest do
              above_index: [],
              doubled: [2, 4, 6],
              shifted: [2, 4, 6],
+             tiers: ["low", "low", "medium"],
              total: 6,
              initial_total: 16
            } = first
@@ -89,6 +98,7 @@ defmodule QuackDB.Integration.ListTest do
              above_index: [3, 4, 5],
              doubled: [6, 8, 10],
              shifted: [4, 6, 8],
+             tiers: ["medium", "medium", "high"],
              total: 12,
              initial_total: 22
            } = second

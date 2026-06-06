@@ -17,7 +17,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       or: "OR"
     }
 
-    @supported_expression_message "Supported expressions are literals, pinned values, lambda variables, arithmetic, comparisons, boolean operators, rem/2, and is_nil/1"
+    @supported_expression_message "Supported expressions are literals, pinned values, lambda variables, arithmetic, comparisons, boolean operators, rem/2, is_nil/1, and case_when/1"
 
     @type option :: {:function, atom()} | {:arities, [non_neg_integer()]}
 
@@ -102,6 +102,22 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       {left_sql, left_params} = expr(left, vars, function)
       {right_sql, right_params} = expr(right, vars, function)
       {["(", left_sql, " % ", right_sql, ")"], left_params ++ right_params}
+    end
+
+    defp expr({:case_when, _meta, [[do: clauses]]}, vars, function) do
+      {when_clauses, else_expression} = QuackDB.Ecto.Conditionals.__split_clauses__!(clauses)
+
+      {when_sql, when_params} =
+        Enum.map_reduce(when_clauses, [], fn {condition, expression}, params ->
+          {condition_sql, condition_params} = expr(condition, vars, function)
+          {expression_sql, expression_params} = expr(expression, vars, function)
+
+          {["WHEN ", condition_sql, " THEN ", expression_sql, " "],
+           params ++ condition_params ++ expression_params}
+        end)
+
+      {else_sql, else_params} = expr(else_expression, vars, function)
+      {["CASE ", when_sql, "ELSE ", else_sql, " END"], when_params ++ else_params}
     end
 
     defp expr({:^, _meta, [_value]} = pinned, _vars, _function), do: {"?", [pinned]}

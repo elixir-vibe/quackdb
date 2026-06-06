@@ -298,6 +298,13 @@ from fragment in "fragments",
     matching_terms: intersect_list(fragment.terms, ^optional_term_ids),
     large_terms: list_filter(fragment.terms, fn term -> term > ^min_term_id end),
     doubled_terms: list_transform(fragment.terms, fn term -> term * 2 end),
+    term_labels:
+      list_transform(fragment.terms, fn term ->
+        case_when do
+          term >= 100 -> "large"
+          true -> "small"
+        end
+      end),
     term_total: list_reduce(fragment.terms, fn total, term -> total + term end, 0),
     term: unnest(fragment.terms)
   }

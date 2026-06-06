@@ -24,7 +24,7 @@ defmodule QuackDB.Ecto.ConditionalsTest do
   end
 
   test "requires a final true clause" do
-    assert_raise ArgumentError, ~r/final true -> expression clause/, fn ->
+    assert_raise ArgumentError, ~r/expected case_when\/1 to end with `true -> expression`/, fn ->
       defmodule MissingElseQuery do
         use QuackDB.Ecto
 
