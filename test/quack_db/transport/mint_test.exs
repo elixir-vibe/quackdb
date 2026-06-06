@@ -2,11 +2,11 @@ defmodule QuackDB.Transport.MintTest do
   use ExUnit.Case, async: false
 
   test "closes timed out connections before reuse" do
-    {:ok, socket} = :gen_tcp.listen(0, [:binary, packet: :raw, active: false, reuseaddr: true])
+    {:ok, socket} = listen_loopback()
     {:ok, port} = :inet.port(socket)
     parent = self()
     server = spawn_link(fn -> serve_timeout_then_success(socket, parent) end)
-    uri = URI.parse("http://localhost:#{port}")
+    uri = URI.parse("http://127.0.0.1:#{port}")
 
     on_exit(fn ->
       :gen_tcp.close(socket)
@@ -15,10 +15,15 @@ defmodule QuackDB.Transport.MintTest do
 
     {:ok, transport} = QuackDB.Transport.Mint.start_link(uri)
 
-    assert {:error, %QuackDB.Error{code: :transport_error}} =
-             QuackDB.Transport.Mint.post(transport, uri, "", timeout: 20)
+    request =
+      Task.async(fn ->
+        QuackDB.Transport.Mint.post(transport, uri, "", timeout: 200)
+      end)
 
-    assert_receive :first_client_closed, 1_000
+    assert_receive :first_request_received, 1_000
+
+    assert {:error, %QuackDB.Error{code: :transport_error}} = Task.await(request, 1_000)
+    assert_receive :first_client_closed, 5_000
     assert {:ok, "ok"} = QuackDB.Transport.Mint.post(transport, uri, "", timeout: 1_000)
   end
 
@@ -32,10 +37,10 @@ defmodule QuackDB.Transport.MintTest do
   end
 
   test "reopens a closed HTTP connection" do
-    {:ok, socket} = :gen_tcp.listen(0, [:binary, packet: :raw, active: false, reuseaddr: true])
+    {:ok, socket} = listen_loopback()
     {:ok, port} = :inet.port(socket)
     server = spawn_link(fn -> serve(socket, ["one", "two"]) end)
-    uri = URI.parse("http://localhost:#{port}")
+    uri = URI.parse("http://127.0.0.1:#{port}")
 
     on_exit(fn ->
       :gen_tcp.close(socket)
@@ -48,9 +53,14 @@ defmodule QuackDB.Transport.MintTest do
     assert {:ok, "two"} = QuackDB.Transport.Mint.post(transport, uri, "", timeout: 1_000)
   end
 
+  defp listen_loopback do
+    :gen_tcp.listen(0, [:binary, packet: :raw, active: false, reuseaddr: true, ip: {127, 0, 0, 1}])
+  end
+
   defp serve_timeout_then_success(socket, parent) do
     {:ok, first} = :gen_tcp.accept(socket)
     {:ok, _request} = :gen_tcp.recv(first, 0, 1_000)
+    send(parent, :first_request_received)
     assert_tcp_closed(first)
     send(parent, :first_client_closed)
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-06-06
+
 ### Added
 
 - Added schema-backed Ecto append support for subset columns/defaulted values and `RETURNING` through a temporary append table plus Ecto insert-from-query SQL generation.
