@@ -628,6 +628,112 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert "duck" = QuackDB.IntegrationRepo.one(query)
   end
 
+  test "Ecto semi and anti join patterns execute through exists predicates" do
+    start_repo!()
+    events = unique_table("quackdb_ecto_semijoin_events")
+    categories = unique_table("quackdb_ecto_semijoin_categories")
+
+    create_table!(QuackDB.IntegrationRepo, events,
+      id: :integer,
+      category_id: :integer,
+      name: :varchar
+    )
+
+    create_table!(QuackDB.IntegrationRepo, categories, id: :integer, name: :varchar)
+
+    insert_rows!(QuackDB.IntegrationRepo, categories, [[10, "bird"], [20, "mammal"]])
+    insert_rows!(QuackDB.IntegrationRepo, events, [[1, 10, "duck"], [2, 30, "orca"]])
+
+    semi_query =
+      from(event in events,
+        as: :event,
+        where:
+          exists(
+            from(category in categories,
+              where: category.id == parent_as(:event).category_id,
+              select: 1
+            )
+          ),
+        select: event.name
+      )
+
+    anti_query =
+      from(event in events,
+        as: :event,
+        where:
+          not exists(
+            from(category in categories,
+              where: category.id == parent_as(:event).category_id,
+              select: 1
+            )
+          ),
+        select: event.name
+      )
+
+    assert ["duck"] = QuackDB.IntegrationRepo.all(semi_query)
+    assert ["orca"] = QuackDB.IntegrationRepo.all(anti_query)
+  end
+
+  test "Ecto ASOF-style lateral top-one query executes against a real Quack server" do
+    start_repo!()
+    trades = unique_table("quackdb_ecto_asof_trades")
+    prices = unique_table("quackdb_ecto_asof_prices")
+
+    create_table!(QuackDB.IntegrationRepo, trades,
+      id: :integer,
+      symbol: :varchar,
+      ts: :timestamp
+    )
+
+    create_table!(QuackDB.IntegrationRepo, prices,
+      symbol: :varchar,
+      ts: :timestamp,
+      price: :integer
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, trades, [
+      [1, "DUCK", ~N[2024-01-01 10:05:00]],
+      [2, "DUCK", ~N[2024-01-01 10:20:00]]
+    ])
+
+    insert_rows!(QuackDB.IntegrationRepo, prices, [
+      ["DUCK", ~N[2024-01-01 10:00:00], 100],
+      ["DUCK", ~N[2024-01-01 10:10:00], 110]
+    ])
+
+    latest_price =
+      from(price in prices,
+        where:
+          price.symbol == parent_as(:trade).symbol and
+            price.ts <= parent_as(:trade).ts,
+        order_by: [desc: price.ts],
+        limit: 1,
+        select: %{price: price.price}
+      )
+
+    query =
+      from(trade in trades,
+        as: :trade,
+        left_lateral_join: price in subquery(latest_price),
+        on: true,
+        order_by: trade.id,
+        select: {trade.id, price.price}
+      )
+
+    assert [{1, 100}, {2, 110}] = QuackDB.IntegrationRepo.all(query)
+  end
+
+  test "raw SQL positional join executes against a real Quack server" do
+    start_repo!()
+
+    assert %{rows: [[1, "x"], [2, "y"]]} =
+             QuackDB.IntegrationRepo.query!("""
+             SELECT *
+             FROM (VALUES (1), (2)) AS ids(id)
+             POSITIONAL JOIN (VALUES ('x'), ('y')) AS labels(label)
+             """)
+  end
+
   test "Ecto Repo.exists?/2 executes existence queries against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_exists")

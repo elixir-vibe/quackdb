@@ -46,7 +46,7 @@ This file is a roadmap, not a claim of complete DuckDB support.
 | Migrations | create/drop/alter table, rename table/column, indexes, references | Ecto migration DDL | yes | yes | covered |
 | Explain | `Ecto.Adapters.SQL.explain/4` | Ecto SQL | yes | yes | covered |
 | Full-text search | BM25 ranking and stemming | Ecto helper fragments | yes | yes | covered |
-| Advanced joins | semi/anti/asof/positional | Raw SQL | no | no | missing |
+| Advanced joins | semi/anti via `exists`, ASOF-style lateral top-one, positional raw SQL | Ecto-native/raw | yes | yes | partial |
 | DuckDB select extensions | `* EXCLUDE`, `* REPLACE`, `COLUMNS(*)` | Raw SQL | no | no | missing |
 | Introspection | summarize/describe/pragma | Direct SQL helper/raw | partial | partial | partial |
 
@@ -99,6 +99,67 @@ from event in subquery(ranked),
 ```
 
 Use raw SQL when DuckDB-specific `QUALIFY` syntax is clearer than the Ecto subquery shape.
+
+## Advanced join patterns
+
+DuckDB exposes advanced join syntax such as `SEMI JOIN`, `ANTI JOIN`, `ASOF JOIN`, and `POSITIONAL JOIN`. Ecto's join qualifiers are intentionally narrower, so prefer ordinary Ecto shapes when they preserve the same semantics.
+
+Use `exists/1` for semi-join semantics: keep left-side rows when a related row exists, without duplicating the left rows or projecting right-side columns.
+
+```elixir
+from event in "events",
+  as: :event,
+  where:
+    exists(
+      from category in "categories",
+        where: category.id == parent_as(:event).category_id,
+        select: 1
+    ),
+  select: event.name
+```
+
+Use `not exists/1` for anti-join semantics: keep left-side rows when no related row exists.
+
+```elixir
+from event in "events",
+  as: :event,
+  where:
+    not exists(
+      from category in "categories",
+        where: category.id == parent_as(:event).category_id,
+        select: 1
+    ),
+  select: event.name
+```
+
+Use a lateral top-one subquery for ASOF-style "latest matching row at or before this timestamp" queries. This keeps the query Ecto-shaped while matching the common analytical ASOF use case.
+
+```elixir
+latest_price =
+  from price in "prices",
+    where:
+      price.symbol == parent_as(:trade).symbol and
+        price.ts <= parent_as(:trade).ts,
+    order_by: [desc: price.ts],
+    limit: 1,
+    select: %{price: price.price}
+
+from trade in "trades",
+  as: :trade,
+  left_lateral_join: price in subquery(latest_price),
+  on: true,
+  select: %{trade_id: trade.id, price: price.price}
+```
+
+Keep `POSITIONAL JOIN` as raw SQL. It joins by row order rather than relational predicates, so representing it as an Ecto join would be surprising.
+
+```elixir
+Repo.query!("""
+SELECT *
+FROM read_csv('ids.csv')
+POSITIONAL JOIN read_csv('labels.csv')
+""")
+```
 
 ## Query style
 

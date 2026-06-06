@@ -694,6 +694,13 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr({:fragment, _meta, parts}, context), do: fragment(parts, context)
     defp expr({:in, _meta, [left, right]}, context), do: in_expr(left, right, context)
+
+    defp expr({:exists, _meta, [subquery: index]}, context),
+      do: ["EXISTS ", subquery_expr(index, context)]
+
+    defp expr({:exists, _meta, [%Ecto.SubQuery{} = subquery]}, context),
+      do: ["EXISTS ", subquery_expr(subquery, context)]
+
     defp expr({:subquery, index}, context), do: subquery_expr(index, context)
 
     defp expr({:type, _meta, [expression, type]}, context) do
@@ -903,12 +910,19 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp subquery_expr(index, %{subqueries: subqueries} = context) when is_integer(index) do
       case Enum.at(subqueries, index) do
-        %Ecto.SubQuery{query: %Ecto.Query{} = query} ->
-          ["(", all(query, subquery_context(query, context, index)), ")"]
+        %Ecto.SubQuery{} = subquery ->
+          subquery_expr(subquery, context, index)
 
         _other ->
           unsupported!(:expression, "unknown Ecto subquery reference: #{inspect(index)}")
       end
+    end
+
+    defp subquery_expr(%Ecto.SubQuery{} = subquery, context),
+      do: subquery_expr(subquery, context, 0)
+
+    defp subquery_expr(%Ecto.SubQuery{query: %Ecto.Query{} = query}, context, index) do
+      ["(", all(query, subquery_context(query, context, index)), ")"]
     end
 
     defp typed_expr(value, {source_index, field}, %{literal_tagged?: true})
