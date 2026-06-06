@@ -515,7 +515,7 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
-LIST columns can use helpers for containment, intersection, all-required matching, extraction, sorting, slicing, lambda filtering/transforms/reductions, and unnesting. `use QuackDB.Ecto` imports list helpers by default; `contains_list/2` and `intersect_list/2` avoid ambiguity with shared predicate/set-operation names:
+LIST columns can use helpers for containment, intersection, all-required matching, extraction, sorting, slicing, lambda filtering/transforms/reductions, and unnesting. `use QuackDB.Ecto` imports list helpers by default; `contains_list/2` and `intersect_list/2` avoid ambiguity with shared predicate/set-operation names. Lambda helpers accept a constrained Elixir `fn` subset: lambda variables, pinned values, literals, arithmetic, comparisons, boolean operators, `rem/2`, `is_nil/1`, and `case_when do ... end`. Unsupported calls raise during query compilation instead of producing lossy SQL.
 
 ```elixir
 use QuackDB.Ecto
