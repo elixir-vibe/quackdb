@@ -25,6 +25,28 @@ defmodule QuackDB.Ecto.SQLGeneration.StarTest do
              ~S[SELECT q0."id" FROM "events" AS q0 WHERE (COLUMNS(* EXCLUDE ("payload")) > 0)]
   end
 
+  test "renders dynamic pinned columns selectors" do
+    fields = [:score, :blah]
+    pattern = "^metric_"
+
+    columns_query =
+      from(event in "events",
+        where: columns(^fields) > 0,
+        select: event.id
+      )
+
+    unpack_query =
+      from(event in "events",
+        select: unpack_columns(^pattern)
+      )
+
+    assert columns_query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT q0."id" FROM "events" AS q0 WHERE (COLUMNS(?) > 0)]
+
+    assert unpack_query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT *COLUMNS(?) FROM "events" AS q0]
+  end
+
   test "renders regex columns and unpacked columns" do
     regex_query =
       from(event in "events",

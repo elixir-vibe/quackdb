@@ -22,8 +22,28 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    @doc false
+    def __selector_param__(selector) when is_list(selector), do: Enum.map(selector, &to_string/1)
+    def __selector_param__(selector) when is_binary(selector), do: selector
+
     @doc "Builds a DuckDB `COLUMNS(...)` expression fragment."
-    defmacro columns(selector \\ :star, options \\ []) do
+    defmacro columns(selector \\ :star, options \\ [])
+
+    defmacro columns({:^, meta, [selector]}, []) do
+      pinned_selector =
+        {:^, meta, [{{:., [], [__MODULE__, :__selector_param__]}, [], [selector]}]}
+
+      quote do
+        fragment("COLUMNS(?)", unquote(pinned_selector))
+      end
+    end
+
+    defmacro columns({:^, _meta, [_selector]}, options) do
+      raise ArgumentError,
+            "dynamic COLUMNS selectors cannot be combined with star options: #{inspect(options)}"
+    end
+
+    defmacro columns(selector, options) do
       fragment_sql = selector |> QuackDB.SQL.columns(options) |> IO.iodata_to_binary()
 
       quote do
@@ -32,7 +52,23 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     end
 
     @doc "Builds a DuckDB `*COLUMNS(...)` unpacked columns expression fragment."
-    defmacro unpack_columns(selector \\ :star, options \\ []) do
+    defmacro unpack_columns(selector \\ :star, options \\ [])
+
+    defmacro unpack_columns({:^, meta, [selector]}, []) do
+      pinned_selector =
+        {:^, meta, [{{:., [], [__MODULE__, :__selector_param__]}, [], [selector]}]}
+
+      quote do
+        fragment("*COLUMNS(?)", unquote(pinned_selector))
+      end
+    end
+
+    defmacro unpack_columns({:^, _meta, [_selector]}, options) do
+      raise ArgumentError,
+            "dynamic *COLUMNS selectors cannot be combined with star options: #{inspect(options)}"
+    end
+
+    defmacro unpack_columns(selector, options) do
       fragment_sql = selector |> QuackDB.SQL.unpack_columns(options) |> IO.iodata_to_binary()
 
       quote do

@@ -197,9 +197,15 @@ QuackDB.SQL.star(
 QuackDB.SQL.star(like: "metric_%")
 ```
 
-Use `columns/1,2` for DuckDB `COLUMNS(...)` expressions and `unpack_columns/1,2` for `*COLUMNS(...)`.
+Use `columns/1,2` for DuckDB `COLUMNS(...)` expressions and `unpack_columns/1,2` for `*COLUMNS(...)`. Literal and pinned atom lists match Ecto's `map/2` and `struct/2` field-list style. Pinned selectors are supported where DuckDB accepts parameterized `COLUMNS(?)` selectors.
 
 ```elixir
+fields = [:score, :temperature]
+
+from event in "events",
+  where: columns(^fields) > 0,
+  select: event.id
+
 Repo.query!([
   "SELECT min(",
   QuackDB.SQL.columns(exclude: [:payload]),
@@ -215,7 +221,7 @@ Repo.query!([
 
 Replacement expressions are explicit `{:expr, sql}` values because they are DuckDB SQL snippets. Prefer ordinary Ecto selects when the selected columns are known and not using DuckDB star syntax.
 
-DuckDB can expand one star or `COLUMNS(...)` expression into multiple result columns. That is safe for raw `Repo.query!/2`, `Ecto.Adapters.SQL.to_sql/3`, and predicates that keep the outer select shape normal. Be careful with ordinary `Repo.all/2` select lists that use expanding star expressions, because Ecto's result loader expects the selected Ecto expression shape to match the returned columns.
+DuckDB can expand one star or `COLUMNS(...)` expression into multiple result columns. That is safe for raw `Repo.query!/2`, `Ecto.Adapters.SQL.to_sql/3`, and predicates that keep the outer select shape normal. Be careful with ordinary `Repo.all/2` select lists that use expanding star expressions, because Ecto's result loader expects the selected Ecto expression shape to match the returned columns. Dynamic pinned selectors are supported for `columns(^fields)` and `unpack_columns(^fields)`, but not for star options such as `exclude: ^fields` because DuckDB requires those names directly in the star syntax.
 
 ## Query style
 

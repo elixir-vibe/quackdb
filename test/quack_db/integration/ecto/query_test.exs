@@ -775,7 +775,16 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
         select: event.id
       )
 
+    dynamic_fields = [:score]
+
+    dynamic_query =
+      from(event in table,
+        where: columns(^dynamic_fields) > 1,
+        select: event.id
+      )
+
     assert [1] = QuackDB.IntegrationRepo.all(query)
+    assert [1] = QuackDB.IntegrationRepo.all(dynamic_query)
   end
 
   test "raw SQL positional join executes against a real Quack server" do
