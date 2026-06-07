@@ -649,6 +649,18 @@ MyApp.AnalyticsRepo.query!(QuackDB.Analytics.summarize("events"))
 MyApp.AnalyticsRepo.query!(QuackDB.Analytics.summarize({:query, "SELECT score FROM events"}))
 ```
 
+Use `QuackDB.Profile` when you need DuckDB query-plan/operator timings instead of column statistics:
+
+```elixir
+profile =
+  QuackDB.Profile.analyze!(MyApp.AnalyticsRepo,
+    "SELECT category, avg(score) FROM events GROUP BY category"
+  )
+
+QuackDB.Profile.slowest(profile, 5)
+IO.puts(QuackDB.Profile.report(profile))
+```
+
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir

@@ -18,6 +18,13 @@ defmodule QuackDB.SQLTest do
 
     assert QuackDB.SQL.explain("SELECT 1", analyze: true) |> IO.iodata_to_binary() ==
              "EXPLAIN ANALYZE SELECT 1"
+
+    assert QuackDB.SQL.explain("SELECT 1", format: :json) |> IO.iodata_to_binary() ==
+             "EXPLAIN (FORMAT json) SELECT 1"
+
+    assert QuackDB.SQL.explain("SELECT 1", analyze: true, format: :json)
+           |> IO.iodata_to_binary() ==
+             "EXPLAIN (ANALYZE, FORMAT json) SELECT 1"
   end
 
   test "builds CALL statements with positional and named arguments" do

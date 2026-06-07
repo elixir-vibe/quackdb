@@ -12,6 +12,26 @@ defmodule QuackDB.Integration.QueryTest do
              QuackDB.query(connection, "SELECT 1 AS n")
   end
 
+  test "profiles a query with DuckDB explain analyze JSON" do
+    connection = start_connection!()
+
+    assert {:ok, %QuackDB.Profile{} = profile} =
+             QuackDB.Profile.analyze(
+               connection,
+               "SELECT i, i % 10 AS bucket FROM range(1000) t(i) WHERE i > 10 ORDER BY bucket LIMIT 5"
+             )
+
+    assert profile.latency > 0
+    assert profile.cpu_time > 0
+    assert profile.cumulative_rows_scanned == 1000
+    assert [_ | _] = operators = QuackDB.Profile.flatten(profile)
+    assert Enum.any?(operators, &(&1.name in ["RANGE", "SEQ_SCAN "]))
+
+    report = QuackDB.Profile.report(profile, limit: 3)
+    assert report =~ "DuckDB query profile"
+    assert report =~ "Rows scanned:"
+  end
+
   test "decodes mixed scalar results from a real Quack server" do
     connection = start_connection!()
 

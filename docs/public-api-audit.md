@@ -30,7 +30,8 @@ Accepted naming decisions for unreleased changes:
 
 `QuackDB.Ecto.Analytics` added or expanded helpers for analytical DuckDB expressions:
 
-- Query profiling: `summarize/2,3,4` and `summarize!/2,3,4`.
+- Data profiling: `summarize/2,3,4` and `summarize!/2,3,4`.
+- Query profiling: `QuackDB.Profile.analyze/4`, `analyze!/4`, `explain/4`, `explain!/4`, `flatten/1`, `slowest/2`, `report/2`, and decoded profile/operator structs.
 - Conditional expressions: `QuackDB.Ecto.Conditionals.case_when/1`.
 - Date/time: atom-aware `date_part/2`, `date_trunc/2`, `time_bucket/2,3` origins and offsets.
 - JSON: `json_extract/2`, `json_extract_string/2`, `json_exists/2`, `json_contains/2`, plus Ecto access lowering.

@@ -417,6 +417,20 @@ QuackDB emits telemetry spans for query, append, and fetch operations:
 
 Metadata includes connection/session information, command details, append batch counts, and client query IDs. Params are not included unless you opt in with `telemetry_params: true`. See the [telemetry guide](guides/telemetry.md).
 
+Use `QuackDB.Profile` when you need DuckDB engine/operator timings rather than client-side telemetry:
+
+```elixir
+profile =
+  QuackDB.Profile.analyze!(conn,
+    "SELECT i, i % 10 AS bucket FROM range(1000) t(i) ORDER BY bucket LIMIT 5"
+  )
+
+QuackDB.Profile.slowest(profile, 5)
+IO.puts(QuackDB.Profile.report(profile))
+```
+
+`QuackDB.Profile` runs DuckDB `EXPLAIN (ANALYZE, FORMAT json)` and returns structs for query/root metrics and operator nodes. `QuackDB.SQL.explain/2` also supports `format: :json`, `:html`, `:graphviz`, `:mermaid`, and `:text`.
+
 ## Ecto coverage
 
 QuackDB includes an optional Ecto SQL adapter for applications that want Ecto query composition, schema-based reads/writes, migrations, and raw SQL through `Repo.query/3`.

@@ -5,6 +5,7 @@
 ### Added
 
 - Added `:or_replace` support to `QuackDB.DDL.create_table/2,3` and support for creating a differently named table from an Ecto schema via `QuackDB.DDL.create_table(name, schema, opts)`.
+- Added `QuackDB.Profile` for DuckDB `EXPLAIN (ANALYZE, FORMAT json)` query profiles with structured operator helpers, and added `:format` support to `QuackDB.SQL.explain/2`.
 
 ### Changed
 

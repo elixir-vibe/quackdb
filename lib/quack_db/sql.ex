@@ -78,13 +78,20 @@ defmodule QuackDB.SQL do
   Builds an `EXPLAIN ...` or `EXPLAIN ANALYZE ...` statement.
 
   Pass `analyze: true` to run the query and include DuckDB execution timings.
+  Pass `format: :json`, `:html`, `:graphviz`, `:mermaid`, or `:text` to use
+  DuckDB's `EXPLAIN (FORMAT ...)` output.
   """
   @spec explain(iodata(), keyword()) :: iodata()
   def explain(statement, options \\ []) when is_list(options) do
-    if Keyword.get(options, :analyze, false) do
-      ["EXPLAIN ANALYZE ", statement]
-    else
-      ["EXPLAIN ", statement]
+    case {Keyword.get(options, :analyze, false), Keyword.fetch(options, :format)} do
+      {false, :error} ->
+        ["EXPLAIN ", statement]
+
+      {true, :error} ->
+        ["EXPLAIN ANALYZE ", statement]
+
+      {analyze?, {:ok, format}} ->
+        ["EXPLAIN (", explain_options(analyze?, format), ") ", statement]
     end
   end
 
@@ -467,6 +474,28 @@ defmodule QuackDB.SQL do
         duration.hour * 60 * 60 * 1_000_000
 
     {months, days, micros}
+  end
+
+  defp explain_options(analyze?, format) do
+    options =
+      if analyze? do
+        ["ANALYZE", "FORMAT " <> explain_format(format)]
+      else
+        ["FORMAT " <> explain_format(format)]
+      end
+
+    Enum.intersperse(options, ", ")
+  end
+
+  defp explain_format(format) when format in [:text, :json, :html, :graphviz, :mermaid],
+    do: Atom.to_string(format)
+
+  defp explain_format(format) when format in ["text", "json", "html", "graphviz", "mermaid"],
+    do: format
+
+  defp explain_format(format) do
+    raise ArgumentError,
+          "expected explain format to be :text, :json, :html, :graphviz, or :mermaid, got: #{inspect(format)}"
   end
 
   defp call_arguments(positional_args, named_args) do
