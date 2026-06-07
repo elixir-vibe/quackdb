@@ -719,7 +719,30 @@ MyApp.AnalyticsRepo.query!(
 
 `DDL.create_table/2` rejects parameterized Ecto queries in `:as` because DDL helpers return SQL iodata, not `{sql, params}` tuples.
 
-Ecto support covers analytical reads and common write/setup flows. `Repo.query/3`, schema-backed reads, combinations, inserts/upserts, schema update/delete callbacks, `update_all` / `delete_all` mutations, `EXPLAIN`, transactions, and basic migrator-backed DDL work; advanced migration features and DuckDB-specific SQL should still use `Repo.query/3`.
+For staging-table dedupe, keep the materialization step in normal Ecto and pass the query to `insert_all/3`:
+
+```elixir
+staged_new_rows =
+  from row in "temp_fragments",
+    as: :row,
+    where:
+      not exists(
+        from target in "fragments",
+          where: target.content_hash == parent_as(:row).content_hash,
+          select: 1
+      ),
+    select: %{
+      content_hash: row.content_hash,
+      ast: row.ast,
+      kind: row.kind
+    }
+
+MyApp.AnalyticsRepo.insert_all("fragments", staged_new_rows,
+  returning: [:id, :content_hash]
+)
+```
+
+Ecto support covers analytical reads and common write/setup flows. `Repo.query/3`, schema-backed reads, combinations, inserts/upserts, insert-from-query with `returning`, schema update/delete callbacks, `update_all` / `delete_all` mutations, `EXPLAIN`, transactions, and basic migrator-backed DDL work; advanced migration features and DuckDB-specific SQL should still use `Repo.query/3`.
 
 ### Basic Ecto migrations
 

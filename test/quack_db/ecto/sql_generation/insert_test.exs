@@ -37,6 +37,40 @@ defmodule QuackDB.Ecto.SQLGeneration.InsertTest do
     assert sql == ~s|INSERT INTO "events" ("id", "name") VALUES (?, ?)|
   end
 
+  test "generates insert from query with not exists and returning" do
+    staging_query =
+      from(row in "staging_fragments",
+        as: :row,
+        where:
+          not exists(
+            from(target in "fragments",
+              where: target.content_hash == parent_as(:row).content_hash,
+              select: 1
+            )
+          ),
+        select: %{
+          content_hash: row.content_hash,
+          ast: row.ast,
+          kind: row.kind
+        }
+      )
+
+    sql =
+      Connection.insert(
+        nil,
+        "fragments",
+        [:content_hash, :ast, :kind],
+        staging_query,
+        {:raise, [], []},
+        [:id, :content_hash],
+        []
+      )
+      |> IO.iodata_to_binary()
+
+    assert sql ==
+             ~s|INSERT INTO "fragments" ("content_hash", "ast", "kind") (SELECT q0."content_hash" AS "content_hash", q0."ast" AS "ast", q0."kind" AS "kind" FROM "staging_fragments" AS q0 WHERE (NOT EXISTS (SELECT 1 FROM "fragments" AS s0_q0 WHERE (s0_q0."content_hash" = q0."content_hash")))) RETURNING "id", "content_hash"|
+  end
+
   test "generates insert SQL with returning" do
     sql =
       Connection.insert(

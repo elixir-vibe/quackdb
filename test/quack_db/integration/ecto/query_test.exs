@@ -73,6 +73,52 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{target} ORDER BY id")
   end
 
+  test "Ecto insert_all from query supports dedupe and returning" do
+    start_repo!()
+    target = unique_table("quackdb_insert_query_target")
+    staging = unique_table("quackdb_insert_query_staging")
+
+    create_table!(QuackDB.IntegrationRepo, target,
+      id: :integer,
+      content_hash: :blob,
+      kind: :varchar
+    )
+
+    create_table!(QuackDB.IntegrationRepo, staging,
+      id: :integer,
+      content_hash: :blob,
+      kind: :varchar
+    )
+
+    insert_rows!(QuackDB.IntegrationRepo, target, [[1, <<1>>, "old"]])
+    insert_rows!(QuackDB.IntegrationRepo, staging, [[2, <<1>>, "duplicate"], [3, <<2>>, "new"]])
+
+    query =
+      from(row in staging,
+        as: :row,
+        where:
+          not exists(
+            from(target in target,
+              where: target.content_hash == parent_as(:row).content_hash,
+              select: 1
+            )
+          ),
+        select: %{
+          id: row.id,
+          content_hash: row.content_hash,
+          kind: row.kind
+        }
+      )
+
+    assert {1, [%{id: 3, content_hash: <<2>>}]} =
+             QuackDB.IntegrationRepo.insert_all(target, query, returning: [:id, :content_hash])
+
+    assert %{rows: [[1, <<1>>, "old"], [3, <<2>>, "new"]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT id, content_hash, kind FROM #{target} ORDER BY id"
+             )
+  end
+
   test "Ecto type/2 casts execute against a real Quack server" do
     start_repo!()
     table = unique_table("quackdb_ecto_type_casts")
