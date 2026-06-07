@@ -113,24 +113,24 @@ defmodule QuackDB.Protocol.Vector do
         value -> value
       end)
 
-    {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+    {entries, child_values} = list_entries_and_child_values(values)
     child_count = length(child_values)
 
     [
       Writer.field(104, Writer.uleb128(child_count)),
-      Writer.field(105, Writer.list(Enum.reverse(entries), &encode_list_entry/1)),
+      Writer.field(105, Writer.list(entries, &encode_list_entry/1)),
       Writer.field(106, encode(child_type, child_values, child_count))
     ]
   end
 
   defp encode_variable_values(type, values, :list, _row_count) do
     child_type = LogicalType.child_type(type)
-    {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+    {entries, child_values} = list_entries_and_child_values(values)
     child_count = length(child_values)
 
     [
       Writer.field(104, Writer.uleb128(child_count)),
-      Writer.field(105, Writer.list(Enum.reverse(entries), &encode_list_entry/1)),
+      Writer.field(105, Writer.list(entries, &encode_list_entry/1)),
       Writer.field(106, encode(child_type, child_values, child_count))
     ]
   end
@@ -541,14 +541,21 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
-  defp append_list_entry(nil, {entries, child_values, offset}) do
-    {[%{offset: 0, length: 0} | entries], child_values, offset}
+  defp list_entries_and_child_values(values) do
+    {entries, child_value_groups, _offset} =
+      Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+
+    {Enum.reverse(entries), child_value_groups |> Enum.reverse() |> :lists.append()}
   end
 
-  defp append_list_entry(value, {entries, child_values, offset}) when is_list(value) do
+  defp append_list_entry(nil, {entries, child_value_groups, offset}) do
+    {[%{offset: 0, length: 0} | entries], child_value_groups, offset}
+  end
+
+  defp append_list_entry(value, {entries, child_value_groups, offset}) when is_list(value) do
     value_length = length(value)
 
-    {[%{offset: offset, length: value_length} | entries], child_values ++ value,
+    {[%{offset: offset, length: value_length} | entries], [value | child_value_groups],
      offset + value_length}
   end
 
