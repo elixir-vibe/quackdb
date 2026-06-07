@@ -106,7 +106,6 @@ Expected package contents are intentionally limited to the public package surfac
 - `CONTRIBUTING.md`
 - `.formatter.exs`
 - `mix.exs`
-- `priv/duckdb_functions/current.exs`
 
 The package should not include:
 

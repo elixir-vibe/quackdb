@@ -74,7 +74,7 @@ defmodule QuackDB.MixProject do
   defp package do
     [
       files:
-        ~w(.formatter.exs CHANGELOG.md CONTRIBUTING.md README.md docs/ecto-analytical-coverage.md docs/public-api-audit.md docs/protocol guides lib mix.exs priv/duckdb_functions/current.exs),
+        ~w(.formatter.exs CHANGELOG.md CONTRIBUTING.md README.md docs/ecto-analytical-coverage.md docs/public-api-audit.md docs/protocol guides lib mix.exs),
       licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/elixir-vibe/quackdb",
