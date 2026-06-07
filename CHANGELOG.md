@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Added `QuackDB.Storage` observability helpers for DuckDB table storage segments, compression summaries, database size, and checkpointing.
+
 ## 0.5.1 - 2026-06-06
 
 ### Added

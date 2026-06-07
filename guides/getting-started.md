@@ -661,6 +661,20 @@ QuackDB.Profile.slowest(profile, 5)
 IO.puts(QuackDB.Profile.report(profile))
 ```
 
+Inspect DuckDB's physical storage and compression choices with `QuackDB.Storage`:
+
+```elixir
+QuackDB.Storage.info!(MyApp.AnalyticsRepo, "events")
+QuackDB.Storage.compression!(MyApp.AnalyticsRepo, "events")
+QuackDB.Storage.database_size!(MyApp.AnalyticsRepo)
+```
+
+`info!/2` accepts schema modules as well as table names:
+
+```elixir
+QuackDB.Storage.compression!(MyApp.AnalyticsRepo, MyApp.Event)
+```
+
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir
