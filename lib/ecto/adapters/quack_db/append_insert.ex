@@ -9,10 +9,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     def run(adapter_meta, schema_meta, header, rows, on_conflict, returning, placeholders, opts) do
       with :ok <- assert_supported!(schema_meta, rows, on_conflict, returning, placeholders, opts),
            conn <- ecto_connection(adapter_meta),
-           insert_rows <- append_rows(header, rows),
-           options <- append_options(schema_meta, header, opts),
+           append_header <- append_header(schema_meta, header),
+           options <- append_options(schema_meta, append_header, opts),
+           insert_rows <- append_rows(append_header, rows, options),
            {:ok, %QuackDB.Result{} = result} <-
-             insert_all(conn, schema_meta, header, insert_rows, returning, options) do
+             insert_all(conn, schema_meta, append_header, insert_rows, returning, options) do
         {result.num_rows, result.rows}
       else
         {:error, %QuackDB.Error{} = error} -> raise error
@@ -30,11 +31,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     defp insert_select?(_schema_meta, _header, returning) when returning != [], do: true
     defp insert_select?(%{schema: nil}, _header, _returning), do: false
 
-    defp insert_select?(%{schema: schema}, header, _returning) do
-      schema_sources =
-        schema.__schema__(:fields) |> Enum.map(&schema.__schema__(:field_source, &1))
-
-      MapSet.new(header) != MapSet.new(schema_sources)
+    defp insert_select?(schema_meta, header, _returning) do
+      MapSet.new(header) != MapSet.new(schema_source_order(schema_meta))
     end
 
     defp insert_select(conn, schema_meta, header, rows, returning, options) do
@@ -89,6 +87,20 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
           type: column_type!(types, source)
         }
       end)
+    end
+
+    defp append_header(%{schema: nil}, header), do: header
+
+    defp append_header(schema_meta, header) do
+      schema_sources = schema_source_order(schema_meta)
+
+      if MapSet.new(header) == MapSet.new(schema_sources), do: schema_sources, else: header
+    end
+
+    defp schema_source_order(%{schema: nil}), do: []
+
+    defp schema_source_order(%{schema: schema}) do
+      Enum.map(schema.__schema__(:fields), &schema.__schema__(:field_source, &1))
     end
 
     defp schema_sources(%{schema: nil}), do: %{}
@@ -223,10 +235,32 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp ecto_pool(%{pid: pool}), do: pool
 
-    defp append_rows(header, rows) do
+    defp append_rows(header, rows, options) do
+      types = Keyword.get(options, :columns, [])
+
       Enum.map(rows, fn row ->
-        Enum.map(header, fn field -> {field, Keyword.fetch!(row, field)} end)
+        Enum.map(header, fn field ->
+          {field,
+           row |> Keyword.fetch!(field) |> normalize_append_value(column_type(types, field))}
+        end)
       end)
+    end
+
+    defp normalize_append_value(nil, _type), do: nil
+
+    defp normalize_append_value(value, :varchar) when is_map(value) and not is_struct(value) do
+      JSON.encode!(value)
+    end
+
+    defp normalize_append_value(value, _type), do: value
+
+    defp column_type(columns, column) do
+      case column_type!(columns, column) do
+        {:json, _type} -> :varchar
+        type -> type
+      end
+    rescue
+      KeyError -> nil
     end
 
     defp append_options(schema_meta, header, opts) do

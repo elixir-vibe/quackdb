@@ -334,6 +334,69 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     assert chunk.types |> Enum.map(& &1.name) |> Enum.sort() == [:integer, :integer, :varchar]
   end
 
+  test "Repo.insert_all/3 append uses schema order for tuple sources" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(
+               {"runtime_fragment_terms", QuackDB.TestSchemas.FragmentTerm},
+               [%{fragment_id: 10, term_id: 2}],
+               insert_method: :append
+             )
+
+    assert_receive {:append, %{table_name: "runtime_fragment_terms", append_chunk: chunk}}
+    assert [:integer, :integer] = Enum.map(chunk.types, & &1.name)
+    assert [[2, 10]] = QuackDB.Protocol.DataChunk.rows(chunk)
+  end
+
+  test "Repo.insert_all/3 append encodes Ecto map fields as JSON strings" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(
+               QuackDB.TestSchemas.MapEvent,
+               [[id: 1, metadata: %{reach_call_node_id: 15}]],
+               insert_method: :append
+             )
+
+    assert_receive {:append, %{append_chunk: chunk}}
+    assert [:integer, :varchar] = Enum.map(chunk.types, & &1.name)
+    assert [[1, metadata]] = QuackDB.Protocol.DataChunk.rows(chunk)
+    assert {:ok, %{"reach_call_node_id" => 15}} = JSON.decode(metadata)
+  end
+
   test "Repo.insert_all/3 append preserves explicit columns before schema inference" do
     parent = self()
 
