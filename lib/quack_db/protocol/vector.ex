@@ -51,7 +51,7 @@ defmodule QuackDB.Protocol.Vector do
   defp maybe_geometry_version(_type), do: []
 
   defp validity_field(values, row_count) do
-    if Enum.any?(values, &is_nil/1) do
+    if :lists.member(nil, values) do
       [
         Writer.field(100, Writer.bool(true)),
         Writer.field(101, Writer.blob(validity_mask(values, row_count)))
@@ -82,6 +82,11 @@ defmodule QuackDB.Protocol.Vector do
     else
       encode_variable_values(type, values, physical_type, row_count)
     end
+  end
+
+  defp encode_variable_values(%LogicalType{name: name}, values, :varchar, row_count)
+       when name in [:char, :varchar] do
+    Writer.field(102, Writer.list(values, row_count, &encode_text_blob/1))
   end
 
   defp encode_variable_values(type, values, :varchar, row_count) do
@@ -488,6 +493,13 @@ defmodule QuackDB.Protocol.Vector do
     upper = value >>> 64
     <<lower::little-unsigned-64, upper::little-unsigned-64>>
   end
+
+  defp encode_text_blob(nil), do: Writer.blob("")
+
+  defp encode_text_blob(value) when is_binary(value),
+    do: [Writer.uleb128(byte_size(value)), value]
+
+  defp encode_text_blob(value), do: value |> to_string() |> Writer.blob()
 
   defp encode_string_like(_type, nil), do: ""
 
