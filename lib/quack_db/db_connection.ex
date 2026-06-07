@@ -24,6 +24,12 @@ defmodule QuackDB.DBConnection do
   alias QuackDB.Telemetry
 
   @disconnect_timeout 1_000
+  @sql_command_atoms ~w(
+    alter analyze attach begin call checkpoint commit copy create delete detach drop explain insert
+    install load pragma rollback select set summarize truncate update use vacuum
+  )a
+  @sql_command_map Map.new(@sql_command_atoms, &{Atom.to_string(&1), &1})
+  @sql_command_aliases %{"from" => :select, "values" => :select}
 
   defstruct [
     :uri,
@@ -389,11 +395,12 @@ defmodule QuackDB.DBConnection do
   defp chunk_column({name, values}, batch_size), do: {name, Enum.chunk_every(values, batch_size)}
 
   defp transpose_column_batches(chunked_columns) do
-    chunk_count = chunked_columns |> List.first() |> elem(1) |> length()
+    names = Enum.map(chunked_columns, &elem(&1, 0))
 
-    for index <- 0..(chunk_count - 1)//1 do
-      Enum.map(chunked_columns, fn {name, chunks} -> {name, Enum.at(chunks, index)} end)
-    end
+    chunked_columns
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.zip()
+    |> Enum.map(fn chunks -> Enum.zip(names, Tuple.to_list(chunks)) end)
   end
 
   defp append_batches(table, batches, options, state) do
@@ -1043,10 +1050,12 @@ defmodule QuackDB.DBConnection do
     statement
     |> IO.iodata_to_binary()
     |> first_sql_word()
-    |> case do
-      "" -> :unknown
-      word -> word |> String.downcase() |> String.to_atom()
-    end
+    |> String.downcase()
+    |> sql_command_atom()
+  end
+
+  defp sql_command_atom(word) do
+    Map.get(@sql_command_map, word) || Map.get(@sql_command_aliases, word, :unknown)
   end
 
   defp first_sql_word(statement) do

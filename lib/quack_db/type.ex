@@ -197,7 +197,12 @@ defmodule QuackDB.Type do
     tokenize_sql_type(rest, [digits |> to_string() |> String.to_integer() | tokens])
   end
 
-  defp tokenize_sql_type([char | _rest] = chars, tokens) when char in ?A..?Z or char == ?_ do
+  defp tokenize_sql_type([?_ | _rest] = chars, tokens) do
+    {identifier, rest} = Enum.split_while(chars, &identifier_char?/1)
+    tokenize_sql_type(rest, [to_string(identifier) | tokens])
+  end
+
+  defp tokenize_sql_type([char | _rest] = chars, tokens) when char in ?A..?Z do
     {identifier, rest} = Enum.split_while(chars, &identifier_char?/1)
     tokenize_sql_type(rest, [to_string(identifier) | tokens])
   end

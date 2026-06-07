@@ -13,7 +13,7 @@ defmodule QuackDB.Protocol.DataChunk do
 
   defstruct row_count: 0, types: [], columns: []
 
-  @type column :: %{type: LogicalType.t(), vector_type: atom(), values: [term()]}
+  @type column :: Vector.t()
   @type t :: %__MODULE__{
           row_count: non_neg_integer(),
           types: [LogicalType.t()],
@@ -54,11 +54,7 @@ defmodule QuackDB.Protocol.DataChunk do
          {:ok, columns} <- columns_from_column_values(values, options) do
       vectors =
         Enum.map(columns, fn column ->
-          %{
-            type: column.type,
-            vector_type: :flat,
-            values: column_values_for_name(values, column.name)
-          }
+          %Vector{type: column.type, values: column_values_for_name(values, column.name)}
         end)
 
       {:ok,
@@ -77,7 +73,7 @@ defmodule QuackDB.Protocol.DataChunk do
         columns
         |> Enum.zip(values_by_column)
         |> Enum.map(fn {column, values} ->
-          %{type: column.type, vector_type: :flat, values: values}
+          %Vector{type: column.type, values: values}
         end)
 
       {:ok, %__MODULE__{row_count: length(rows), types: types, columns: vectors}}
@@ -323,7 +319,7 @@ defmodule QuackDB.Protocol.DataChunk do
   defp normalize_type(type) when is_atom(type), do: {:ok, LogicalType.new(type)}
 
   defp normalize_type({:decimal, width, scale}),
-    do: {:ok, LogicalType.new(:decimal, %{type: 2, width: width, scale: scale})}
+    do: {:ok, LogicalType.new(:decimal, LogicalType.decimal_info(width, scale))}
 
   defp normalize_type({:list, child_type}),
     do:
@@ -442,7 +438,7 @@ defmodule QuackDB.Protocol.DataChunk do
   defp decimal_type(%Decimal{coef: coefficient, exp: exponent}) do
     scale = max(-exponent, 0)
     width = min(max(coefficient |> abs() |> Integer.digits() |> length(), scale + 1), 38)
-    LogicalType.new(:decimal, %{type: 2, width: width, scale: scale})
+    LogicalType.new(:decimal, LogicalType.decimal_info(width, scale))
   end
 
   defp fetch_row_value(row, name), do: QuackDB.KeyLookup.fetch(row, name)

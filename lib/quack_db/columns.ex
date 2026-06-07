@@ -38,18 +38,20 @@ defmodule QuackDB.Columns do
 
   @doc "Converts column vectors back to row lists."
   @spec to_rows(t()) :: [[term()]]
-  def to_rows(%__MODULE__{names: names, columns: columns, num_rows: num_rows}) do
-    for index <- 0..(num_rows - 1)//1 do
-      Enum.map(names, fn name -> columns |> Map.fetch!(name) |> Enum.at(index) end)
-    end
+  def to_rows(%__MODULE__{names: names, columns: columns}) do
+    names
+    |> Enum.map(&Map.fetch!(columns, &1))
+    |> Enum.zip()
+    |> Enum.map(&Tuple.to_list/1)
   end
 
   @doc "Converts column vectors to row maps keyed by disambiguated column names."
   @spec to_maps(t()) :: [%{String.t() => term()}]
-  def to_maps(%__MODULE__{names: names, columns: columns, num_rows: num_rows}) do
-    for index <- 0..(num_rows - 1)//1 do
-      Map.new(names, fn name -> {name, columns |> Map.fetch!(name) |> Enum.at(index)} end)
-    end
+  def to_maps(%__MODULE__{names: names, columns: columns}) do
+    names
+    |> Enum.map(&Map.fetch!(columns, &1))
+    |> Enum.zip()
+    |> Enum.map(fn row -> names |> Enum.zip(Tuple.to_list(row)) |> Map.new() end)
   end
 
   @doc "Raises because column result structs are read-only."

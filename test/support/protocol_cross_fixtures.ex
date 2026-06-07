@@ -5,6 +5,11 @@ defmodule QuackDB.ProtocolCrossFixtures do
   alias QuackDB.Protocol.DataChunk
   alias QuackDB.Protocol.Message.AppendRequest
 
+  defmodule Fixture do
+    @moduledoc false
+    defstruct [:name, :file, :encoder]
+  end
+
   def all do
     [
       data_chunk_scalar(),
@@ -15,15 +20,23 @@ defmodule QuackDB.ProtocolCrossFixtures do
   end
 
   def data_chunk_scalar do
-    %{name: "scalar DataChunk", file: "data_chunk_scalar.bin", encoder: :encode_scalar_data_chunk}
+    %Fixture{
+      name: "scalar DataChunk",
+      file: "data_chunk_scalar.bin",
+      encoder: :encode_scalar_data_chunk
+    }
   end
 
   def data_chunk_nested do
-    %{name: "nested DataChunk", file: "data_chunk_nested.bin", encoder: :encode_nested_data_chunk}
+    %Fixture{
+      name: "nested DataChunk",
+      file: "data_chunk_nested.bin",
+      encoder: :encode_nested_data_chunk
+    }
   end
 
   def append_request_scalar do
-    %{
+    %Fixture{
       name: "scalar AppendRequest",
       file: "append_request_scalar.bin",
       encoder: :encode_scalar_append_request
@@ -31,7 +44,7 @@ defmodule QuackDB.ProtocolCrossFixtures do
   end
 
   def append_request_nested do
-    %{
+    %Fixture{
       name: "nested AppendRequest",
       file: "append_request_nested.bin",
       encoder: :encode_nested_append_request

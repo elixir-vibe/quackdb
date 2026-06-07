@@ -49,6 +49,10 @@ defmodule QuackDB.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
       {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
+      {:libgraph, "~> 0.16", only: [:dev, :test], runtime: false},
+      {:sourceror, "~> 1.12", only: [:dev, :test], runtime: false},
+      {:ex_ast, "~> 0.12", only: [:dev, :test], runtime: false},
+      {:reach, "~> 2.7", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
@@ -60,7 +64,8 @@ defmodule QuackDB.MixProject do
         "format --check-formatted",
         "test",
         "credo --strict",
-        "ex_dna --max-clones 0"
+        "ex_dna --max-clones 0",
+        "reach.check --smells --strict"
       ]
     ]
   end

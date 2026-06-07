@@ -150,10 +150,14 @@ defmodule QuackDB.DDL do
 
   defp parameterized_query?(%{params: [_ | _]}), do: true
 
-  defp parameterized_query?(value) when is_map(value) do
+  defp parameterized_query?(%struct{} = value) when is_atom(struct) do
     value
-    |> Map.values()
-    |> Enum.any?(&parameterized_query?/1)
+    |> Map.from_struct()
+    |> parameterized_query?()
+  end
+
+  defp parameterized_query?(value) when is_map(value) do
+    Enum.any?(value, fn {_key, field} -> parameterized_query?(field) end)
   end
 
   defp parameterized_query?(value) when is_list(value),

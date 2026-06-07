@@ -16,6 +16,7 @@ defmodule Mix.Tasks.Quackdb.Functions.Snapshot do
   @shortdoc "Writes a DuckDB function-catalog snapshot"
   @default_output "priv/duckdb_functions/current.exs"
   @function_types [:aggregate, :macro, :scalar]
+  @function_type_names Map.new(@function_types, &{Atom.to_string(&1), &1})
   @candidate_types [:aggregate, :macro]
   @skip_prefix_reasons [
     {"__internal_", "DuckDB internal generated function"},
@@ -239,12 +240,9 @@ defmodule Mix.Tasks.Quackdb.Functions.Snapshot do
   end
 
   defp normalize_function_type(type) when is_binary(type) do
-    type = String.to_atom(type)
-
-    if type in @function_types do
-      type
-    else
-      Mix.raise("unknown DuckDB function type in snapshot: #{inspect(type)}")
+    case @function_type_names do
+      %{^type => function_type} -> function_type
+      _types -> Mix.raise("unknown DuckDB function type in snapshot: #{inspect(type)}")
     end
   end
 

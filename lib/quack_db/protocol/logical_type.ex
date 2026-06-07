@@ -67,6 +67,9 @@ defmodule QuackDB.Protocol.LogicalType do
     %__MODULE__{id: id(name), name: name, type_info: type_info}
   end
 
+  @spec decimal_info(pos_integer(), non_neg_integer()) :: map()
+  def decimal_info(width, scale), do: %{type: 2, width: width, scale: scale}
+
   @spec encode(t()) :: iodata()
   def encode(%__MODULE__{} = type) do
     [

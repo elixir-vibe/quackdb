@@ -11,7 +11,9 @@ defmodule QuackDB.Protocol.Vector do
   alias QuackDB.Protocol.Value
   alias QuackDB.Protocol.Writer
 
-  @type t :: %{type: LogicalType.t(), vector_type: atom(), values: [term()]}
+  defstruct [:type, vector_type: :flat, values: []]
+
+  @type t :: %__MODULE__{type: LogicalType.t(), vector_type: atom(), values: [term()]}
 
   @spec encode(LogicalType.t(), [term()], non_neg_integer()) :: iodata()
   def encode(type, values, row_count) when is_list(values) do
@@ -28,7 +30,7 @@ defmodule QuackDB.Protocol.Vector do
 
   @spec decode(binary(), LogicalType.t(), non_neg_integer()) :: Reader.read_result(t())
   def decode(binary, type, row_count) do
-    decode_object(binary, type, row_count, %{type: type, vector_type: :flat, values: []})
+    decode_object(binary, type, row_count, %__MODULE__{type: type})
   end
 
   defp encode_flat(type, values, row_count) do
@@ -106,22 +108,24 @@ defmodule QuackDB.Protocol.Vector do
       end)
 
     {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+    child_count = length(child_values)
 
     [
-      Writer.field(104, Writer.uleb128(length(child_values))),
+      Writer.field(104, Writer.uleb128(child_count)),
       Writer.field(105, Writer.list(Enum.reverse(entries), &encode_list_entry/1)),
-      Writer.field(106, encode(child_type, child_values, length(child_values)))
+      Writer.field(106, encode(child_type, child_values, child_count))
     ]
   end
 
   defp encode_variable_values(type, values, :list) do
     child_type = LogicalType.child_type(type)
     {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
+    child_count = length(child_values)
 
     [
-      Writer.field(104, Writer.uleb128(length(child_values))),
+      Writer.field(104, Writer.uleb128(child_count)),
       Writer.field(105, Writer.list(Enum.reverse(entries), &encode_list_entry/1)),
-      Writer.field(106, encode(child_type, child_values, length(child_values)))
+      Writer.field(106, encode(child_type, child_values, child_count))
     ]
   end
 
@@ -188,7 +192,7 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp decode_body(binary, type, row_count, :flat) do
-    decode_flat(binary, type, row_count, %{type: type, vector_type: :flat, values: []})
+    decode_flat(binary, type, row_count, %__MODULE__{type: type})
   end
 
   defp decode_body(binary, type, row_count, :constant) do
@@ -202,13 +206,9 @@ defmodule QuackDB.Protocol.Vector do
     with {:ok, selection, rest} <- read_required(binary, 91, &read_selection(&1, row_count)),
          {:ok, dictionary_count, rest} <- read_required(rest, 92, &Reader.read_uleb128/1),
          {:ok, dictionary, rest} <-
-           decode_object(rest, type, dictionary_count, %{
-             type: type,
-             vector_type: :flat,
-             values: []
-           }),
+           decode_object(rest, type, dictionary_count, %__MODULE__{type: type}),
          {:ok, values} <- select_dictionary_values(dictionary.values, selection) do
-      {:ok, %{type: type, vector_type: :dictionary, values: values}, rest}
+      {:ok, %__MODULE__{type: type, vector_type: :dictionary, values: values}, rest}
     end
   end
 
@@ -221,7 +221,7 @@ defmodule QuackDB.Protocol.Vector do
         for index <- 0..(row_count - 1)//1,
             do: Value.decode_sequence(type, start + increment * index)
 
-      {:ok, %{type: type, vector_type: :sequence, values: values}, rest}
+      {:ok, %__MODULE__{type: type, vector_type: :sequence, values: values}, rest}
     end
   end
 
@@ -517,8 +517,10 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp append_list_entry(value, {entries, child_values, offset}) when is_list(value) do
-    {[%{offset: offset, length: length(value)} | entries], child_values ++ value,
-     offset + length(value)}
+    value_length = length(value)
+
+    {[%{offset: offset, length: value_length} | entries], child_values ++ value,
+     offset + value_length}
   end
 
   defp append_list_entry(value, _acc) do
@@ -832,21 +834,8 @@ defmodule QuackDB.Protocol.Vector do
     end)
   end
 
-  defp map_key_value(%{"key" => key} = entry) do
-    if Map.has_key?(entry, "value") do
-      {:ok, key, Map.fetch!(entry, "value")}
-    else
-      invalid_map_entry(entry)
-    end
-  end
-
-  defp map_key_value(%{key: key} = entry) do
-    if Map.has_key?(entry, :value) do
-      {:ok, key, Map.fetch!(entry, :value)}
-    else
-      invalid_map_entry(entry)
-    end
-  end
+  defp map_key_value(%{"key" => key, "value" => value}), do: {:ok, key, value}
+  defp map_key_value(%{key: key, value: value}), do: {:ok, key, value}
 
   defp map_key_value(other), do: invalid_map_entry(other)
 

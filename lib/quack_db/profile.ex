@@ -243,7 +243,7 @@ defmodule QuackDB.Profile do
       :error
     end
   rescue
-    _error -> :error
+    _error in [ArgumentError, FunctionClauseError, RuntimeError, UndefinedFunctionError] -> :error
   end
 
   defp ecto_query_statement(_connection, _statement), do: :error

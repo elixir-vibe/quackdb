@@ -56,7 +56,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     defp lambda_vars!(function, args) do
       Enum.map(args, fn
         {name, _meta, context} when is_atom(name) and is_atom(context) ->
-          if valid_identifier?(Atom.to_string(name)) do
+          if QuackDB.Identifier.valid?(name) do
             name
           else
             raise ArgumentError,
@@ -107,16 +107,17 @@ if Code.ensure_loaded?(Ecto.Query.API) do
     defp expr({:case_when, _meta, [[do: clauses]]}, vars, function) do
       {when_clauses, else_expression} = QuackDB.Ecto.Conditionals.__split_clauses__!(clauses)
 
-      {when_sql, when_params} =
-        Enum.map_reduce(when_clauses, [], fn {condition, expression}, params ->
+      {when_sql, when_param_groups} =
+        Enum.map_reduce(when_clauses, [], fn {condition, expression}, param_groups ->
           {condition_sql, condition_params} = expr(condition, vars, function)
           {expression_sql, expression_params} = expr(expression, vars, function)
 
           {["WHEN ", condition_sql, " THEN ", expression_sql, " "],
-           params ++ condition_params ++ expression_params}
+           [expression_params, condition_params | param_groups]}
         end)
 
       {else_sql, else_params} = expr(else_expression, vars, function)
+      when_params = when_param_groups |> Enum.reverse() |> List.flatten()
       {["CASE ", when_sql, "ELSE ", else_sql, " END"], when_params ++ else_params}
     end
 
@@ -148,7 +149,5 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       raise ArgumentError,
             "unsupported DuckDB lambda expression in #{function}: #{Macro.to_string(other)}. #{@supported_expression_message}"
     end
-
-    defp valid_identifier?(value), do: QuackDB.Identifier.valid?(value)
   end
 end

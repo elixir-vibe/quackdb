@@ -127,7 +127,8 @@ defmodule QuackDB.Binary do
   defp gunzip(compressed) do
     {:ok, :zlib.gunzip(compressed)}
   rescue
-    error -> error(:archive_error, "failed to unpack DuckDB binary: #{Exception.message(error)}")
+    error in ErlangError ->
+      error(:archive_error, "failed to unpack DuckDB binary: #{Exception.message(error)}")
   end
 
   defp verify_checksum(binary, target, options) do
@@ -180,7 +181,7 @@ defmodule QuackDB.Binary do
         })
     end
   rescue
-    error ->
+    error in ErlangError ->
       error(:invalid_duckdb_binary, "DuckDB binary probe failed: #{Exception.message(error)}", %{
         path: path
       })
@@ -249,7 +250,8 @@ defmodule QuackDB.Binary do
   end
 
   defp validate_target(target) do
-    targets = @checksums |> Map.keys() |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
+    targets =
+      @checksums |> Enum.map(fn {{_version, target}, _checksum} -> target end) |> Enum.uniq()
 
     if target in targets do
       {:ok, target}

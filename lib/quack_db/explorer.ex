@@ -33,7 +33,15 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
         QuackDB.insert_columns(connection, table, columns, append_options)
       end
     rescue
-      error -> {:error, error}
+      error in [
+        ArgumentError,
+        ErlangError,
+        FunctionClauseError,
+        Protocol.UndefinedError,
+        RuntimeError,
+        UndefinedFunctionError
+      ] ->
+        {:error, error}
     end
 
     @doc """
@@ -64,7 +72,15 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
         |> ok()
       end
     rescue
-      error -> {:error, error}
+      error in [
+        ArgumentError,
+        ErlangError,
+        FunctionClauseError,
+        Protocol.UndefinedError,
+        RuntimeError,
+        UndefinedFunctionError
+      ] ->
+        {:error, error}
     end
 
     @doc """
