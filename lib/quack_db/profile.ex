@@ -30,17 +30,6 @@ defmodule QuackDB.Profile.Operator do
           extra_info: map(),
           children: [t()]
         }
-
-  @doc "Builds an operator struct from decoded DuckDB profiling JSON."
-  @spec from_decoded(map()) :: t()
-  def from_decoded(%{} = decoded) do
-    operator_fields = Map.keys(%__MODULE__{}) -- [:__struct__, :children]
-
-    decoded
-    |> Map.take(operator_fields)
-    |> Map.put(:children, Enum.map(Map.get(decoded, :children, []), &from_decoded/1))
-    |> then(&struct!(__MODULE__, &1))
-  end
 end
 
 defmodule QuackDB.Profile do
@@ -129,7 +118,7 @@ defmodule QuackDB.Profile do
     with {:ok, sql, params} <- profile_statement(connection, statement, params, analyze: false),
          {:ok, result} <- QuackDB.query(connection, sql, params, options),
          {:ok, profile} <- decode_result(result) do
-      {:ok, from_decoded(profile)}
+      {:ok, build_profile(profile)}
     end
   end
 
@@ -151,7 +140,7 @@ defmodule QuackDB.Profile do
     with {:ok, sql, params} <- profile_statement(connection, statement, params, analyze: true),
          {:ok, result} <- QuackDB.query(connection, sql, params, options),
          {:ok, profile} <- decode_result(result) do
-      {:ok, from_decoded(profile)}
+      {:ok, build_profile(profile)}
     end
   end
 
@@ -203,16 +192,23 @@ defmodule QuackDB.Profile do
     |> IO.iodata_to_binary()
   end
 
-  @doc "Builds a profile struct from decoded DuckDB profiling JSON."
-  @spec from_decoded(map()) :: t()
-  def from_decoded(%{} = decoded) do
+  defp build_profile(%{} = decoded) do
     profile_fields = Map.keys(%__MODULE__{}) -- [:__struct__, :children, :optimizers]
 
     decoded
     |> Map.take(profile_fields)
-    |> Map.put(:children, Enum.map(Map.get(decoded, :children, []), &Operator.from_decoded/1))
+    |> Map.put(:children, Enum.map(Map.get(decoded, :children, []), &build_operator/1))
     |> Map.put(:optimizers, optimizer_metrics(decoded))
     |> then(&struct!(__MODULE__, &1))
+  end
+
+  defp build_operator(%{} = decoded) do
+    operator_fields = Map.keys(%Operator{}) -- [:__struct__, :children]
+
+    decoded
+    |> Map.take(operator_fields)
+    |> Map.put(:children, Enum.map(Map.get(decoded, :children, []), &build_operator/1))
+    |> then(&struct!(Operator, &1))
   end
 
   defp normalize_arguments(statement, params, []) when is_list(params) do

@@ -1,15 +1,23 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 - 2026-06-06
 
 ### Added
 
 - Added `:or_replace` support to `QuackDB.DDL.create_table/2,3` and support for creating a differently named table from an Ecto schema via `QuackDB.DDL.create_table(name, schema, opts)`.
 - Added `QuackDB.Profile` for DuckDB `EXPLAIN (ANALYZE, FORMAT json)` query profiles with structured operator helpers, and added `:format` support to `QuackDB.SQL.explain/2`.
+- Added tests and documentation for Ecto insert-from-query staging/dedupe with `returning`.
 
 ### Changed
 
 - Removed public `QuackDB.DDL.create_table_as/3`; use `QuackDB.DDL.create_table/2` or `/3` with the `:as` option instead.
+
+### Fixed
+
+- Fixed schema-backed append type inference for parameterized Ecto types such as `Ecto.Enum`.
+- Fixed explicit `columns: [...]` preservation in schema-backed append inserts.
+- Fixed Ecto `:map` append values by JSON-encoding maps for DuckDB `VARCHAR` append columns.
+- Fixed full schema-backed native append value ordering to follow schema field-source order.
 
 ## 0.5.0 - 2026-06-06
 

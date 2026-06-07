@@ -1,21 +1,24 @@
 # Public API audit
 
-This audit tracks public API added after `0.3.0` and records accepted naming decisions before release cuts. No open naming decisions remain for the current unreleased changes.
+This audit tracks public API changes and records accepted naming decisions before release cuts. No open naming decisions remain for the current release candidate.
 
-## Unreleased API additions after 0.4.2
+## 0.5.1 API additions after 0.5.0
 
-New public surfaces since `0.4.2`:
+New public surfaces since `0.5.0`:
 
-- Ecto append behavior: `Repo.insert_all(..., insert_method: :append)` explicitly opts into native append, including schema-backed subset/default columns and `returning` support through an internal temporary-table path.
-- Repo-backed public helpers: `QuackDB.query/4`, `insert_rows/4`, `insert_columns/4`, and `insert_stream/4` accept a QuackDB-backed Ecto repo as the connection argument.
-- Direct SQL helpers: `QuackDB.SQL.star/1`, `columns/1,2`, `unpack_columns/1,2`, `pivot/2`, `unpivot/2`, `grouping_sets/1`, `rollup/1`, and `cube/1`.
-- Ecto star helpers: `QuackDB.Ecto.Star.star/1`, `columns/1,2`, and `unpack_columns/1,2`.
-- Direct LIST helpers: `QuackDB.List.length/1`, `extract/2`, `slice/3,4`, `sort/1`, `reverse_sort/1`, `distinct/1`, `unique/1`, `position/2`, `intersect/2`, and `concat/2`.
-- Ecto LIST helpers: `QuackDB.Ecto.List.list_length/1`, `extract/2`, `slice/3,4`, `sort/1`, `reverse_sort/1`, `distinct/1`, `unique/1`, `position/2`, `intersect_list/2`, `concat/2`, `list_filter/2`, `list_transform/2`, and `list_reduce/2,3`.
-- Direct MAP and STRUCT helpers: `QuackDB.Map` and `QuackDB.Struct`.
-- Ecto MAP and STRUCT helpers: `QuackDB.Ecto.Map` and `QuackDB.Ecto.Struct` focused imports plus explicit aliases for broad `use QuackDB.Ecto` imports.
+- DDL options: `QuackDB.DDL.create_table/2,3` accepts `or_replace: true` and `QuackDB.DDL.create_table(name, schema, opts)` can create a differently named table from an Ecto schema.
+- Query profiling: `QuackDB.Profile.analyze/4`, `analyze!/4`, `explain/4`, `explain!/4`, `flatten/1`, `slowest/2`, `report/2`, and decoded profile/operator structs.
+- SQL explain formats: `QuackDB.SQL.explain/2` accepts `format: :text | :json | :html | :graphviz | :mermaid`.
 
-Accepted naming decisions for unreleased changes:
+Accepted naming decisions for 0.5.1 changes:
+
+- Keep DDL replacement and schema-copy staging as options/overloads on `create_table` rather than adding `replace_table_as/3` or `create_table_like/3`.
+- Keep query profiling in `QuackDB.Profile` and reserve telemetry for client-side query/fetch/append timings.
+- Decode DuckDB profile JSON into structs, while keeping open-ended `extra_info` keys as DuckDB returns them.
+
+## 0.5.0 API additions after 0.4.2
+
+Accepted naming decisions for 0.5.0 changes:
 
 - Keep append opt-in explicit with `insert_method: :append`; do not add `insert_method: :auto`.
 - Keep temporary append/returning internals private; do not add a public `append_insert_all` helper.
