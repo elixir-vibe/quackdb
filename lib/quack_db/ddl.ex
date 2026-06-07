@@ -73,9 +73,7 @@ defmodule QuackDB.DDL do
     ]
   end
 
-  @doc "Builds a `CREATE TABLE AS` statement."
-  @spec create_table_as(String.t() | atom(), iodata(), [create_table_option()]) :: iodata()
-  def create_table_as(name, query, options \\ []) when is_list(options) do
+  defp create_table_as(name, query, options) when is_list(options) do
     [
       "CREATE ",
       temporary(options),

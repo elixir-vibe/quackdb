@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Removed public `QuackDB.DDL.create_table_as/3`; use `QuackDB.DDL.create_table/2` or `/3` with the `:as` option instead.
+
 ## 0.5.0 - 2026-06-06
 
 ### Added
