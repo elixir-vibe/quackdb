@@ -184,29 +184,11 @@ defmodule QuackDB.Source do
     end
   end
 
-  defp validate_identifier!(value, kind) when is_atom(value) do
-    value |> Atom.to_string() |> validate_identifier!(kind)
-  end
-
-  defp validate_identifier!(<<first, rest::binary>> = value, kind)
-       when first in ?A..?Z or first in ?a..?z or first == ?_ do
-    if valid_identifier_rest?(rest) do
-      :ok
-    else
+  defp validate_identifier!(value, kind) do
+    unless QuackDB.Identifier.valid?(value) do
       raise ArgumentError, "invalid DuckDB #{kind} identifier: #{inspect(value)}"
     end
+
+    :ok
   end
-
-  defp validate_identifier!(value, kind) do
-    raise ArgumentError, "invalid DuckDB #{kind} identifier: #{inspect(value)}"
-  end
-
-  defp valid_identifier_rest?(<<>>), do: true
-
-  defp valid_identifier_rest?(<<char, rest::binary>>)
-       when char in ?A..?Z or char in ?a..?z or char in ?0..?9 or char == ?_ do
-    valid_identifier_rest?(rest)
-  end
-
-  defp valid_identifier_rest?(_value), do: false
 end

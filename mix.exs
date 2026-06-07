@@ -48,13 +48,20 @@ defmodule QuackDB.MixProject do
       {:stream_data, "~> 1.2", only: :test},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:ex_dna, "~> 1.5", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 
   defp aliases do
     [
-      ci: ["compile --warnings-as-errors", "format --check-formatted", "test", "credo --strict"]
+      ci: [
+        "compile --warnings-as-errors",
+        "format --check-formatted",
+        "test",
+        "credo --strict",
+        "ex_dna --max-clones 0"
+      ]
     ]
   end
 

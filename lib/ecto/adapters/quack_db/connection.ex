@@ -693,17 +693,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     defp if_do(condition, value), do: if(condition, do: value, else: [])
 
-    defp quote_name(nil, name), do: quote_name(name)
-    defp quote_name(prefix, name), do: [quote_name(prefix), ?., quote_name(name)]
-    defp quote_name(name) when is_atom(name), do: name |> Atom.to_string() |> quote_name()
-
-    defp quote_name(name) when is_binary(name) do
-      if String.contains?(name, "\"") do
-        raise ArgumentError, "bad literal/field/table name #{inspect(name)} (\" is not permitted)"
-      end
-
-      [?\", name, ?\"]
-    end
+    defp quote_name(name), do: QuackDB.Ecto.Quote.name(name)
+    defp quote_name(prefix, name), do: QuackDB.Ecto.Quote.name(prefix, name)
 
     defp normalize_result(%QuackDB.Result{} = result) do
       %{

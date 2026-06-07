@@ -699,12 +699,16 @@ defmodule QuackDB.DBConnection do
         {:halt, cursor_result(cursor, []), state}
 
       true ->
-        with {:ok, cursor_state} <- fetch_cursor_state(cursor_state, cursor, options, state) do
-          state = put_cursor_state(state, cursor.ref, cursor_state)
-          handle_fetch(nil, cursor, options, state)
-        else
-          {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
-        end
+        fetch_more_cursor_rows(cursor_state, cursor, options, state)
+    end
+  end
+
+  defp fetch_more_cursor_rows(cursor_state, cursor, options, state) do
+    with {:ok, cursor_state} <- fetch_cursor_state(cursor_state, cursor, options, state) do
+      state = put_cursor_state(state, cursor.ref, cursor_state)
+      handle_fetch(nil, cursor, options, state)
+    else
+      {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
     end
   end
 
@@ -724,12 +728,7 @@ defmodule QuackDB.DBConnection do
         {:halt, cursor_result(cursor, nil, []), state}
 
       true ->
-        with {:ok, cursor_state} <- fetch_cursor_state(cursor_state, cursor, options, state) do
-          state = put_cursor_state(state, cursor.ref, cursor_state)
-          handle_fetch(nil, cursor, options, state)
-        else
-          {:error, error} -> {:error, annotate_cursor_error(error, cursor), state}
-        end
+        fetch_more_cursor_rows(cursor_state, cursor, options, state)
     end
   end
 

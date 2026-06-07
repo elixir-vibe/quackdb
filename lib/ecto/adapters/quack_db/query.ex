@@ -1017,15 +1017,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp order_direction(:desc_nulls_last), do: "DESC NULLS LAST"
     defp order_direction(:desc_nulls_first), do: "DESC NULLS FIRST"
 
-    defp quote_name(name) when is_atom(name), do: name |> Atom.to_string() |> quote_name()
-
-    defp quote_name(name) when is_binary(name) do
-      if String.contains?(name, "\"") do
-        raise ArgumentError, "bad literal/field/table name #{inspect(name)} (\" is not permitted)"
-      end
-
-      [?\", name, ?\"]
-    end
+    defp quote_name(name), do: QuackDB.Ecto.Quote.name(name)
 
     defp unsupported!(feature, message) do
       raise QuackDB.Error.new(:ecto_feature_not_supported, message,

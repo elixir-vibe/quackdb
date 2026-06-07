@@ -193,16 +193,7 @@ if Code.ensure_loaded?(Table.Reader) do
     def init(%{columns: columns}) when columns in [nil, []], do: :none
 
     def init(%{rows: rows} = result) do
-      {columns, _counts} =
-        Enum.map_reduce(result.columns, %{}, fn column, counts ->
-          counts = Map.update(counts, column, 1, &(&1 + 1))
-
-          case counts[column] do
-            1 -> {column, counts}
-            count -> {"#{column}_#{count}", counts}
-          end
-        end)
-
+      columns = QuackDB.Result.disambiguate_columns(result.columns)
       {:rows, %{columns: columns, count: result.num_rows}, rows || []}
     end
   end

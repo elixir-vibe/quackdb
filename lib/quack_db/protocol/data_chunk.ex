@@ -445,56 +445,7 @@ defmodule QuackDB.Protocol.DataChunk do
     LogicalType.new(:decimal, %{type: 2, width: width, scale: scale})
   end
 
-  defp fetch_row_value(row, name) when is_list(row) do
-    if Keyword.keyword?(row) do
-      keyword_value(row, name)
-    end
-  end
-
-  defp fetch_row_value(row, name) when is_map(row) do
-    cond do
-      Map.has_key?(row, name) ->
-        Map.fetch!(row, name)
-
-      is_atom(name) and Map.has_key?(row, to_string(name)) ->
-        Map.fetch!(row, to_string(name))
-
-      is_binary(name) ->
-        row
-        |> Enum.find_value(fn
-          {key, value} when is_atom(key) -> if Atom.to_string(key) == name, do: {:value, value}
-          _entry -> nil
-        end)
-        |> case do
-          {:value, value} -> value
-          nil -> nil
-        end
-
-      true ->
-        nil
-    end
-  end
-
-  defp keyword_value(row, name) do
-    cond do
-      is_atom(name) and Keyword.has_key?(row, name) ->
-        Keyword.fetch!(row, name)
-
-      is_binary(name) ->
-        row
-        |> Enum.find_value(fn
-          {key, value} when is_atom(key) -> if Atom.to_string(key) == name, do: {:value, value}
-          _entry -> nil
-        end)
-        |> case do
-          {:value, value} -> value
-          nil -> nil
-        end
-
-      true ->
-        nil
-    end
-  end
+  defp fetch_row_value(row, name), do: QuackDB.KeyLookup.fetch(row, name)
 
   defp collect_ok(results) do
     Enum.reduce_while(results, {:ok, []}, fn

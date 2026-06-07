@@ -149,20 +149,6 @@ if Code.ensure_loaded?(Ecto.Query.API) do
             "unsupported DuckDB lambda expression in #{function}: #{Macro.to_string(other)}. #{@supported_expression_message}"
     end
 
-    defp valid_identifier?(<<first, rest::binary>>)
-         when first in ?A..?Z or first in ?a..?z or first == ?_ do
-      valid_identifier_rest?(rest)
-    end
-
-    defp valid_identifier?(_value), do: false
-
-    defp valid_identifier_rest?(<<>>), do: true
-
-    defp valid_identifier_rest?(<<char, rest::binary>>)
-         when char in ?A..?Z or char in ?a..?z or char in ?0..?9 or char == ?_ do
-      valid_identifier_rest?(rest)
-    end
-
-    defp valid_identifier_rest?(_value), do: false
+    defp valid_identifier?(value), do: QuackDB.Identifier.valid?(value)
   end
 end

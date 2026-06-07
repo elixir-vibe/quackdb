@@ -535,33 +535,7 @@ defmodule QuackDB.Protocol.Vector do
     ]
   end
 
-  defp struct_child_value(nil, _name), do: nil
-
-  defp struct_child_value(value, name) when is_map(value) do
-    cond do
-      Map.has_key?(value, name) ->
-        Map.fetch!(value, name)
-
-      is_binary(name) ->
-        value
-        |> Enum.find_value(fn
-          {key, child_value} when is_atom(key) ->
-            if Atom.to_string(key) == name, do: {:value, child_value}
-
-          _entry ->
-            nil
-        end)
-        |> case do
-          {:value, child_value} -> child_value
-          nil -> nil
-        end
-
-      true ->
-        nil
-    end
-  end
-
-  defp struct_child_value(_value, _name), do: nil
+  defp struct_child_value(value, name), do: QuackDB.KeyLookup.fetch(value, name)
 
   defp read_child_vectors(binary, children, row_count) do
     with {:ok, count, rest} <- Reader.read_uleb128(binary),

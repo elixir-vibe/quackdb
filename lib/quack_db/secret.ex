@@ -89,28 +89,13 @@ defmodule QuackDB.Secret do
     end
   end
 
-  defp identifier!(value, kind) when is_atom(value),
-    do: value |> Atom.to_string() |> identifier!(kind)
-
-  defp identifier!(<<first, rest::binary>> = value, kind)
-       when first in ?A..?Z or first in ?a..?z or first == ?_ do
-    if valid_identifier_rest?(rest) do
-      value
+  defp identifier!(value, kind) do
+    if QuackDB.Identifier.valid?(value) do
+      to_string(value)
     else
       invalid_identifier!(value, kind)
     end
   end
-
-  defp identifier!(value, kind), do: invalid_identifier!(value, kind)
-
-  defp valid_identifier_rest?(<<>>), do: true
-
-  defp valid_identifier_rest?(<<char, rest::binary>>)
-       when char in ?A..?Z or char in ?a..?z or char in ?0..?9 or char == ?_ do
-    valid_identifier_rest?(rest)
-  end
-
-  defp valid_identifier_rest?(_value), do: false
 
   defp invalid_identifier!(value, kind) do
     raise ArgumentError, "invalid DuckDB secret #{kind} identifier: #{inspect(value)}"
