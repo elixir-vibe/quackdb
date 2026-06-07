@@ -11,20 +11,20 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
            conn <- ecto_connection(adapter_meta),
            append_header <- append_header(schema_meta, header),
            options <- append_options(schema_meta, append_header, opts),
-           insert_rows <- append_rows(append_header, rows, options),
+           insert_columns <- append_columns(append_header, rows, options),
            {:ok, %QuackDB.Result{} = result} <-
-             insert_all(conn, schema_meta, append_header, insert_rows, returning, options) do
+             insert_all(conn, schema_meta, append_header, insert_columns, returning, options) do
         {result.num_rows, result.rows}
       else
         {:error, %QuackDB.Error{} = error} -> raise error
       end
     end
 
-    defp insert_all(conn, schema_meta, header, rows, returning, options) do
+    defp insert_all(conn, schema_meta, header, columns, returning, options) do
       if insert_select?(schema_meta, header, returning) do
-        insert_select(conn, schema_meta, header, rows, returning, options)
+        insert_select(conn, schema_meta, header, columns, returning, options)
       else
-        QuackDB.insert_rows(conn, schema_meta.source, rows, options)
+        QuackDB.insert_columns(conn, schema_meta.source, columns, options)
       end
     end
 
@@ -35,13 +35,13 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       MapSet.new(header) != MapSet.new(schema_source_order(schema_meta))
     end
 
-    defp insert_select(conn, schema_meta, header, rows, returning, options) do
+    defp insert_select(conn, schema_meta, header, columns, returning, options) do
       case DBConnection.status(conn, options) do
         :idle ->
           DBConnection.transaction(
             conn,
             fn tx ->
-              case do_insert_select(tx, schema_meta, header, rows, returning, options) do
+              case do_insert_select(tx, schema_meta, header, columns, returning, options) do
                 {:ok, result} -> result
                 {:error, error} -> DBConnection.rollback(tx, error)
               end
@@ -50,19 +50,22 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
           )
 
         _status ->
-          do_insert_select(conn, schema_meta, header, rows, returning, options)
+          do_insert_select(conn, schema_meta, header, columns, returning, options)
       end
     end
 
-    defp do_insert_select(conn, schema_meta, header, rows, returning, options) do
-      columns = append_columns!(schema_meta, header, options)
+    defp do_insert_select(conn, schema_meta, header, append_column_values, returning, options) do
+      temp_columns = append_columns!(schema_meta, header, options)
       temp_table = temp_table_name()
-      create_statement = create_temp_table(temp_table, columns)
-      insert_statement = insert_from_temp_statement(schema_meta, columns, temp_table, returning)
+      create_statement = create_temp_table(temp_table, temp_columns)
+
+      insert_statement =
+        insert_from_temp_statement(schema_meta, temp_columns, temp_table, returning)
 
       try do
         with {:ok, _result} <- QuackDB.query(conn, create_statement, [], options),
-             {:ok, _result} <- QuackDB.insert_rows(conn, temp_table, rows, options),
+             {:ok, _result} <-
+               QuackDB.insert_columns(conn, temp_table, append_column_values, options),
              {:ok, %QuackDB.Result{} = result} <-
                QuackDB.query(conn, insert_statement, [], options) do
           {:ok, result}
@@ -235,15 +238,58 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp ecto_pool(%{pid: pool}), do: pool
 
-    defp append_rows(header, rows, options) do
-      types = Keyword.get(options, :columns, [])
+    @doc false
+    def __append_columns__(header, rows, options), do: append_columns(header, rows, options)
 
-      Enum.map(rows, fn row ->
-        Enum.map(header, fn field ->
-          {field,
-           row |> Keyword.fetch!(field) |> normalize_append_value(column_type(types, field))}
-        end)
+    defp append_columns(header, rows, options) do
+      column_types = Enum.map(header, &column_type(Keyword.get(options, :columns, []), &1))
+      accumulators = Enum.map(header, fn _field -> [] end)
+
+      rows
+      |> Enum.reduce(accumulators, fn row, accumulators ->
+        row
+        |> append_row_values(header, column_types)
+        |> prepend_column_values(accumulators)
       end)
+      |> then(fn columns ->
+        header
+        |> Enum.zip(columns)
+        |> Enum.map(fn {field, values} -> {field, Enum.reverse(values)} end)
+      end)
+    end
+
+    defp append_row_values(row, header, column_types) do
+      case ordered_row_values(row, header, column_types, []) do
+        {:ok, values} -> values
+        :error -> fetched_row_values(row, header, column_types)
+      end
+    end
+
+    defp ordered_row_values([], [], [], values), do: {:ok, Enum.reverse(values)}
+
+    defp ordered_row_values(
+           [{field, value} | row],
+           [field | header],
+           [type | column_types],
+           values
+         ) do
+      ordered_row_values(row, header, column_types, [normalize_append_value(value, type) | values])
+    end
+
+    defp ordered_row_values(_row, _header, _column_types, _values), do: :error
+
+    defp fetched_row_values(row, header, column_types) do
+      header
+      |> Enum.zip(column_types)
+      |> Enum.map(fn {field, type} ->
+        row |> Keyword.fetch!(field) |> normalize_append_value(type)
+      end)
+    end
+
+    defp prepend_column_values(values, accumulators) do
+      values
+      |> Enum.zip(accumulators)
+      |> Enum.map(fn {value, accumulator} -> [value | accumulator] end)
     end
 
     defp normalize_append_value(nil, _type), do: nil
