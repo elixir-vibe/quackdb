@@ -67,6 +67,8 @@ defmodule QuackDB.Server do
           | {:boot_sql, String.t()}
           | {:settings, keyword(QuackDB.SQL.parameter())}
           | {:global_settings, keyword(QuackDB.SQL.parameter())}
+          | {:recovery_mode, :no_wal_writes | String.t()}
+          | {:attach_as, atom() | String.t()}
           | {:wait, boolean()}
           | {:wait_timeout, timeout()}
           | {:poll_interval, pos_integer()}
@@ -190,9 +192,11 @@ defmodule QuackDB.Server do
     boot_sql = Keyword.get_lazy(options, :boot_sql, fn -> boot_sql(endpoint, token, options) end)
     daemon_options = daemon_options(options)
 
+    cli_database = if Keyword.has_key?(options, :recovery_mode), do: ":memory:", else: database
+
     {command, args} =
       Keyword.get_lazy(options, :daemon_command, fn ->
-        daemon_command(duckdb, database, boot_sql)
+        daemon_command(duckdb, cli_database, boot_sql)
       end)
 
     %__MODULE__{
@@ -347,6 +351,7 @@ defmodule QuackDB.Server do
 
   defp boot_sql(endpoint, token, options) do
     [
+      attach_database(options),
       if(Keyword.get(options, :load_quack?, true), do: [QuackDB.SQL.load(:quack), " "], else: []),
       server_settings(options),
       server_global_settings(options),
@@ -354,6 +359,37 @@ defmodule QuackDB.Server do
     ]
     |> IO.iodata_to_binary()
   end
+
+  defp attach_database(options) do
+    case Keyword.fetch(options, :recovery_mode) do
+      {:ok, recovery_mode} ->
+        database = Keyword.get(options, :database, ":memory:")
+
+        if database == ":memory:" do
+          raise ArgumentError, "server option :recovery_mode requires a persistent :database path"
+        end
+
+        alias_name = Keyword.get(options, :attach_as, :quackdb)
+
+        [
+          "ATTACH ",
+          QuackDB.SQL.literal!(database),
+          " AS ",
+          QuackDB.Type.quote_identifier(alias_name),
+          " (RECOVERY_MODE ",
+          recovery_mode(recovery_mode),
+          "); USE ",
+          QuackDB.Type.quote_identifier(alias_name),
+          "; "
+        ]
+
+      :error ->
+        []
+    end
+  end
+
+  defp recovery_mode(:no_wal_writes), do: "no_wal_writes"
+  defp recovery_mode(value) when is_binary(value), do: value
 
   defp server_settings(options) do
     options

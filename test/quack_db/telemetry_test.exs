@@ -84,6 +84,14 @@ defmodule QuackDB.TelemetryTest do
     assert metadata.command == :insert
     assert metadata.rows == 2
     assert metadata.result == :ok
+    assert metadata.batches == 1
+    assert is_integer(metadata.encode_duration)
+    assert is_integer(metadata.transport_duration)
+    assert is_integer(metadata.decode_duration)
+    assert is_integer(metadata.append_duration)
+    assert metadata.request_bytes > 0
+    assert metadata.response_bytes > 0
+    assert metadata.rows_per_second > 0
   end
 
   test "supports custom telemetry prefixes" do

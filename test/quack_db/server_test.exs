@@ -98,6 +98,27 @@ defmodule QuackDB.ServerTest do
            } = QuackDB.Server.info(server)
   end
 
+  test "recovery_mode attaches persistent databases without WAL writes" do
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         database: "/tmp/rebuildable.duckdb",
+         recovery_mode: :no_wal_writes,
+         attach_as: :index,
+         token: "secret",
+         settings: [],
+         global_settings: [],
+         wait: false,
+         daemon_command: {"tail", ["-f", "/dev/null"]}}
+      )
+
+    assert %{
+             database: "/tmp/rebuildable.duckdb",
+             boot_sql:
+               "ATTACH '/tmp/rebuildable.duckdb' AS \"index\" (RECOVERY_MODE no_wal_writes); USE \"index\"; LOAD quack; CALL quack_serve('quack:localhost', token = 'secret');"
+           } = QuackDB.Server.info(server)
+  end
+
   test "load_quack? false omits LOAD statement" do
     server =
       start_supervised!(

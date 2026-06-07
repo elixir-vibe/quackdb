@@ -282,18 +282,22 @@ defmodule QuackDB.DBConnection do
       metadata = append_metadata(query, table, rows, batches, options, state)
 
       Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
-        result =
+        append_started_at = System.monotonic_time()
+
+        {result, append_metrics} =
           case append_batches(table, batches, options, state) do
-            :ok ->
+            {:ok, metrics} ->
               result = append_result(rows, state)
-              {:ok, query, result, %{state | status: successful_status(state.status)}}
+
+              {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
 
             {:error, error} ->
-              {:error, annotate_error(error, query, state),
-               %{state | status: failed_status(state.status)}}
+              {{:error, annotate_error(error, query, state),
+                %{state | status: failed_status(state.status)}}, empty_append_metrics()}
           end
 
-        {result, append_stop_metadata(result)}
+        append_duration = System.monotonic_time() - append_started_at
+        {result, append_stop_metadata(result, append_metrics, append_duration)}
       end)
     else
       {:error, error} ->
@@ -334,18 +338,22 @@ defmodule QuackDB.DBConnection do
       metadata = append_metadata(query, table, row_count, batches, options, state)
 
       Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
-        result =
+        append_started_at = System.monotonic_time()
+
+        {result, append_metrics} =
           case append_column_batches(table, batches, options, state) do
-            :ok ->
+            {:ok, metrics} ->
               result = append_result(row_count, state)
-              {:ok, query, result, %{state | status: successful_status(state.status)}}
+
+              {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
 
             {:error, error} ->
-              {:error, annotate_error(error, query, state),
-               %{state | status: failed_status(state.status)}}
+              {{:error, annotate_error(error, query, state),
+                %{state | status: failed_status(state.status)}}, empty_append_metrics()}
           end
 
-        {result, append_stop_metadata(result)}
+        append_duration = System.monotonic_time() - append_started_at
+        {result, append_stop_metadata(result, append_metrics, append_duration)}
       end)
     else
       {:error, error} ->
@@ -389,24 +397,26 @@ defmodule QuackDB.DBConnection do
   end
 
   defp append_batches(table, batches, options, state) do
-    Enum.reduce_while(batches, :ok, fn rows, :ok ->
+    Enum.reduce_while(batches, {:ok, empty_append_metrics()}, fn rows, {:ok, metrics} ->
       case append_batch(table, rows, options, state) do
-        :ok -> {:cont, :ok}
+        {:ok, batch_metrics} -> {:cont, {:ok, merge_append_metrics(metrics, batch_metrics)}}
         {:error, _error} = error -> {:halt, error}
       end
     end)
   end
 
   defp append_column_batches(table, batches, options, state) do
-    Enum.reduce_while(batches, :ok, fn columns, :ok ->
+    Enum.reduce_while(batches, {:ok, empty_append_metrics()}, fn columns, {:ok, metrics} ->
       case append_column_batch(table, columns, options, state) do
-        :ok -> {:cont, :ok}
+        {:ok, batch_metrics} -> {:cont, {:ok, merge_append_metrics(metrics, batch_metrics)}}
         {:error, _error} = error -> {:halt, error}
       end
     end)
   end
 
   defp append_batch(table, rows, options, state) do
+    encode_started_at = System.monotonic_time()
+
     with {:ok, chunk} <- DataChunk.from_rows(rows, options),
          request = %AppendRequest{
            schema_name: Keyword.get(options, :schema, ""),
@@ -417,10 +427,9 @@ defmodule QuackDB.DBConnection do
            Codec.encode(request,
              connection_id: state.connection_id,
              client_query_id: Keyword.get(options, :client_query_id)
-           ),
-         {:ok, response} <- state.transport.(state.uri, encoded, options),
-         {:ok, decoded} <- Codec.decode(response) do
-      normalize_append_response(decoded)
+           ) do
+      encode_duration = System.monotonic_time() - encode_started_at
+      append_encoded(encoded, options, state, encode_duration)
     end
   end
 
@@ -437,7 +446,68 @@ defmodule QuackDB.DBConnection do
      )}
   end
 
+  defp append_encoded(encoded, options, state, encode_duration) do
+    {transport_duration, transport_result} =
+      timed(fn -> state.transport.(state.uri, encoded, options) end)
+
+    with {:ok, response} <- transport_result do
+      {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
+
+      with {:ok, decoded} <- decode_result,
+           :ok <- normalize_append_response(decoded) do
+        {:ok,
+         append_batch_metrics(
+           encode_duration,
+           transport_duration,
+           decode_duration,
+           encoded,
+           response
+         )}
+      end
+    end
+  end
+
+  defp append_batch_metrics(
+         encode_duration,
+         transport_duration,
+         decode_duration,
+         request,
+         response
+       ) do
+    %{
+      batches: 1,
+      encode_duration: encode_duration,
+      transport_duration: transport_duration,
+      decode_duration: decode_duration,
+      request_bytes: IO.iodata_length(request),
+      response_bytes: byte_size(response)
+    }
+  end
+
+  defp empty_append_metrics do
+    %{
+      batches: 0,
+      encode_duration: 0,
+      transport_duration: 0,
+      decode_duration: 0,
+      request_bytes: 0,
+      response_bytes: 0
+    }
+  end
+
+  defp merge_append_metrics(left, right) do
+    Map.merge(left, right, fn _key, left_value, right_value -> left_value + right_value end)
+  end
+
+  defp timed(fun) do
+    started_at = System.monotonic_time()
+    result = fun.()
+    {System.monotonic_time() - started_at, result}
+  end
+
   defp append_column_batch(table, columns, options, state) do
+    encode_started_at = System.monotonic_time()
+
     with {:ok, chunk} <- DataChunk.from_columns(columns, options),
          request = %AppendRequest{
            schema_name: Keyword.get(options, :schema, ""),
@@ -448,10 +518,9 @@ defmodule QuackDB.DBConnection do
            Codec.encode(request,
              connection_id: state.connection_id,
              client_query_id: Keyword.get(options, :client_query_id)
-           ),
-         {:ok, response} <- state.transport.(state.uri, encoded, options),
-         {:ok, decoded} <- Codec.decode(response) do
-      normalize_append_response(decoded)
+           ) do
+      encode_duration = System.monotonic_time() - encode_started_at
+      append_encoded(encoded, options, state, encode_duration)
     end
   end
 
@@ -943,7 +1012,25 @@ defmodule QuackDB.DBConnection do
     %{error: error, result: :error}
   end
 
-  defp append_stop_metadata(result), do: result_stop_metadata(result)
+  defp append_stop_metadata(result, metrics, duration) do
+    result
+    |> result_stop_metadata()
+    |> Map.merge(metrics)
+    |> Map.put(:append_duration, duration)
+    |> maybe_put_rows_per_second(result, duration)
+  end
+
+  defp maybe_put_rows_per_second(
+         metadata,
+         {:ok, _query, %Result{num_rows: rows}, _state},
+         duration
+       )
+       when is_integer(rows) and rows >= 0 and duration > 0 do
+    seconds = System.convert_time_unit(duration, :native, :microsecond) / 1_000_000
+    Map.put(metadata, :rows_per_second, rows / seconds)
+  end
+
+  defp maybe_put_rows_per_second(metadata, _result, _duration), do: metadata
 
   defp fetch_stop_metadata({:ok, chunks}) do
     %{chunks: length(chunks), result: :ok}

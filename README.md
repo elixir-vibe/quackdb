@@ -104,6 +104,23 @@ children =
 
 `duckdb: :managed` downloads DuckDB's official CLI binary on first use, verifies known checksums for QuackDB's pinned DuckDB version, and caches it. QuackDB never downloads DuckDB during dependency compilation. Use `QUACKDB_BINARY_PATH`, `QUACKDB_BINARY_CACHE_DIR`, `duckdb: "/path/to/duckdb"`, or run the `quackdb.install` Mix task when you want explicit control. See the [managed DuckDB guide](guides/managed-duckdb.md).
 
+For rebuildable local artifacts, attach the persistent database with DuckDB's no-WAL recovery mode:
+
+```elixir
+children =
+  QuackDB.Server.child_specs(
+    server: [
+      duckdb: :managed,
+      database: "priv/index.duckdb",
+      recovery_mode: :no_wal_writes,
+      settings: [threads: 8]
+    ],
+    client: [name: MyApp.QuackDB]
+  )
+```
+
+`recovery_mode: :no_wal_writes` starts DuckDB in memory, attaches the database with `ATTACH ... (RECOVERY_MODE no_wal_writes)`, and then starts `quack_serve/2`. Use it only for databases that can be rebuilt if the process exits before data is durable.
+
 You can also start DuckDB manually:
 
 ```sh

@@ -70,6 +70,24 @@ Append start metadata includes:
 }
 ```
 
+Append stop metadata includes the normal command/result fields plus append phase metrics. Duration values use Erlang native time units, matching the `:telemetry.span/3` measurement convention:
+
+```elixir
+%{
+  command: :insert,
+  rows: 100_000,
+  result: :ok,
+  batches: 10,
+  encode_duration: 1_200_000,
+  transport_duration: 8_000_000,
+  decode_duration: 300_000,
+  append_duration: 9_700_000,
+  request_bytes: 12_000_000,
+  response_bytes: 240,
+  rows_per_second: 103_092.78
+}
+```
+
 Fetch stop metadata includes:
 
 ```elixir

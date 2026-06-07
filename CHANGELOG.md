@@ -6,6 +6,8 @@
 
 - Added `QuackDB.Storage` observability helpers for DuckDB table storage segments, compression summaries, database size, and checkpointing.
 - Added `QuackDB.Meta` catalog helpers for listing tables, attached databases, and logical table columns.
+- Added `QuackDB.Server` `recovery_mode: :no_wal_writes` support for rebuildable local DuckDB databases.
+- Added append telemetry phase metrics for encode, transport, decode, request/response bytes, append duration, and rows/sec.
 
 ## 0.5.1 - 2026-06-06
 
