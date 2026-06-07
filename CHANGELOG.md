@@ -9,6 +9,10 @@
 - Added `QuackDB.Server` `recovery_mode: :no_wal_writes` support for rebuildable local DuckDB databases.
 - Added append telemetry phase metrics for encode, transport, decode, request/response bytes, append duration, and rows/sec.
 
+### Changed
+
+- Optimized row-oriented native append encoding for wide ordered keyword rows by transposing rows to columns in one pass.
+
 ## 0.5.1 - 2026-06-06
 
 ### Added

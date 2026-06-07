@@ -69,11 +69,14 @@ defmodule QuackDB.Protocol.DataChunk do
   @spec from_rows([row()], Keyword.t()) :: {:ok, t()} | {:error, Error.t()}
   def from_rows(rows, options \\ []) when is_list(rows) do
     with {:ok, columns} <- columns_from_rows(rows, options) do
+      names = Enum.map(columns, & &1.name)
+      values_by_column = rows_to_column_values(rows, names)
       types = Enum.map(columns, & &1.type)
 
       vectors =
-        Enum.map(columns, fn column ->
-          values = Enum.map(rows, &fetch_row_value(&1, column.name))
+        columns
+        |> Enum.zip(values_by_column)
+        |> Enum.map(fn {column, values} ->
           %{type: column.type, vector_type: :flat, values: values}
         end)
 
@@ -126,6 +129,66 @@ defmodule QuackDB.Protocol.DataChunk do
   defp encode_column(%{type: type, values: values}) do
     Vector.encode(type, values, length(values))
   end
+
+  defp rows_to_column_values([], names), do: Enum.map(names, fn _name -> [] end)
+
+  defp rows_to_column_values(rows, names) do
+    rows
+    |> Enum.reduce(empty_column_accumulators(names), fn row, acc ->
+      row
+      |> row_values(names)
+      |> prepend_column_values(acc)
+    end)
+    |> Enum.map(&Enum.reverse/1)
+  end
+
+  defp empty_column_accumulators(names), do: Enum.map(names, fn _name -> [] end)
+
+  defp prepend_column_values(values, accumulators) do
+    values
+    |> Enum.zip(accumulators)
+    |> Enum.map(fn {value, accumulator} -> [value | accumulator] end)
+  end
+
+  defp row_values(row, names) when is_list(row) do
+    if Keyword.keyword?(row) do
+      case ordered_keyword_values(row, names, []) do
+        {:ok, values} -> values
+        :error -> Enum.map(names, &fetch_row_value(row, &1))
+      end
+    else
+      Enum.map(names, &fetch_row_value(row, &1))
+    end
+  end
+
+  defp row_values(row, names) when is_map(row) do
+    Enum.map(names, &fetch_row_value(row, &1))
+  end
+
+  defp ordered_keyword_values([], [], values), do: {:ok, Enum.reverse(values)}
+
+  defp ordered_keyword_values([{name, value} | row], [name | names], values),
+    do: ordered_keyword_values(row, names, [value | values])
+
+  defp ordered_keyword_values([{name, value} | row], [column | names], values)
+       when is_atom(name) and is_binary(column) do
+    if Atom.to_string(name) == column do
+      ordered_keyword_values(row, names, [value | values])
+    else
+      :error
+    end
+  end
+
+  defp ordered_keyword_values([{name, value} | row], [column | names], values)
+       when is_binary(name) and is_atom(column) do
+    if name == Atom.to_string(column) do
+      ordered_keyword_values(row, names, [value | values])
+    else
+      :error
+    end
+  end
+
+  defp ordered_keyword_values(_row, _names, _values), do: :error
 
   defp infer_columns_from_column_values(values) do
     values
