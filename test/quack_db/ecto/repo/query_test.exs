@@ -149,13 +149,14 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
              )
 
     assert_receive {:statement, "BEGIN"}
-    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:statement, "CREATE TEMP TABLE IF NOT EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
     assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 2}}}
 
     assert_receive {:statement, insert_statement}
     assert insert_statement =~ ~s|INSERT INTO "renamed_events" ("id", "event_name")|
     assert insert_statement =~ ~s| RETURNING "id"|
-    assert_receive {:statement, "DROP TABLE IF EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
     assert_receive {:statement, "COMMIT"}
   end
 
@@ -196,11 +197,12 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
              end)
 
     assert_receive {:statement, "BEGIN"}
-    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:statement, "CREATE TEMP TABLE IF NOT EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
     assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 1}}}
     assert_receive {:statement, insert_statement}
     assert insert_statement =~ ~s|INSERT INTO "renamed_events" ("id", "event_name")|
-    assert_receive {:statement, "DROP TABLE IF EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
     assert_receive {:statement, "COMMIT"}
     refute_received {:statement, "BEGIN"}
   end
@@ -245,10 +247,11 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     end
 
     assert_receive {:statement, "BEGIN"}
-    assert_receive {:statement, "CREATE TEMP TABLE " <> _}
+    assert_receive {:statement, "CREATE TEMP TABLE IF NOT EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
     assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 1}}}
     assert_receive {:statement, ~s|INSERT INTO "renamed_events"| <> _}
-    assert_receive {:statement, "DROP TABLE IF EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
     assert_receive {:statement, "ROLLBACK"}
   end
 

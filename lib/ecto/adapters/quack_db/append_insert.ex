@@ -57,26 +57,29 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp do_insert_select(conn, schema_meta, header, rows, returning, options) do
       temp_columns = append_columns!(schema_meta, header, options)
-      temp_table = temp_table_name()
+      temp_table = temp_table_name(temp_columns)
       create_statement = create_temp_table(temp_table, temp_columns)
+      clear_statement = clear_temp_table(temp_table)
 
       insert_statement =
         insert_from_temp_statement(schema_meta, temp_columns, temp_table, returning)
 
       try do
         with {:ok, _result} <- QuackDB.query(conn, create_statement, [], options),
+             {:ok, _result} <- QuackDB.query(conn, clear_statement, [], options),
              {:ok, _result} <- QuackDB.insert_rows(conn, temp_table, rows, options),
              {:ok, %QuackDB.Result{} = result} <-
                QuackDB.query(conn, insert_statement, [], options) do
           {:ok, result}
         end
       after
-        _ = QuackDB.query(conn, QuackDB.DDL.drop_table(temp_table, if_exists: true), [], options)
+        _ = QuackDB.query(conn, clear_statement, [], options)
       end
     end
 
-    defp temp_table_name do
-      "quackdb_append_#{System.unique_integer([:positive])}"
+    defp temp_table_name(columns) do
+      hash = columns |> :erlang.phash2(4_294_967_296) |> Integer.to_string(36)
+      "quackdb_append_#{hash}"
     end
 
     defp append_columns!(schema_meta, header, options) do
@@ -124,7 +127,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp create_temp_table(temp_table, columns) do
       ddl_columns = Enum.map(columns, fn column -> {column.source, column.type} end)
-      QuackDB.DDL.create_table(temp_table, ddl_columns, temporary: true)
+      QuackDB.DDL.create_table(temp_table, ddl_columns, temporary: true, if_not_exists: true)
+    end
+
+    defp clear_temp_table(temp_table) do
+      ["DELETE FROM ", QuackDB.Type.quote_identifier(temp_table)]
     end
 
     defp column_type!(columns, column) do
