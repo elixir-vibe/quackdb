@@ -40,6 +40,7 @@ defmodule QuackDB.MixProject do
       {:decimal, "~> 2.0 or ~> 3.0"},
       {:muontrap, "~> 1.5"},
       {:telemetry, "~> 1.0"},
+      {:varint, "~> 1.5"},
       {:table, "~> 0.1", optional: true},
       {:ecto_sql, "~> 3.13", optional: true},
       {:explorer, "~> 0.11", optional: true},
