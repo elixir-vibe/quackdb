@@ -11,6 +11,8 @@ defmodule QuackDB.TestSchemas.TypedEvent do
     field(:event_time, :time)
     field(:occurred_at, :naive_datetime)
     field(:occurred_tz, :utc_datetime)
+    field(:status, Ecto.Enum, values: [:queued, :done])
+    field(:priority, Ecto.Enum, values: [low: 1, high: 2])
     field(:tags, {:array, :string})
   end
 end

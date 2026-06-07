@@ -259,7 +259,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp base_options(opts) do
       opts
-      |> Keyword.take([:timeout])
+      |> Keyword.take([:timeout, :columns])
       |> maybe_put_batch_size(opts)
     end
 

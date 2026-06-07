@@ -297,6 +297,83 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
            ]
   end
 
+  test "Repo.insert_all/3 append maps schema Ecto.Enum fields to dumped column types" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+          chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk], names: ["Count"])}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(
+               QuackDB.TestSchemas.TypedEvent,
+               [[id: 1, status: :queued, priority: :high]],
+               insert_method: :append
+             )
+
+    assert_receive {:append, %{append_chunk: chunk}}
+    assert chunk.types |> Enum.map(& &1.name) |> Enum.sort() == [:integer, :integer, :varchar]
+  end
+
+  test "Repo.insert_all/3 append preserves explicit columns before schema inference" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+          chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk], names: ["Count"])}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(
+               QuackDB.TestSchemas.TypedEvent,
+               [[priority: nil]],
+               insert_method: :append,
+               columns: [priority: :varchar]
+             )
+
+    assert_receive {:statement, "CREATE TEMP TABLE " <> create_temp_table}
+    assert create_temp_table =~ ~s|"priority" VARCHAR|
+    assert_receive {:append, %{append_chunk: chunk}}
+    assert Enum.map(chunk.types, & &1.name) == [:varchar]
+  end
+
   test "QuackDB.insert_stream/4 can use the Ecto repo pool" do
     parent = self()
 

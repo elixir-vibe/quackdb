@@ -892,6 +892,8 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
       event_time: :time,
       occurred_at: :timestamp,
       occurred_tz: :timestamp_tz,
+      status: :varchar,
+      priority: :integer,
       tags: {:list, :varchar}
     )
 
@@ -902,6 +904,8 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
       event_time: ~T[12:34:56],
       occurred_at: ~N[2026-05-26 12:34:56],
       occurred_tz: ~U[2026-05-26 12:34:56Z],
+      status: :queued,
+      priority: :high,
       tags: ["duck", "analytics"]
     ]
 
@@ -925,6 +929,8 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
                event_date: ~D[2026-05-26],
                event_time: ~T[12:34:56],
                occurred_at: ~N[2026-05-26 12:34:56],
+               status: :queued,
+               priority: :high,
                tags: ["duck", "analytics"]
              }
            ] = QuackDB.IntegrationRepo.all(query)

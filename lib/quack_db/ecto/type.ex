@@ -10,7 +10,12 @@ if Code.ensure_loaded?(Ecto.Type) do
     def column_type!(:map, :schema), do: raise(ArgumentError, inspect(:map))
 
     def column_type!(type, usage) when usage in [:migration, :append, :schema],
-      do: base_type!(type)
+      do: type |> normalize_type() |> base_type!()
+
+    defp normalize_type({:parameterized, {module, params}}),
+      do: Ecto.Type.type({:parameterized, {module, params}})
+
+    defp normalize_type(type), do: type
 
     defp base_type!(:id), do: :bigint
     defp base_type!(:bigserial), do: :bigint
