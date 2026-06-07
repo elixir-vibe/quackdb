@@ -104,16 +104,16 @@ defmodule QuackDB.Storage do
   alias QuackDB.Storage.DatabaseSize
   alias QuackDB.Storage.Segment
 
-  @type source :: module() | atom() | String.t() | {atom() | String.t(), atom() | String.t()}
+  @type source :: QuackDB.SourceRef.t()
 
   @doc "Returns DuckDB storage segments for a table."
   @spec info(DBConnection.conn() | module(), source(), keyword()) ::
           {:ok, [Segment.t()]} | {:error, Exception.t()}
   def info(connection, source, options \\ []) do
-    statement = QuackDB.SQL.call(:pragma_storage_info, [source_name(source)])
+    statement = QuackDB.SQL.call(:pragma_storage_info, [QuackDB.SourceRef.name(source)])
 
     with {:ok, result} <- QuackDB.query(connection, statement, [], options) do
-      {:ok, rows_to_structs(result, Segment)}
+      {:ok, QuackDB.ResultMapper.rows_to_structs(result, Segment)}
     end
   end
 
@@ -131,7 +131,7 @@ defmodule QuackDB.Storage do
           {:ok, CompressionSummary.t()} | {:error, Exception.t()}
   def compression(connection, source, options \\ []) do
     with {:ok, segments} <- info(connection, source, options) do
-      {:ok, compression_summary(source_name(source), segments)}
+      {:ok, compression_summary(QuackDB.SourceRef.name(source), segments)}
     end
   end
 
@@ -183,7 +183,7 @@ defmodule QuackDB.Storage do
   def database_size(connection, options \\ []) do
     with {:ok, result} <-
            QuackDB.query(connection, QuackDB.SQL.call(:pragma_database_size), [], options) do
-      {:ok, rows_to_structs(result, DatabaseSize)}
+      {:ok, QuackDB.ResultMapper.rows_to_structs(result, DatabaseSize)}
     end
   end
 
@@ -234,54 +234,4 @@ defmodule QuackDB.Storage do
     |> Enum.group_by(&(&1.segment_type || "unknown"))
     |> Map.new(fn {segment_type, entries} -> {segment_type, length(entries)} end)
   end
-
-  defp rows_to_structs(%QuackDB.Result{columns: columns, rows: rows}, module)
-       when is_list(columns) and is_list(rows) do
-    fields = Map.keys(struct!(module)) -- [:__struct__]
-
-    Enum.map(rows, fn row ->
-      data =
-        columns
-        |> Enum.map(&normalize_key/1)
-        |> Enum.zip(row)
-        |> Map.new()
-        |> Map.take(fields)
-
-      struct!(module, data)
-    end)
-  end
-
-  defp rows_to_structs(%QuackDB.Result{}, _module), do: []
-
-  defp normalize_key(key) when is_binary(key) do
-    key
-    |> Macro.underscore()
-    |> String.to_existing_atom()
-  rescue
-    ArgumentError -> key
-  end
-
-  defp source_name({prefix, source}), do: Enum.map_join([prefix, source], ".", &source_part/1)
-
-  defp source_name(source) when is_atom(source) do
-    if Code.ensure_loaded?(source) and function_exported?(source, :__schema__, 1) do
-      schema_source_name(source)
-    else
-      Atom.to_string(source)
-    end
-  end
-
-  defp source_name(source) when is_binary(source), do: source
-
-  defp schema_source_name(schema) do
-    case apply(schema, :__schema__, [:prefix]) do
-      nil -> apply(schema, :__schema__, [:source])
-      prefix -> source_name({prefix, apply(schema, :__schema__, [:source])})
-    end
-  rescue
-    FunctionClauseError -> apply(schema, :__schema__, [:source])
-  end
-
-  defp source_part(value) when is_atom(value), do: Atom.to_string(value)
-  defp source_part(value) when is_binary(value), do: value
 end

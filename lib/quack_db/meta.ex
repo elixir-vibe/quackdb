@@ -49,7 +49,7 @@ defmodule QuackDB.Meta do
   alias QuackDB.Meta.Database
   alias QuackDB.Meta.Table
 
-  @type source :: module() | atom() | String.t() | {atom() | String.t(), atom() | String.t()}
+  @type source :: QuackDB.SourceRef.t()
 
   @doc "Lists tables visible to the current DuckDB connection."
   @spec tables(DBConnection.conn() | module(), keyword()) ::
@@ -78,7 +78,7 @@ defmodule QuackDB.Meta do
           {:ok, [Database.t()]} | {:error, Exception.t()}
   def databases(connection, options \\ []) do
     with {:ok, result} <- QuackDB.query(connection, "PRAGMA database_list", [], options) do
-      {:ok, rows_to_structs(result, Database)}
+      {:ok, QuackDB.ResultMapper.rows_to_structs(result, Database)}
     end
   end
 
@@ -95,10 +95,10 @@ defmodule QuackDB.Meta do
   @spec table_info(DBConnection.conn() | module(), source(), keyword()) ::
           {:ok, [Column.t()]} | {:error, Exception.t()}
   def table_info(connection, source, options \\ []) do
-    statement = QuackDB.SQL.call(:pragma_table_info, [source_name(source)])
+    statement = QuackDB.SQL.call(:pragma_table_info, [QuackDB.SourceRef.name(source)])
 
     with {:ok, result} <- QuackDB.query(connection, statement, [], options) do
-      {:ok, rows_to_structs(result, Column)}
+      {:ok, QuackDB.ResultMapper.rows_to_structs(result, Column)}
     end
   end
 
@@ -111,61 +111,11 @@ defmodule QuackDB.Meta do
     end
   end
 
-  defp table_rows(result, true), do: rows_to_structs(result, Table)
+  defp table_rows(result, true), do: QuackDB.ResultMapper.rows_to_structs(result, Table)
 
   defp table_rows(%QuackDB.Result{columns: ["name"], rows: rows}, false) when is_list(rows) do
     Enum.map(rows, fn [name] -> %Table{name: name} end)
   end
 
-  defp table_rows(result, false), do: rows_to_structs(result, Table)
-
-  defp rows_to_structs(%QuackDB.Result{columns: columns, rows: rows}, module)
-       when is_list(columns) and is_list(rows) do
-    fields = Map.keys(struct!(module)) -- [:__struct__]
-
-    Enum.map(rows, fn row ->
-      data =
-        columns
-        |> Enum.map(&normalize_key/1)
-        |> Enum.zip(row)
-        |> Map.new()
-        |> Map.take(fields)
-
-      struct!(module, data)
-    end)
-  end
-
-  defp rows_to_structs(%QuackDB.Result{}, _module), do: []
-
-  defp normalize_key(key) when is_binary(key) do
-    key
-    |> Macro.underscore()
-    |> String.to_existing_atom()
-  rescue
-    ArgumentError -> key
-  end
-
-  defp source_name({prefix, source}), do: Enum.map_join([prefix, source], ".", &source_part/1)
-
-  defp source_name(source) when is_atom(source) do
-    if Code.ensure_loaded?(source) and function_exported?(source, :__schema__, 1) do
-      schema_source_name(source)
-    else
-      Atom.to_string(source)
-    end
-  end
-
-  defp source_name(source) when is_binary(source), do: source
-
-  defp schema_source_name(schema) do
-    case apply(schema, :__schema__, [:prefix]) do
-      nil -> apply(schema, :__schema__, [:source])
-      prefix -> source_name({prefix, apply(schema, :__schema__, [:source])})
-    end
-  rescue
-    FunctionClauseError -> apply(schema, :__schema__, [:source])
-  end
-
-  defp source_part(value) when is_atom(value), do: Atom.to_string(value)
-  defp source_part(value) when is_binary(value), do: value
+  defp table_rows(result, false), do: QuackDB.ResultMapper.rows_to_structs(result, Table)
 end
