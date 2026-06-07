@@ -17,12 +17,14 @@ defmodule QuackDB.Protocol.Vector do
 
   @spec encode(LogicalType.t(), [term()], non_neg_integer()) :: iodata()
   def encode(type, values, row_count) when is_list(values) do
-    if Enum.count(values) == row_count do
+    value_count = length(values)
+
+    if value_count == row_count do
       [encode_flat(type, values, row_count), Writer.end_object()]
     else
       raise Error.new(
               :invalid_vector_size,
-              "vector has #{Enum.count(values)} values, expected #{row_count}",
+              "vector has #{value_count} values, expected #{row_count}",
               source: :protocol
             )
     end
@@ -34,13 +36,11 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp encode_flat(type, values, row_count) do
-    validity = Enum.map(values, &(!is_nil(&1)))
-    has_validity? = Enum.any?(validity, &(!&1))
+    validity = validity_field(values, row_count)
 
     [
       maybe_geometry_version(type),
-      Writer.field(100, Writer.bool(has_validity?)),
-      maybe_validity_mask(validity, has_validity?),
+      validity,
       encode_values(type, values, row_count)
     ]
   end
@@ -50,10 +50,16 @@ defmodule QuackDB.Protocol.Vector do
 
   defp maybe_geometry_version(_type), do: []
 
-  defp maybe_validity_mask(validity, true),
-    do: Writer.field(101, Writer.blob(validity_mask(validity)))
-
-  defp maybe_validity_mask(_validity, false), do: []
+  defp validity_field(values, row_count) do
+    if Enum.any?(values, &is_nil/1) do
+      [
+        Writer.field(100, Writer.bool(true)),
+        Writer.field(101, Writer.blob(validity_mask(values, row_count)))
+      ]
+    else
+      Writer.field(100, Writer.bool(false))
+    end
+  end
 
   defp encode_values(type, values, row_count) do
     physical_type = LogicalType.physical_type(type)
@@ -74,18 +80,18 @@ defmodule QuackDB.Protocol.Vector do
               )
       end
     else
-      encode_variable_values(type, values, physical_type)
+      encode_variable_values(type, values, physical_type, row_count)
     end
   end
 
-  defp encode_variable_values(type, values, :varchar) do
+  defp encode_variable_values(type, values, :varchar, row_count) do
     Writer.field(
       102,
-      Writer.list(values, fn value -> Writer.blob(encode_string_like(type, value)) end)
+      Writer.list(values, row_count, fn value -> Writer.blob(encode_string_like(type, value)) end)
     )
   end
 
-  defp encode_variable_values(type, values, :struct) do
+  defp encode_variable_values(type, values, :struct, _row_count) do
     children = LogicalType.struct_children(type)
 
     Writer.field(
@@ -97,7 +103,7 @@ defmodule QuackDB.Protocol.Vector do
     )
   end
 
-  defp encode_variable_values(%LogicalType{name: :map} = type, values, :list) do
+  defp encode_variable_values(%LogicalType{name: :map} = type, values, :list, _row_count) do
     child_type = LogicalType.child_type(type)
 
     values =
@@ -117,7 +123,7 @@ defmodule QuackDB.Protocol.Vector do
     ]
   end
 
-  defp encode_variable_values(type, values, :list) do
+  defp encode_variable_values(type, values, :list, _row_count) do
     child_type = LogicalType.child_type(type)
     {entries, child_values, _offset} = Enum.reduce(values, {[], [], 0}, &append_list_entry/2)
     child_count = length(child_values)
@@ -129,7 +135,7 @@ defmodule QuackDB.Protocol.Vector do
     ]
   end
 
-  defp encode_variable_values(type, values, :array) do
+  defp encode_variable_values(type, values, :array, _row_count) do
     child_type = LogicalType.child_type(type)
     array_size = LogicalType.array_size(type)
 
@@ -155,7 +161,7 @@ defmodule QuackDB.Protocol.Vector do
     ]
   end
 
-  defp encode_variable_values(_type, _values, physical_type) do
+  defp encode_variable_values(_type, _values, physical_type, _row_count) do
     raise Error.new(:unsupported_physical_type, "#{physical_type} vectors are not encodable yet",
             source: :protocol
           )
@@ -494,22 +500,45 @@ defmodule QuackDB.Protocol.Vector do
 
   defp encode_string_like(_type, value), do: to_string(value)
 
-  defp validity_mask(validity) do
-    bytes = div(length(validity) + 63, 64) * 8
+  defp validity_mask(values, row_count) do
+    values
+    |> Enum.reduce({0, 0, []}, fn value, {bit_index, byte, bytes} ->
+      byte = if is_nil(value), do: byte, else: byte ||| 1 <<< bit_index
+      bit_index = bit_index + 1
 
-    validity
-    |> Enum.with_index()
-    |> Enum.reduce(:binary.copy(<<0>>, bytes), fn
-      {true, index}, mask -> set_mask_bit(mask, index)
-      {false, _index}, mask -> mask
+      if bit_index == 8 do
+        {0, 0, [<<byte>> | bytes]}
+      else
+        {bit_index, byte, bytes}
+      end
     end)
+    |> finish_validity_mask(row_count)
   end
 
-  defp set_mask_bit(mask, index) do
-    byte_index = div(index, 8)
-    bit = 1 <<< rem(index, 8)
-    <<prefix::binary-size(byte_index), byte, suffix::binary>> = mask
-    <<prefix::binary, byte ||| bit, suffix::binary>>
+  defp finish_validity_mask({0, _byte, bytes}, row_count) do
+    bytes
+    |> pad_validity_mask(row_count)
+    |> Enum.reverse()
+    |> IO.iodata_to_binary()
+  end
+
+  defp finish_validity_mask({_bit_index, byte, bytes}, row_count) do
+    bytes
+    |> then(&[<<byte>> | &1])
+    |> pad_validity_mask(row_count)
+    |> Enum.reverse()
+    |> IO.iodata_to_binary()
+  end
+
+  defp pad_validity_mask(bytes, row_count) do
+    byte_count = div(row_count + 63, 64) * 8
+    missing = byte_count - length(bytes)
+
+    if missing > 0 do
+      List.duplicate(<<0>>, missing) ++ bytes
+    else
+      bytes
+    end
   end
 
   defp append_list_entry(nil, {entries, child_values, offset}) do

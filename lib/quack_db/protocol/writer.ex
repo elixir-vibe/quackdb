@@ -39,7 +39,13 @@ defmodule QuackDB.Protocol.Writer do
 
   @spec list([value], (value -> iodata())) :: iodata() when value: term()
   def list(values, write_element) when is_list(values) and is_function(write_element, 1) do
-    [uleb128(length(values)), Enum.map(values, write_element)]
+    list(values, length(values), write_element)
+  end
+
+  @spec list([value], non_neg_integer(), (value -> iodata())) :: iodata() when value: term()
+  def list(values, count, write_element)
+      when is_list(values) and is_integer(count) and count >= 0 and is_function(write_element, 1) do
+    [uleb128(count), Enum.map(values, write_element)]
   end
 
   @spec nullable(value | nil, (value -> iodata())) :: iodata() when value: term()
