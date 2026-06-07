@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 - 2026-06-08
 
 ### Added
 
@@ -12,6 +12,10 @@
 ### Changed
 
 - Optimized row-oriented native append encoding for wide ordered keyword rows by transposing rows to columns in one pass.
+- Switched unsigned LEB128 protocol encoding to `varint`.
+- Optimized native append vector encoding by reducing redundant count and validity passes.
+- Optimized Ecto append inserts by using column-oriented append for direct inserts and an ordered-row fast path for temporary append staging.
+- Added ExDNA zero-duplication and Reach smell checks to `mix ci`.
 
 ## 0.5.1 - 2026-06-06
 

@@ -104,7 +104,7 @@ defmodule QuackDB.Storage do
   alias QuackDB.Storage.DatabaseSize
   alias QuackDB.Storage.Segment
 
-  @type source :: QuackDB.SourceRef.t()
+  @type source :: module() | atom() | String.t() | {atom() | String.t(), atom() | String.t()}
 
   @doc "Returns DuckDB storage segments for a table."
   @spec info(DBConnection.conn() | module(), source(), keyword()) ::

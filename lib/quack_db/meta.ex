@@ -49,7 +49,7 @@ defmodule QuackDB.Meta do
   alias QuackDB.Meta.Database
   alias QuackDB.Meta.Table
 
-  @type source :: QuackDB.SourceRef.t()
+  @type source :: module() | atom() | String.t() | {atom() | String.t(), atom() | String.t()}
 
   @doc "Lists tables visible to the current DuckDB connection."
   @spec tables(DBConnection.conn() | module(), keyword()) ::

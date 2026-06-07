@@ -2,14 +2,14 @@
 
 This audit tracks public API changes and records accepted naming decisions before release cuts. No open naming decisions remain for the current release candidate.
 
-## Unreleased API additions after 0.5.1
+## 0.5.2 API additions after 0.5.1
 
 New public surfaces since `0.5.1`:
 
 - Storage observability: `QuackDB.Storage.info/3`, `info!/3`, `compression/3`, `compression!/3`, `database_size/2`, `database_size!/2`, `checkpoint/2`, `checkpoint!/2`, `force_checkpoint/2`, `force_checkpoint!/2`, and storage segment/database-size/compression summary structs.
 - Catalog metadata: `QuackDB.Meta.tables/2`, `tables!/2`, `databases/2`, `databases!/2`, `table_info/3`, `table_info!/3`, and table/database/column metadata structs.
 
-Accepted naming decisions for unreleased changes:
+Accepted naming decisions for 0.5.2 changes:
 
 - Use `QuackDB.Storage.info!/2` rather than repeating storage in `storage_info!/2`.
 - Keep storage observability outside `QuackDB.Ecto` because the same API accepts raw connections and Ecto repos.
