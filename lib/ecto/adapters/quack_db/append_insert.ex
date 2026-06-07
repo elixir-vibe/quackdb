@@ -238,17 +238,36 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp ecto_pool(%{pid: pool}), do: pool
 
-    @doc false
-    def __append_columns__(header, rows, options), do: append_columns(header, rows, options)
-
     defp append_rows(header, rows, options) do
-      types = Keyword.get(options, :columns, [])
+      column_types = Enum.map(header, &column_type(Keyword.get(options, :columns, []), &1))
 
       Enum.map(rows, fn row ->
-        Enum.map(header, fn field ->
-          {field,
-           row |> Keyword.fetch!(field) |> normalize_append_value(column_type(types, field))}
-        end)
+        case ordered_row_entries(row, header, column_types, []) do
+          {:ok, entries} -> entries
+          :error -> fetched_row_entries(row, header, column_types)
+        end
+      end)
+    end
+
+    defp ordered_row_entries([], [], [], entries), do: {:ok, Enum.reverse(entries)}
+
+    defp ordered_row_entries(
+           [{field, value} | row],
+           [field | header],
+           [type | column_types],
+           entries
+         ) do
+      entry = {field, normalize_append_value(value, type)}
+      ordered_row_entries(row, header, column_types, [entry | entries])
+    end
+
+    defp ordered_row_entries(_row, _header, _column_types, _entries), do: :error
+
+    defp fetched_row_entries(row, header, column_types) do
+      header
+      |> Enum.zip(column_types)
+      |> Enum.map(fn {field, type} ->
+        {field, row |> Keyword.fetch!(field) |> normalize_append_value(type)}
       end)
     end
 
