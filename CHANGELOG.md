@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added `:or_replace` support to `QuackDB.DDL.create_table/2,3` and support for creating a differently named table from an Ecto schema via `QuackDB.DDL.create_table(name, schema, opts)`.
+
 ### Changed
 
 - Removed public `QuackDB.DDL.create_table_as/3`; use `QuackDB.DDL.create_table/2` or `/3` with the `:as` option instead.

@@ -685,7 +685,7 @@ MyApp.AnalyticsRepo.insert_all(
 
 The append insert path does not support query inserts, placeholders, or upserts/conflict targets. For streaming rows outside Ecto, use `QuackDB.insert_stream!/4`; it can take either a QuackDB connection or a QuackDB-backed Ecto repo.
 
-For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` and `CREATE TABLE AS` statements:
+For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` and `CREATE TABLE AS` statements. Use `or_replace: true` for DuckDB table rewrites, and pass an Ecto schema as the second argument when you want a temporary staging table with the same columns under a different name:
 
 ```elixir
 MyApp.AnalyticsRepo.query!(
@@ -703,6 +703,17 @@ query =
 
 MyApp.AnalyticsRepo.query!(
   QuackDB.DDL.create_table("events_from_parquet", as: query, temporary: true)
+)
+
+MyApp.AnalyticsRepo.query!(
+  QuackDB.DDL.create_table("sorted_fragment_terms",
+    as: from(term in "fragment_terms", distinct: true, order_by: [term.term_id, term.fragment_id]),
+    or_replace: true
+  )
+)
+
+MyApp.AnalyticsRepo.query!(
+  QuackDB.DDL.create_table("temp_fragments", MyApp.Fragment, temporary: true)
 )
 ```
 

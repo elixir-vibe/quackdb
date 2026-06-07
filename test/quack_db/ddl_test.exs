@@ -50,6 +50,23 @@ defmodule QuackDB.DDLTest do
              ~S[CREATE TEMP TABLE IF NOT EXISTS "events" ("payload" JSON, "occurred_at" TIMESTAMP)]
   end
 
+  test "create_table supports replacing tables" do
+    assert QuackDB.DDL.create_table(:events, [id: :integer], or_replace: true)
+           |> IO.iodata_to_binary() == ~S[CREATE OR REPLACE TABLE "events" ("id" INTEGER)]
+  end
+
+  test "create_table builds DDL for a new table name from an Ecto schema" do
+    assert QuackDB.DDL.create_table(:temp_events, EventSchema, temporary: true)
+           |> IO.iodata_to_binary() ==
+             ~s|CREATE TEMP TABLE "temp_events" ("id" INTEGER, "name" VARCHAR, "score" DOUBLE)|
+  end
+
+  test "create_table rejects conflicting replacement and existence options" do
+    assert_raise ArgumentError, ~r/:or_replace and :if_not_exists cannot be used together/, fn ->
+      QuackDB.DDL.create_table(:events, [id: :integer], or_replace: true, if_not_exists: true)
+    end
+  end
+
   test "create_table builds CTAS statements" do
     assert QuackDB.DDL.create_table("docs",
              as: ["SELECT * FROM ", QuackDB.Source.parquet("docs.parquet")],
@@ -58,6 +75,11 @@ defmodule QuackDB.DDLTest do
            )
            |> IO.iodata_to_binary() ==
              ~s|CREATE TEMP TABLE IF NOT EXISTS "docs" AS SELECT * FROM read_parquet('docs.parquet')|
+  end
+
+  test "create_table builds OR REPLACE CTAS statements" do
+    assert QuackDB.DDL.create_table("docs", as: "SELECT 1 AS id", or_replace: true)
+           |> IO.iodata_to_binary() == ~S[CREATE OR REPLACE TABLE "docs" AS SELECT 1 AS id]
   end
 
   test "create_table builds CTAS with selected aliases" do

@@ -24,7 +24,10 @@ defmodule QuackDB.DDL do
           {atom() | String.t(), column_type()} | {atom() | String.t(), column_type(), keyword()}
 
   @type create_table_option ::
-          {:temporary, boolean()} | {:if_not_exists, boolean()} | {:as, iodata()}
+          {:temporary, boolean()}
+          | {:if_not_exists, boolean()}
+          | {:or_replace, boolean()}
+          | {:as, iodata()}
 
   @doc "Builds a `CREATE TABLE` statement from an Ecto schema module."
   @spec create_table(module()) :: iodata()
@@ -54,15 +57,31 @@ defmodule QuackDB.DDL do
 
       QuackDB.DDL.create_table("events", id: :integer, name: :varchar)
       QuackDB.DDL.create_table("events", [id: :integer], temporary: true)
+      QuackDB.DDL.create_table("temp_events", EventSchema, temporary: true)
 
   Pass `:as` to build `CREATE TABLE AS` from iodata or an Ecto query without pinned params:
 
       QuackDB.DDL.create_table("docs", as: query, temporary: true)
+      QuackDB.DDL.create_table("docs", as: query, or_replace: true)
   """
-  @spec create_table(String.t() | atom(), [column()], [create_table_option()]) :: iodata()
-  def create_table(name, columns, options \\ []) when is_list(columns) and is_list(options) do
+  @spec create_table(String.t() | atom(), module() | [column()], [create_table_option()]) ::
+          iodata()
+  def create_table(name, schema_or_columns, options \\ [])
+
+  def create_table(name, schema, options) when is_atom(schema) and is_list(options) do
+    if function_exported?(schema, :__schema__, 1) do
+      create_table(name, schema_columns(schema), options)
+    else
+      create_table(name, [{schema, options}], [])
+    end
+  end
+
+  def create_table(name, columns, options) when is_list(columns) and is_list(options) do
+    assert_create_options!(options)
+
     [
       "CREATE ",
+      or_replace(options),
       temporary(options),
       "TABLE ",
       if_not_exists(options),
@@ -74,8 +93,11 @@ defmodule QuackDB.DDL do
   end
 
   defp create_table_as(name, query, options) when is_list(options) do
+    assert_create_options!(options)
+
     [
       "CREATE ",
+      or_replace(options),
       temporary(options),
       "TABLE ",
       if_not_exists(options),
@@ -152,6 +174,17 @@ defmodule QuackDB.DDL do
     error in ArgumentError ->
       raise ArgumentError,
             "unsupported Ecto schema type for #{inspect(schema)}.#{field}: #{Exception.message(error)}"
+  end
+
+  defp assert_create_options!(options) do
+    if Keyword.get(options, :or_replace, false) and Keyword.get(options, :if_not_exists, false) do
+      raise ArgumentError,
+            "create_table options :or_replace and :if_not_exists cannot be used together"
+    end
+  end
+
+  defp or_replace(options) do
+    if Keyword.get(options, :or_replace, false), do: "OR REPLACE ", else: []
   end
 
   defp temporary(options) do
