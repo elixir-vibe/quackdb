@@ -675,6 +675,15 @@ QuackDB.Storage.database_size!(MyApp.AnalyticsRepo)
 QuackDB.Storage.compression!(MyApp.AnalyticsRepo, MyApp.Event)
 ```
 
+Use `QuackDB.Meta` for catalog metadata:
+
+```elixir
+QuackDB.Meta.tables!(MyApp.AnalyticsRepo)
+QuackDB.Meta.tables!(MyApp.AnalyticsRepo, expanded: true)
+QuackDB.Meta.table_info!(MyApp.AnalyticsRepo, MyApp.Event)
+QuackDB.Meta.databases!(MyApp.AnalyticsRepo)
+```
+
 Ecto `insert/2` and `insert_all/3` are supported for straightforward row inserts. DuckDB `RETURNING` works through the SQL insert path:
 
 ```elixir

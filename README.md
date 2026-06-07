@@ -442,6 +442,15 @@ QuackDB.Storage.checkpoint!(MyApp.AnalyticsRepo)
 
 `info!/2` wraps DuckDB's `pragma_storage_info` output as segment structs. `compression!/2` groups segment compression by table column, accepting schema modules, atoms, strings, and `{prefix, source}` tuples.
 
+Use `QuackDB.Meta` for logical catalog metadata:
+
+```elixir
+QuackDB.Meta.tables!(MyApp.AnalyticsRepo)
+QuackDB.Meta.tables!(MyApp.AnalyticsRepo, expanded: true)
+QuackDB.Meta.table_info!(MyApp.AnalyticsRepo, MyApp.Fragment)
+QuackDB.Meta.databases!(MyApp.AnalyticsRepo)
+```
+
 ## Ecto coverage
 
 QuackDB includes an optional Ecto SQL adapter for applications that want Ecto query composition, schema-based reads/writes, migrations, and raw SQL through `Repo.query/3`.
