@@ -59,26 +59,82 @@ if Code.ensure_loaded?(Ecto.Query) do
     """
 
     @doc """
-    Returns the sequence name QuackDB migrations use for serial columns.
+    Returns the sequence name QuackDB migrations use for a serial table column.
 
-        QuackDB.Ecto.serial_sequence_name("fragments", :id)
+        QuackDB.Ecto.column_sequence_name("fragments", :id)
         #=> "fragments_id_seq"
 
-        QuackDB.Ecto.serial_sequence_name({"main", "fragments"}, :id)
+        QuackDB.Ecto.column_sequence_name({"main", "fragments"}, :id)
         #=> "main_fragments_id_seq"
+
+    Schema modules and `{source, schema}` tuples use Ecto field-source metadata:
+
+        QuackDB.Ecto.column_sequence_name(FragmentRecord, :id)
+        QuackDB.Ecto.column_sequence_name({"tenant_fragments", FragmentRecord}, :id)
     """
-    @spec serial_sequence_name(
-            atom() | String.t() | {atom() | String.t(), atom() | String.t()},
+    @spec column_sequence_name(
+            module()
+            | atom()
+            | String.t()
+            | {atom() | String.t(), atom() | String.t()}
+            | {atom() | String.t(), module()},
             atom() | String.t()
           ) :: String.t()
-    def serial_sequence_name({prefix, table}, field) do
-      [prefix, table, field, "seq"]
-      |> Enum.map_join("_", &to_string/1)
+    def column_sequence_name({source, schema}, field) when is_atom(schema) do
+      if ecto_schema?(schema) do
+        source = to_string(source)
+        field = schema_field_source(schema, field)
+
+        case schema_prefix(schema) do
+          nil -> sequence_name([source, field])
+          prefix -> sequence_name([prefix, source, field])
+        end
+      else
+        sequence_name([source, schema, field])
+      end
     end
 
-    def serial_sequence_name(table, field) do
-      [table, field, "seq"]
-      |> Enum.map_join("_", &to_string/1)
+    def column_sequence_name(schema, field) when is_atom(schema) do
+      if ecto_schema?(schema) do
+        source = schema.__schema__(:source)
+        field = schema_field_source(schema, field)
+
+        case schema_prefix(schema) do
+          nil -> sequence_name([source, field])
+          prefix -> sequence_name([prefix, source, field])
+        end
+      else
+        sequence_name([schema, field])
+      end
+    end
+
+    def column_sequence_name({prefix, table}, field) do
+      sequence_name([prefix, table, field])
+    end
+
+    def column_sequence_name(table, field) do
+      sequence_name([table, field])
+    end
+
+    defp sequence_name(parts),
+      do: parts |> Enum.concat(["seq"]) |> Enum.map_join("_", &to_string/1)
+
+    defp ecto_schema?(schema) do
+      Code.ensure_loaded?(schema) and function_exported?(schema, :__schema__, 1)
+    end
+
+    defp schema_field_source(schema, field) when is_atom(field) do
+      schema.__schema__(:field_source, field)
+    rescue
+      FunctionClauseError -> field
+    end
+
+    defp schema_field_source(_schema, field), do: field
+
+    defp schema_prefix(schema) do
+      schema.__schema__(:prefix)
+    rescue
+      FunctionClauseError -> nil
     end
 
     @doc false

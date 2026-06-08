@@ -32,7 +32,7 @@ defmodule QuackDB.Integration.QueryTest do
     assert report =~ "Rows scanned:"
   end
 
-  test "allocates sequence values from a real Quack server" do
+  test "finds and allocates sequence values from a real Quack server" do
     connection = start_connection!()
     sequence = "quackdb_sequence_test_#{System.unique_integer([:positive])}"
 
@@ -41,6 +41,22 @@ defmodule QuackDB.Integration.QueryTest do
                "CREATE SEQUENCE ",
                QuackDB.Type.quote_identifier(sequence)
              ])
+
+    table = "quackdb_sequence_table_#{System.unique_integer([:positive])}"
+
+    assert {:ok, _result} =
+             QuackDB.query(connection, [
+               "CREATE TABLE ",
+               QuackDB.Type.quote_identifier(table),
+               " (id BIGINT DEFAULT nextval('",
+               sequence,
+               "'), name VARCHAR)"
+             ])
+
+    assert QuackDB.Sequence.for_column!(connection, table, :id) == sequence
+
+    assert {:error, %QuackDB.Error{code: :sequence_not_found}} =
+             QuackDB.Sequence.for_column(connection, table, :name)
 
     assert QuackDB.Sequence.next_values(connection, sequence, 3) == [1, 2, 3]
     assert QuackDB.Sequence.next_values(connection, sequence, 2) == [4, 5]

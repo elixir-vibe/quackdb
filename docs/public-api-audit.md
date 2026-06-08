@@ -6,12 +6,12 @@ This audit tracks public API changes and records accepted naming decisions befor
 
 New public surfaces since `0.5.2`:
 
-- Sequence helpers: `QuackDB.Sequence.next_values/4` and `QuackDB.Ecto.serial_sequence_name/2`.
+- Sequence helpers: `QuackDB.Sequence.next_values/4`, `QuackDB.Sequence.for_column/4`, `for_column!/4`, and `QuackDB.Ecto.column_sequence_name/2`.
 
 Accepted naming decisions for unreleased changes:
 
 - Keep sequence allocation as a small explicit helper instead of adding an Exograph-specific `insert_all_with_generated_ids` wrapper.
-- Use `QuackDB.Ecto.serial_sequence_name/2` to expose the existing migration naming convention without guessing sequence names in applications.
+- Use catalog-backed `QuackDB.Sequence.for_column/4` when a connection is available; keep `QuackDB.Ecto.column_sequence_name/2` as an explicit convention helper for code paths that already know the QuackDB Ecto migration naming convention.
 
 ## 0.5.2 API additions after 0.5.1
 

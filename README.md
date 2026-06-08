@@ -415,7 +415,7 @@ Any `Table.Reader`-compatible data can be appended through the same column appen
 QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
 ```
 
-Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Ecto `insert_all(..., insert_method: :append)` can use schema types for nullable batches, omitted/defaulted columns, and `RETURNING` through a temporary append table. Native append does not evaluate column defaults; use `QuackDB.Sequence.next_values/4` when you need to preallocate sequence-backed IDs before appending explicit primary keys. See the [type support guide](guides/type-support.md), [getting started guide](guides/getting-started.md), and the [Explorer guide](guides/explorer.md).
+Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Ecto `insert_all(..., insert_method: :append)` can use schema types for nullable batches, omitted/defaulted columns, and `RETURNING` through a temporary append table. Native append does not evaluate column defaults; use `QuackDB.Sequence.for_column/4` or `QuackDB.Ecto.column_sequence_name/2` with `QuackDB.Sequence.next_values/4` when you need to preallocate sequence-backed IDs before appending explicit primary keys. See the [type support guide](guides/type-support.md), [getting started guide](guides/getting-started.md), and the [Explorer guide](guides/explorer.md).
 
 ## Results, Livebook, and telemetry
 

@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added `QuackDB.Sequence.next_values/4` for preallocating DuckDB sequence IDs before native append, plus `QuackDB.Ecto.serial_sequence_name/2` for QuackDB's serial-column sequence naming convention.
+- Added `QuackDB.Sequence.next_values/4` for preallocating DuckDB sequence IDs before native append, `QuackDB.Sequence.for_column/4` for catalog-backed column sequence lookup, and `QuackDB.Ecto.column_sequence_name/2` for QuackDB's serial-column sequence naming convention.
 
 ## 0.5.2 - 2026-06-08
 
