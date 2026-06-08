@@ -12,7 +12,7 @@ defmodule QuackDB.Integration.MetaTest do
     assert {:ok, _result} =
              QuackDB.query(
                connection,
-               "CREATE TEMP TABLE #{table} (id INTEGER, name VARCHAR NOT NULL)"
+               "CREATE TEMP TABLE #{table} (id INTEGER DEFAULT 42 PRIMARY KEY, name VARCHAR NOT NULL)"
              )
 
     assert {:ok, tables} = QuackDB.Meta.tables(connection)
@@ -26,9 +26,12 @@ defmodule QuackDB.Integration.MetaTest do
            )
 
     assert [
-             %QuackDB.Meta.Column{name: "id", type: "INTEGER"},
+             %QuackDB.Meta.Column{name: "id", type: "INTEGER", dflt_value: "42", pk: true},
              %QuackDB.Meta.Column{name: "name", type: "VARCHAR", notnull: true}
            ] = QuackDB.Meta.table_info!(connection, table)
+
+    assert [%QuackDB.Meta.Column{name: "id"}] = QuackDB.Meta.primary_keys!(connection, table)
+    assert %{"id" => "42"} = QuackDB.Meta.column_defaults!(connection, table)
   end
 
   test "lists attached databases" do

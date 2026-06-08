@@ -114,6 +114,48 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 1}}}
   end
 
+  test "Repo.insert_all/3 append supports explicit row append shape" do
+    parent = self()
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, nil} =
+             QuackDB.EctoRepo.insert_all(
+               "events",
+               [[id: 1, name: "duck"]],
+               insert_method: :append,
+               append_shape: :rows
+             )
+
+    assert_receive {:append, %{table_name: "events", append_chunk: %{row_count: 1}}}
+  end
+
+  test "Repo.insert_all/3 append rejects unsupported append shape" do
+    put_repo_env(fn _uri, _request, _options -> flunk("transport should not be called") end)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert_raise QuackDB.Error, ~r/unsupported append_shape/, fn ->
+      QuackDB.EctoRepo.insert_all("events", [[id: 1]],
+        insert_method: :append,
+        append_shape: :auto
+      )
+    end
+  end
+
   test "Repo.insert_all/3 append supports returning through temp insert" do
     parent = self()
     chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1, 2])

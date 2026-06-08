@@ -111,6 +111,49 @@ defmodule QuackDB.Meta do
     end
   end
 
+  @doc "Returns primary-key columns for a table."
+  @spec primary_keys(DBConnection.conn() | module(), source(), keyword()) ::
+          {:ok, [Column.t()]} | {:error, Exception.t()}
+  def primary_keys(connection, source, options \\ []) do
+    with {:ok, columns} <- table_info(connection, source, options) do
+      {:ok, Enum.filter(columns, & &1.pk)}
+    end
+  end
+
+  @doc "Returns primary-key columns for a table, raising on errors."
+  @spec primary_keys!(DBConnection.conn() | module(), source(), keyword()) :: [Column.t()]
+  def primary_keys!(connection, source, options \\ []) do
+    case primary_keys(connection, source, options) do
+      {:ok, columns} -> columns
+      {:error, error} -> raise error
+    end
+  end
+
+  @doc "Returns column defaults for a table as a map keyed by column name."
+  @spec column_defaults(DBConnection.conn() | module(), source(), keyword()) ::
+          {:ok, %{String.t() => String.t()}} | {:error, Exception.t()}
+  def column_defaults(connection, source, options \\ []) do
+    with {:ok, columns} <- table_info(connection, source, options) do
+      defaults =
+        columns
+        |> Enum.reject(&is_nil(&1.dflt_value))
+        |> Map.new(&{&1.name, &1.dflt_value})
+
+      {:ok, defaults}
+    end
+  end
+
+  @doc "Returns column defaults for a table, raising on errors."
+  @spec column_defaults!(DBConnection.conn() | module(), source(), keyword()) :: %{
+          String.t() => String.t()
+        }
+  def column_defaults!(connection, source, options \\ []) do
+    case column_defaults(connection, source, options) do
+      {:ok, defaults} -> defaults
+      {:error, error} -> raise error
+    end
+  end
+
   defp table_rows(result, true), do: QuackDB.ResultMapper.rows_to_structs(result, Table)
 
   defp table_rows(%QuackDB.Result{columns: ["name"], rows: rows}, false) when is_list(rows) do

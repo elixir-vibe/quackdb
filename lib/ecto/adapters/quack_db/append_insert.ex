@@ -24,8 +24,19 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
         rows = append_rows(header, rows, options)
         insert_select(conn, schema_meta, header, rows, returning, options)
       else
-        columns = append_columns(header, rows, options)
-        QuackDB.insert_columns(conn, schema_meta.source, columns, options)
+        direct_insert_all(conn, schema_meta, header, rows, options)
+      end
+    end
+
+    defp direct_insert_all(conn, schema_meta, header, rows, options) do
+      case Keyword.get(options, :append_shape, :columns) do
+        :columns ->
+          columns = append_columns(header, rows, options)
+          QuackDB.insert_columns(conn, schema_meta.source, columns, options)
+
+        :rows ->
+          rows = append_rows(header, rows, options)
+          QuackDB.insert_rows(conn, schema_meta.source, rows, options)
       end
     end
 
@@ -376,8 +387,22 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp base_options(opts) do
       opts
-      |> Keyword.take([:timeout, :columns])
+      |> Keyword.take([:timeout, :columns, :append_shape])
+      |> validate_append_shape!()
       |> maybe_put_batch_size(opts)
+    end
+
+    defp validate_append_shape!(options) do
+      case Keyword.get(options, :append_shape, :columns) do
+        shape when shape in [:columns, :rows] ->
+          options
+
+        other ->
+          unsupported!(
+            :schema_inserts,
+            "unsupported append_shape for QuackDB append insert: #{inspect(other)}"
+          )
+      end
     end
 
     defp maybe_put_batch_size(options, opts) do

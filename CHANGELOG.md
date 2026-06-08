@@ -5,6 +5,8 @@
 ### Added
 
 - Added `QuackDB.Sequence.next_values/4` for preallocating DuckDB sequence IDs before native append, `QuackDB.Sequence.for_column/4` for catalog-backed column sequence lookup, and `QuackDB.Ecto.column_sequence_name/2` for QuackDB's serial-column sequence naming convention.
+- Added `QuackDB.Meta.primary_keys/3` and `column_defaults/3` helpers for table/column append planning.
+- Added `append_shape: :columns | :rows` for explicit direct Ecto native append shape selection.
 
 ## 0.5.2 - 2026-06-08
 
