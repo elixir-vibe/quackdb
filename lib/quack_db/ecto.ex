@@ -58,6 +58,29 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, query: false
     """
 
+    @doc """
+    Returns the sequence name QuackDB migrations use for serial columns.
+
+        QuackDB.Ecto.serial_sequence_name("fragments", :id)
+        #=> "fragments_id_seq"
+
+        QuackDB.Ecto.serial_sequence_name({"main", "fragments"}, :id)
+        #=> "main_fragments_id_seq"
+    """
+    @spec serial_sequence_name(
+            atom() | String.t() | {atom() | String.t(), atom() | String.t()},
+            atom() | String.t()
+          ) :: String.t()
+    def serial_sequence_name({prefix, table}, field) do
+      [prefix, table, field, "seq"]
+      |> Enum.map_join("_", &to_string/1)
+    end
+
+    def serial_sequence_name(table, field) do
+      [table, field, "seq"]
+      |> Enum.map_join("_", &to_string/1)
+    end
+
     @doc false
     defmacro __using__(options) do
       enabled? = fn key -> Keyword.get(options, key, true) end

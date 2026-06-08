@@ -2,6 +2,17 @@
 
 This audit tracks public API changes and records accepted naming decisions before release cuts. No open naming decisions remain for the current release candidate.
 
+## Unreleased API additions after 0.5.2
+
+New public surfaces since `0.5.2`:
+
+- Sequence helpers: `QuackDB.Sequence.next_values/4` and `QuackDB.Ecto.serial_sequence_name/2`.
+
+Accepted naming decisions for unreleased changes:
+
+- Keep sequence allocation as a small explicit helper instead of adding an Exograph-specific `insert_all_with_generated_ids` wrapper.
+- Use `QuackDB.Ecto.serial_sequence_name/2` to expose the existing migration naming convention without guessing sequence names in applications.
+
 ## 0.5.2 API additions after 0.5.1
 
 New public surfaces since `0.5.1`:

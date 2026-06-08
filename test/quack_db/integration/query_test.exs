@@ -32,6 +32,21 @@ defmodule QuackDB.Integration.QueryTest do
     assert report =~ "Rows scanned:"
   end
 
+  test "allocates sequence values from a real Quack server" do
+    connection = start_connection!()
+    sequence = "quackdb_sequence_test_#{System.unique_integer([:positive])}"
+
+    assert {:ok, _result} =
+             QuackDB.query(connection, [
+               "CREATE SEQUENCE ",
+               QuackDB.Type.quote_identifier(sequence)
+             ])
+
+    assert QuackDB.Sequence.next_values(connection, sequence, 3) == [1, 2, 3]
+    assert QuackDB.Sequence.next_values(connection, sequence, 2) == [4, 5]
+    assert QuackDB.Sequence.next_values(connection, sequence, 0) == []
+  end
+
   test "decodes mixed scalar results from a real Quack server" do
     connection = start_connection!()
 
