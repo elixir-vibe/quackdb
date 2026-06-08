@@ -101,6 +101,7 @@ Expected package contents are intentionally limited to the public package surfac
 - `guides/`
 - `docs/protocol/`
 - `docs/ecto-analytical-coverage.md`
+- `docs/public-api-audit.md`
 - `README.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
