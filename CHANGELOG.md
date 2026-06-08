@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Switched signed LEB128 protocol encoding to `varint` now that upstream SLEB128 support is available.
+
 ## 0.5.3 - 2026-06-08
 
 ### Added

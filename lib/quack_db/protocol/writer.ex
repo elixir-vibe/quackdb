@@ -24,7 +24,7 @@ defmodule QuackDB.Protocol.Writer do
 
   @spec sleb128(integer()) :: iodata()
   def sleb128(value) when is_integer(value) do
-    do_sleb128(value, [])
+    Varint.SLEB128.encode(value)
   end
 
   @spec string(String.t()) :: iodata()
@@ -63,21 +63,6 @@ defmodule QuackDB.Protocol.Writer do
   def hugeint(value) when is_integer(value) do
     {upper, lower} = div_rem_floor(value, 1 <<< 64)
     [sleb128(upper), uleb128(lower)]
-  end
-
-  defp do_sleb128(value, acc) do
-    byte = value &&& 0x7F
-    next = value >>> 7
-    sign_set? = (byte &&& 0x40) != 0
-    done? = (next == 0 and not sign_set?) or (next == -1 and sign_set?)
-    byte = if done?, do: byte, else: byte ||| 0x80
-    acc = [<<byte>> | acc]
-
-    if done? do
-      Enum.reverse(acc)
-    else
-      do_sleb128(next, acc)
-    end
   end
 
   defp div_rem_floor(value, divisor) do
