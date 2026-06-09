@@ -3,6 +3,7 @@ defmodule QuackDB.Ecto.Quote do
 
   @spec name(atom() | String.t()) :: iodata()
   def name(name) when is_atom(name), do: name |> Atom.to_string() |> name()
+  def name(name) when is_integer(name), do: name |> Integer.to_string() |> name()
 
   def name(name) when is_binary(name) do
     if String.contains?(name, "\"") do

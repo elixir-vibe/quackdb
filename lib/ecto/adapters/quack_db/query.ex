@@ -185,7 +185,7 @@ if Code.ensure_loaded?(Ecto.Query) do
           |> Enum.intersperse(", ")
 
         _other ->
-          unsupported!(:select, "full-source Ecto selects require a schema-backed source")
+          [binding_alias(binding, context), ".*"]
       end
     end
 
@@ -234,6 +234,12 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
+    defp select_expr({:merge, _meta, _parts} = merge, from, context) do
+      merge
+      |> flatten_select_merge()
+      |> select_expr(from, context)
+    end
+
     defp select_expr({:%{}, _meta, fields}, from, context) do
       fields
       |> Enum.map(fn
@@ -253,10 +259,11 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp select_expr(fields, from, context) when is_list(fields) do
       fields
       |> Enum.map(fn
-        {alias_name, {:selected_as, _meta, [expression, name]}} when is_atom(alias_name) ->
+        {alias_name, {:selected_as, _meta, [expression, name]}}
+        when is_atom(alias_name) or is_integer(alias_name) ->
           [select_value_expr(expression, from, context), " AS ", quote_name(name)]
 
-        {alias_name, expression} when is_atom(alias_name) ->
+        {alias_name, expression} when is_atom(alias_name) or is_integer(alias_name) ->
           [select_value_expr(expression, from, context), " AS ", quote_name(alias_name)]
 
         expression ->
@@ -267,12 +274,24 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp select_expr(expression, from, context), do: select_value_expr(expression, from, context)
 
+    defp flatten_select_merge({:merge, _meta, [left, right]}) do
+      flatten_select_merge(left) ++ flatten_select_merge(right)
+    end
+
+    defp flatten_select_merge({:%{}, _meta, fields}), do: fields
+    defp flatten_select_merge(fields) when is_list(fields), do: fields
+
+    defp flatten_select_merge(expression) do
+      unsupported!(:select, "unsupported select_merge expression: #{inspect(expression)}")
+    end
+
     defp select_value_expr({alias_name, {:selected_as, _meta, [expression, name]}}, from, context)
-         when is_atom(alias_name) do
+         when is_atom(alias_name) or is_integer(alias_name) do
       [select_value_expr(expression, from, context), " AS ", quote_name(name)]
     end
 
-    defp select_value_expr({alias_name, expression}, from, context) when is_atom(alias_name) do
+    defp select_value_expr({alias_name, expression}, from, context)
+         when is_atom(alias_name) or is_integer(alias_name) do
       [select_value_expr(expression, from, context), " AS ", quote_name(alias_name)]
     end
 
@@ -281,7 +300,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp select_value_expr({:{}, _meta, [alias_name, expression]}, from, context)
-         when is_atom(alias_name) do
+         when is_atom(alias_name) or is_integer(alias_name) do
       select_value_expr(expression, from, context)
     end
 
@@ -351,6 +370,14 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp source(%{source: {:fragment, _meta, parts}}, index, context) do
       [fragment(parts, context), " AS ", binding_alias(index, context), "(value)"]
+    end
+
+    defp source(%{source: {:values, _meta, [types, _idx, num_rows]}}, index, context) do
+      columns = types |> Keyword.keys() |> Enum.map(&quote_name/1) |> Enum.intersperse(", ")
+      row = types |> Keyword.keys() |> Enum.map(fn _ -> "?" end) |> Enum.intersperse(", ")
+      rows = Enum.map(1..num_rows, fn _ -> ["(", row, ")"] end) |> Enum.intersperse(", ")
+
+      ["(VALUES ", rows, ") AS ", binding_alias(index, context), "(", columns, ")"]
     end
 
     defp source(_from, _index, _context) do
