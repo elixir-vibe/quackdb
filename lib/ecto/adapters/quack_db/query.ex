@@ -189,8 +189,8 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
-    defp schema_fields(_from, _binding, _context),
-      do: unsupported!(:select, "full-source Ecto selects require a schema-backed source")
+    defp schema_fields(_from, binding, context),
+      do: binding_alias(binding, context)
 
     defp schema_select_fields(schema, binding, context) do
       schema.__schema__(:fields)
@@ -251,10 +251,39 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp select_expr(fields, from, context) when is_list(fields) do
-      fields |> Enum.map(&select_value_expr(&1, from, context)) |> Enum.intersperse(", ")
+      fields
+      |> Enum.map(fn
+        {alias_name, {:selected_as, _meta, [expression, name]}} when is_atom(alias_name) ->
+          [select_value_expr(expression, from, context), " AS ", quote_name(name)]
+
+        {alias_name, expression} when is_atom(alias_name) ->
+          [select_value_expr(expression, from, context), " AS ", quote_name(alias_name)]
+
+        expression ->
+          select_value_expr(expression, from, context)
+      end)
+      |> Enum.intersperse(", ")
     end
 
     defp select_expr(expression, from, context), do: select_value_expr(expression, from, context)
+
+    defp select_value_expr({alias_name, {:selected_as, _meta, [expression, name]}}, from, context)
+         when is_atom(alias_name) do
+      [select_value_expr(expression, from, context), " AS ", quote_name(name)]
+    end
+
+    defp select_value_expr({alias_name, expression}, from, context) when is_atom(alias_name) do
+      [select_value_expr(expression, from, context), " AS ", quote_name(alias_name)]
+    end
+
+    defp select_value_expr(fields, from, context) when is_list(fields) do
+      select_expr(fields, from, context)
+    end
+
+    defp select_value_expr({:{}, _meta, [alias_name, expression]}, from, context)
+         when is_atom(alias_name) do
+      select_value_expr(expression, from, context)
+    end
 
     defp select_value_expr({:%{}, meta, fields}, from, context) do
       select_expr({:%{}, meta, fields}, from, context)
@@ -321,7 +350,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp source(%{source: {:fragment, _meta, parts}}, index, context) do
-      [fragment(parts, context), " AS ", binding_alias(index, context)]
+      [fragment(parts, context), " AS ", binding_alias(index, context), "(value)"]
     end
 
     defp source(_from, _index, _context) do
@@ -443,15 +472,24 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp joins(joins, context) do
       joins
       |> Enum.with_index(1)
-      |> Enum.map(fn {join, index} ->
-        [
-          " ",
-          join_qualifier(join.qual),
-          " ",
-          source(join, index, context),
-          " ON ",
-          expr(join.on.expr, context)
-        ]
+      |> Enum.map(fn
+        {%{qual: :cross} = join, index} ->
+          [
+            " ",
+            join_qualifier(join.qual),
+            " ",
+            source(join, index, context)
+          ]
+
+        {join, index} ->
+          [
+            " ",
+            join_qualifier(join.qual),
+            " ",
+            source(join, index, context),
+            " ON ",
+            expr(join.on.expr, context)
+          ]
       end)
     end
 
@@ -703,6 +741,8 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr({:subquery, index}, context), do: subquery_expr(index, context)
 
+    defp expr(%Ecto.SubQuery{} = subquery, context), do: subquery_expr(subquery, context)
+
     defp expr({:type, _meta, [expression, type]}, context) do
       ["CAST(", expr(expression, context), " AS ", ecto_cast_type!(type), ")"]
     end
@@ -712,6 +752,10 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp expr(%Ecto.Query.Tagged{value: value, type: type}, context),
       do: typed_expr(value, type, context)
+
+    defp expr({:&, _meta, [binding]}, context) when is_integer(binding) do
+      [binding_alias(binding, context), ".value"]
+    end
 
     defp expr(other, _context), do: expr(other)
 
