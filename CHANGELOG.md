@@ -2,14 +2,22 @@
 
 ## Unreleased
 
+## 0.5.4 - 2026-06-10
+
 ### Added
 
 - Added `QuackDB.DML.delete_from/2` for parameterized `DELETE ... WHERE ...` statements.
+- Added support for additional Ecto query shapes, including `values` sources and merged map selects.
 - Added Dialyxir to `mix ci` to catch public spec/type drift.
 
 ### Changed
 
 - Switched signed LEB128 protocol encoding to `varint` now that upstream SLEB128 support is available.
+
+### Fixed
+
+- Fixed `QuackDB.FTS` types to include the documented `:schema` match option.
+- Fixed Ecto fragment sources so table-valued functions such as `read_csv(...)` are not forced into a single `value` column alias.
 
 ## 0.5.3 - 2026-06-08
 
