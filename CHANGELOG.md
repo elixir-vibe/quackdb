@@ -5,6 +5,7 @@
 ### Added
 
 - Added `QuackDB.DML.delete_from/2` for parameterized `DELETE ... WHERE ...` statements.
+- Added Dialyxir to `mix ci` to catch public spec/type drift.
 
 ### Changed
 

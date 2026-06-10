@@ -21,7 +21,8 @@ defmodule QuackDB.DDL do
 
   @type column_type :: QuackDB.Type.spec()
   @type column ::
-          {atom() | String.t(), column_type()} | {atom() | String.t(), column_type(), keyword()}
+          {atom() | String.t(), column_type() | keyword()}
+          | {atom() | String.t(), column_type(), keyword()}
 
   @type create_table_option ::
           {:temporary, boolean()}

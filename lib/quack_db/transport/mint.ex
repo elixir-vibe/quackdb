@@ -238,14 +238,10 @@ defmodule QuackDB.Transport.Mint do
     end
   end
 
-  defp close_connection(%{conn: nil} = state), do: state
-
   defp close_connection(%{conn: conn} = state) do
     _ = Mint.HTTP.close(conn)
     %{state | conn: nil}
   end
-
-  defp close_if_closed(%{conn: nil} = state), do: state
 
   defp close_if_closed(%{conn: conn} = state) do
     if Mint.HTTP.open?(conn), do: state, else: %{state | conn: nil}

@@ -27,6 +27,7 @@ defmodule QuackDB.SQL do
           | QuackDB.Interval.t()
           | Duration.t()
           | {:blob, binary()}
+          | {:uuid, binary()}
           | {:json, term()}
           | {:interval, integer(), integer(), integer()}
           | [parameter()]

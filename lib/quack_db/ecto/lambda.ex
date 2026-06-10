@@ -19,7 +19,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
 
     @supported_expression_message "Supported expressions are literals, pinned values, lambda variables, arithmetic, comparisons, boolean operators, rem/2, is_nil/1, and case_when/1"
 
-    @type option :: {:function, atom()} | {:arities, [non_neg_integer()]}
+    @type option :: {:function, atom() | String.t()} | {:arities, [non_neg_integer()]}
 
     @spec to_sql!(Macro.t(), [option()]) :: {String.t(), [Macro.t()]}
     def to_sql!(lambda_ast, options) do

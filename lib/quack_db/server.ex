@@ -334,7 +334,6 @@ defmodule QuackDB.Server do
      )}
   end
 
-  defp disconnect(_uri, nil), do: :ok
   defp disconnect(_uri, ""), do: :ok
 
   defp disconnect(uri, connection_id) do

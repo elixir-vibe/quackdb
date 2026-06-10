@@ -14,7 +14,8 @@ defmodule QuackDB.MixProject do
       description: "Remote DuckDB Quack protocol client for Elixir",
       source_url: "https://github.com/elixir-vibe/quackdb",
       homepage_url: "https://github.com/elixir-vibe/quackdb",
-      docs: docs()
+      docs: docs(),
+      dialyzer: [plt_add_apps: [:mix, :ex_unit], ignore_warnings: ".dialyzer_ignore.exs"]
     ]
   end
 
@@ -54,6 +55,7 @@ defmodule QuackDB.MixProject do
       {:sourceror, "~> 1.12", only: [:dev, :test], runtime: false},
       {:ex_ast, "~> 0.12", only: [:dev, :test], runtime: false},
       {:reach, "~> 2.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
@@ -66,7 +68,8 @@ defmodule QuackDB.MixProject do
         "test",
         "credo --strict",
         "ex_dna --max-clones 0",
-        "reach.check --smells --strict"
+        "reach.check --smells --strict",
+        "dialyzer"
       ]
     ]
   end
@@ -74,7 +77,7 @@ defmodule QuackDB.MixProject do
   defp package do
     [
       files:
-        ~w(.formatter.exs CHANGELOG.md CONTRIBUTING.md README.md docs/ecto-analytical-coverage.md docs/public-api-audit.md docs/protocol guides lib mix.exs),
+        ~w(.dialyzer_ignore.exs .formatter.exs CHANGELOG.md CONTRIBUTING.md README.md docs/ecto-analytical-coverage.md docs/public-api-audit.md docs/protocol guides lib mix.exs),
       licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/elixir-vibe/quackdb",

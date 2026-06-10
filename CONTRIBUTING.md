@@ -11,6 +11,8 @@ mix ci
 rm -rf doc && mix docs
 ```
 
+`mix ci` includes compilation with warnings-as-errors, formatting, tests, Credo/ExSlop, ExDNA, Reach, and Dialyzer. Dialyzer warnings should be fixed when practical; add entries to `.dialyzer_ignore.exs` only for intentional unsupported callbacks or other reviewed false positives.
+
 ## Real DuckDB Quack integration
 
 Changes that affect protocol decoding/encoding, DBConnection behavior, Ecto SQL semantics, local server supervision, DuckDB helper SQL, or example workflows should also run against a real DuckDB Quack server.
@@ -105,6 +107,7 @@ Expected package contents are intentionally limited to the public package surfac
 - `README.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
+- `.dialyzer_ignore.exs`
 - `.formatter.exs`
 - `mix.exs`
 
