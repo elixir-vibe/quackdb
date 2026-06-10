@@ -9,12 +9,14 @@ New public surfaces since `0.5.2`:
 - Sequence helpers: `QuackDB.Sequence.next_values/4`, `QuackDB.Sequence.for_column/4`, `for_column!/4`, and `QuackDB.Ecto.column_sequence_name/2`.
 - Metadata helpers: `QuackDB.Meta.primary_keys/3`, `primary_keys!/3`, `column_defaults/3`, and `column_defaults!/3`.
 - Ecto append option: `append_shape: :columns | :rows` for direct native append inserts.
+- DML builders: `QuackDB.DML.delete_from/2` for parameterized equality deletes.
 
 Accepted naming decisions for unreleased changes:
 
 - Keep sequence allocation as a small explicit helper instead of adding an Exograph-specific `insert_all_with_generated_ids` wrapper.
 - Use catalog-backed `QuackDB.Sequence.for_column/4` when a connection is available; keep `QuackDB.Ecto.column_sequence_name/2` as an explicit convention helper for code paths that already know the QuackDB Ecto migration naming convention.
 - Keep `append_shape` explicit and limited to `:columns`/`:rows`; do not add `:auto` until telemetry can justify robust heuristics.
+- Keep DML builders small and parameter-preserving for write queries that are awkward as raw iodata; avoid building a broad query DSL prematurely.
 
 ## 0.5.2 API additions after 0.5.1
 

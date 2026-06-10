@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added `QuackDB.DML.delete_from/2` for parameterized `DELETE ... WHERE ...` statements.
+
 ### Changed
 
 - Switched signed LEB128 protocol encoding to `varint` now that upstream SLEB128 support is available.

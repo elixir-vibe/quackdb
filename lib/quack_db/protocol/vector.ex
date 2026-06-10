@@ -667,7 +667,7 @@ defmodule QuackDB.Protocol.Vector do
         )
       end
     else
-      <<_ignored::binary-size(size), rest::binary>> = binary
+      <<_ignored::binary-size(^size), rest::binary>> = binary
 
       decode_nullable_fixed_values(
         rest,

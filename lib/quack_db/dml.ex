@@ -10,6 +10,37 @@ defmodule QuackDB.DML do
 
   @type value :: QuackDB.SQL.parameter() | {:expr, iodata()}
   @type row :: keyword(value()) | %{(atom() | String.t()) => value()}
+  @type table :: atom() | String.t()
+  @type where :: keyword(value())
+
+  @doc """
+  Builds a parameterized `DELETE FROM ... WHERE ...` statement.
+
+      {sql, params} =
+        QuackDB.DML.delete_from(:events,
+          where: [event_type: "session_entry", session_file: session_file]
+        )
+
+      QuackDB.query!(conn, sql, params)
+
+  `nil` values generate `IS NULL` predicates. `{:expr, sql}` values are emitted
+  directly for cases where a DuckDB expression is required.
+  """
+  @spec delete_from(table(), keyword()) :: {iodata(), [QuackDB.SQL.parameter()]}
+  def delete_from(table, options) when is_list(options) do
+    where = Keyword.get(options, :where, :missing)
+    {predicates, params} = delete_predicates!(where)
+
+    {
+      [
+        "DELETE FROM ",
+        QuackDB.Type.quote_identifier(table),
+        " WHERE ",
+        Enum.intersperse(predicates, " AND ")
+      ],
+      params
+    }
+  end
 
   @doc "Builds an `INSERT INTO ... VALUES ...` statement."
   @spec insert_into(String.t() | atom(), [row()] | row()) :: iodata()
@@ -28,6 +59,41 @@ defmodule QuackDB.DML do
   end
 
   def insert_into(table, row) when is_map(row), do: insert_into(table, [row])
+
+  defp delete_predicates!(:missing) do
+    raise ArgumentError, "expected delete where: to be a non-empty keyword list"
+  end
+
+  defp delete_predicates!([]) do
+    raise ArgumentError, "expected delete where: to include at least one predicate"
+  end
+
+  defp delete_predicates!(where) when is_list(where) do
+    unless Keyword.keyword?(where) do
+      raise ArgumentError, "expected delete where: to be a keyword list, got: #{inspect(where)}"
+    end
+
+    where
+    |> Enum.map(&delete_predicate/1)
+    |> Enum.unzip()
+    |> then(fn {predicates, params} -> {predicates, :lists.append(params)} end)
+  end
+
+  defp delete_predicates!(where) do
+    raise ArgumentError, "expected delete where: to be a keyword list, got: #{inspect(where)}"
+  end
+
+  defp delete_predicate({column, nil}) do
+    {[QuackDB.Type.quote_identifier(column), " IS NULL"], []}
+  end
+
+  defp delete_predicate({column, {:expr, expression}}) do
+    {[QuackDB.Type.quote_identifier(column), " = ", expression], []}
+  end
+
+  defp delete_predicate({column, value}) do
+    {[QuackDB.Type.quote_identifier(column), " = ?"], [value]}
+  end
 
   defp normalize_rows([]), do: []
 

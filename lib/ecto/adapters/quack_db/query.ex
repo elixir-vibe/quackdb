@@ -275,7 +275,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp select_expr(expression, from, context), do: select_value_expr(expression, from, context)
 
     defp flatten_select_merge({:merge, _meta, [left, right]}) do
-      flatten_select_merge(left) ++ flatten_select_merge(right)
+      [flatten_select_merge(left), flatten_select_merge(right)]
+      |> :lists.append()
     end
 
     defp flatten_select_merge({:%{}, _meta, fields}), do: fields
@@ -369,12 +370,13 @@ if Code.ensure_loaded?(Ecto.Query) do
     end
 
     defp source(%{source: {:fragment, _meta, parts}}, index, context) do
-      [fragment(parts, context), " AS ", binding_alias(index, context), "(value)"]
+      [fragment(parts, context), " AS ", binding_alias(index, context)]
     end
 
     defp source(%{source: {:values, _meta, [types, _idx, num_rows]}}, index, context) do
-      columns = types |> Keyword.keys() |> Enum.map(&quote_name/1) |> Enum.intersperse(", ")
-      row = types |> Keyword.keys() |> Enum.map(fn _ -> "?" end) |> Enum.intersperse(", ")
+      keys = Keyword.keys(types)
+      columns = keys |> Enum.map(&quote_name/1) |> Enum.intersperse(", ")
+      row = keys |> Enum.map(fn _ -> "?" end) |> Enum.intersperse(", ")
       rows = Enum.map(1..num_rows, fn _ -> ["(", row, ")"] end) |> Enum.intersperse(", ")
 
       ["(VALUES ", rows, ") AS ", binding_alias(index, context), "(", columns, ")"]

@@ -4,6 +4,53 @@ defmodule QuackDB.DMLTest do
   alias QuackDB.DML
   alias QuackDB.Spatial
 
+  test "builds parameterized DELETE statements" do
+    assert {sql, params} =
+             DML.delete_from(:events,
+               where: [event_type: "session_entry", session_file: "session.json"]
+             )
+
+    assert IO.iodata_to_binary(sql) ==
+             ~s|DELETE FROM "events" WHERE "event_type" = ? AND "session_file" = ?|
+
+    assert params == ["session_entry", "session.json"]
+  end
+
+  test "builds DELETE statements with null and expression predicates" do
+    assert {sql, params} =
+             DML.delete_from("events",
+               where: [deleted_at: nil, expires_at: {:expr, "current_timestamp"}]
+             )
+
+    assert IO.iodata_to_binary(sql) ==
+             ~s|DELETE FROM "events" WHERE "deleted_at" IS NULL AND "expires_at" = current_timestamp|
+
+    assert params == []
+  end
+
+  test "preserves list-valued DELETE parameters" do
+    assert {sql, params} = DML.delete_from(:events, where: [ids: [1, 2, 3]])
+
+    assert IO.iodata_to_binary(sql) == ~s|DELETE FROM "events" WHERE "ids" = ?|
+    assert params == [[1, 2, 3]]
+  end
+
+  test "rejects DELETE without predicates" do
+    assert_raise ArgumentError, ~r/expected delete where:/, fn ->
+      DML.delete_from(:events, [])
+    end
+
+    assert_raise ArgumentError, ~r/at least one predicate/, fn ->
+      DML.delete_from(:events, where: [])
+    end
+  end
+
+  test "rejects non-keyword DELETE predicates" do
+    assert_raise ArgumentError, ~r/keyword list/, fn ->
+      DML.delete_from(:events, where: ["event_type"])
+    end
+  end
+
   test "builds INSERT statements from keyword rows" do
     assert DML.insert_into("events", id: 1, name: "duck")
            |> IO.iodata_to_binary() ==

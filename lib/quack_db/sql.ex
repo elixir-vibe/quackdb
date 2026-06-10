@@ -366,6 +366,8 @@ defmodule QuackDB.SQL do
   defp projection_expr({:expr, expression}), do: expression
   defp projection_expr(value), do: QuackDB.Type.quote_identifier(value)
 
+  defp aggregate_expr({:expr, expression}), do: expression
+
   defp aggregate_expr({function, column}) when is_atom(function) do
     [identifier!(function, :aggregate), "(", projection_expr(column), ")"]
   end
@@ -380,7 +382,6 @@ defmodule QuackDB.SQL do
     ]
   end
 
-  defp aggregate_expr({:expr, expression}), do: expression
   defp aggregate_expr(expression), do: expression
 
   defp star_base(options) do

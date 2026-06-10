@@ -133,7 +133,7 @@ defmodule QuackDB.Protocol.Reader do
 
   @spec take(binary(), non_neg_integer()) :: read_result(binary())
   def take(binary, size) when byte_size(binary) >= size do
-    <<value::binary-size(size), rest::binary>> = binary
+    <<value::binary-size(^size), rest::binary>> = binary
     {:ok, value, rest}
   end
 

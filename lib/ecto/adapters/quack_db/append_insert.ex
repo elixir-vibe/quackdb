@@ -114,8 +114,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       if MapSet.new(header) == MapSet.new(schema_sources), do: schema_sources, else: header
     end
 
-    defp schema_source_order(%{schema: nil}), do: []
-
     defp schema_source_order(%{schema: schema}) do
       Enum.map(schema.__schema__(:fields), &schema.__schema__(:field_source, &1))
     end

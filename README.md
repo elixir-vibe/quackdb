@@ -417,6 +417,17 @@ QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
 
 Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Ecto `insert_all(..., insert_method: :append)` can use schema types for nullable batches, omitted/defaulted columns, and `RETURNING` through a temporary append table; direct append inserts can choose `append_shape: :columns` or `:rows` when one shape is known to fit a workload better. Native append does not evaluate column defaults; use `QuackDB.Sequence.for_column/4` or `QuackDB.Ecto.column_sequence_name/2` with `QuackDB.Sequence.next_values/4` when you need to preallocate sequence-backed IDs before appending explicit primary keys. See the [type support guide](guides/type-support.md), [getting started guide](guides/getting-started.md), and the [Explorer guide](guides/explorer.md).
 
+Small DML builders can keep setup/cleanup SQL readable while preserving query parameters:
+
+```elixir
+{sql, params} =
+  QuackDB.DML.delete_from(:events,
+    where: [event_type: "session_entry", session_file: session_file]
+  )
+
+QuackDB.query!(conn, sql, params, timeout: :infinity)
+```
+
 ## Results, Livebook, and telemetry
 
 `QuackDB.Result` and `QuackDB.Columns` implement `Table.Reader`, so they can be consumed by Livebook and other Table-aware tooling. When Explorer is installed, query results can be turned into dataframes:
