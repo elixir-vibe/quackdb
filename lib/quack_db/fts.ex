@@ -32,6 +32,7 @@ defmodule QuackDB.FTS do
           | {:k, number()}
           | {:b, number()}
           | {:conjunctive, boolean()}
+          | {:schema, atom() | String.t()}
 
   @doc "Builds an `INSTALL fts;` statement."
   @spec install() :: iodata()
