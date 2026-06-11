@@ -559,3 +559,14 @@ mix ci
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local checks, example smoke tests, package audit steps, and release dry-run notes.
 
 Integration tests run automatically when a local DuckDB executable is available. Set `QUACKDB_SKIP_INTEGRATION=1` to skip them, `QUACKDB_TEST_DUCKDB=managed` to force the managed binary path, or `QUACKDB_TEST_URI` / `QUACKDB_TEST_TOKEN` to reuse an external Quack server.
+
+## Part of Elixir Vibe
+
+QuackDB gives Elixir applications an OTP-supervised DuckDB with an Ecto adapter — the local-first analytics store the stack's memory lives in.
+
+It is one building block of a larger stack — tools that make AI-generated
+software checkable: structural search, dependence analysis, duplication and
+slop detection, session replay, and ecosystem-wide code search. See the
+[Elixir Vibe](https://github.com/elixir-vibe) organization for the rest, and
+[Building Blocks for the Future Web](https://github.com/elixir-vibe/building-blocks)
+for the thesis, architecture, and roadmap that tie them together.
