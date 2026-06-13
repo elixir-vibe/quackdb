@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.5 - 2026-06-13
+
+### Fixed
+
+- Added Ecto native append support for `Repo.insert_all/3` with `insert_method: :append`, `on_conflict: :nothing`, and `conflict_target`, including optional `returning`.
+
 ## 0.5.4 - 2026-06-10
 
 ### Added
