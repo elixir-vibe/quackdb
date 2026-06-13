@@ -566,6 +566,69 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
              QuackDB.IntegrationRepo.query!("SELECT id, name FROM #{table} ORDER BY id")
   end
 
+  test "Ecto append insert_all supports on_conflict nothing" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.KeyedEvent, [
+               [id: 1, name: "duck", score: 10]
+             ])
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(
+               QuackDB.TestSchemas.KeyedEvent,
+               [[id: 1, name: "mallard", score: 20], [id: 2, name: "goose", score: 30]],
+               insert_method: :append,
+               on_conflict: :nothing,
+               conflict_target: [:id]
+             )
+
+    assert %{rows: [[1, "duck", 10], [2, "goose", 30]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT id, name, score FROM keyed_events ORDER BY id"
+             )
+  end
+
+  test "Ecto append insert_all supports on_conflict nothing with returning" do
+    start_repo!()
+
+    drop_table!(QuackDB.IntegrationRepo, "keyed_events")
+
+    create_table!(QuackDB.IntegrationRepo, "keyed_events",
+      id: "INTEGER PRIMARY KEY",
+      name: :varchar,
+      score: :integer
+    )
+
+    assert {1, nil} =
+             QuackDB.IntegrationRepo.insert_all(QuackDB.TestSchemas.KeyedEvent, [
+               [id: 1, name: "duck", score: 10]
+             ])
+
+    assert {1, [%{id: 2, name: "goose"}]} =
+             QuackDB.IntegrationRepo.insert_all(
+               QuackDB.TestSchemas.KeyedEvent,
+               [[id: 1, name: "mallard", score: 20], [id: 2, name: "goose", score: 30]],
+               insert_method: :append,
+               on_conflict: :nothing,
+               conflict_target: [:id],
+               returning: [:id, :name]
+             )
+
+    assert %{rows: [[1, "duck", 10], [2, "goose", 30]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT id, name, score FROM keyed_events ORDER BY id"
+             )
+  end
+
   test "Ecto append insert_all can omit defaulted schema columns" do
     start_repo!()
 

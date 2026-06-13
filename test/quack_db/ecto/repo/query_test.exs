@@ -202,6 +202,55 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     assert_receive {:statement, "COMMIT"}
   end
 
+  test "Repo.insert_all/3 append supports on_conflict nothing through temp insert" do
+    parent = self()
+    chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([2])
+
+    transport = fn _uri, request, _options ->
+      request = IO.iodata_to_binary(request)
+
+      case Codec.decode(request) do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok,
+         {%Header{type: :prepare_request},
+          %QuackDB.Protocol.Message.PrepareRequest{sql_query: statement}}} ->
+          send(parent, {:statement, statement})
+          {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk], names: ["id"])}
+
+        {:ok, {%Header{type: :append_request}, %AppendRequest{} = append}} ->
+          send(parent, {:append, append})
+          {:ok, IO.iodata_to_binary(Codec.encode(%SuccessResponse{}))}
+      end
+    end
+
+    put_repo_env(transport)
+    start_supervised!(QuackDB.EctoRepo)
+
+    assert {1, [%{id: 2}]} =
+             QuackDB.EctoRepo.insert_all(
+               QuackDB.TestSchemas.RenamedEvent,
+               [[id: 1, name: "duck"], [id: 2, name: "goose"]],
+               insert_method: :append,
+               on_conflict: :nothing,
+               conflict_target: [:id],
+               returning: [:id]
+             )
+
+    assert_receive {:statement, "BEGIN"}
+    assert_receive {:statement, "CREATE TEMP TABLE IF NOT EXISTS " <> _}
+    assert_receive {:statement, "DELETE FROM " <> _}
+    assert_receive {:append, %{table_name: "quackdb_append_" <> _, append_chunk: %{row_count: 2}}}
+
+    assert_receive {:statement, insert_statement}
+    assert insert_statement =~ ~s|INSERT INTO "renamed_events" ("id", "event_name")|
+    assert insert_statement =~ ~s| ON CONFLICT ("id") DO NOTHING|
+    assert insert_statement =~ ~s| RETURNING "id"|
+    assert_receive {:statement, "DELETE FROM " <> _}
+    assert_receive {:statement, "COMMIT"}
+  end
+
   test "Repo.insert_all/3 append returning reuses an existing transaction" do
     parent = self()
     chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
@@ -555,14 +604,14 @@ defmodule QuackDB.Ecto.Repo.QueryTest do
     end
   end
 
-  test "Repo.insert_all/3 append method rejects conflict targets" do
+  test "Repo.insert_all/3 append method rejects upsert updates" do
     put_repo_env(transport(prepare: []))
     start_supervised!(QuackDB.EctoRepo)
 
-    assert_raise QuackDB.Error, ~r/does not support conflict targets/, fn ->
-      QuackDB.EctoRepo.insert_all("events", [[id: 1]],
+    assert_raise QuackDB.Error, ~r/only supports plain insert_all or on_conflict: :nothing/, fn ->
+      QuackDB.EctoRepo.insert_all("events", [[id: 1, name: "duck"]],
         insert_method: :append,
-        on_conflict: :nothing,
+        on_conflict: [set: [name: "duck"]],
         conflict_target: [:id]
       )
     end
