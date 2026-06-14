@@ -10,7 +10,7 @@ defmodule QuackDB.DML do
 
   @type value :: QuackDB.SQL.parameter() | {:expr, iodata()}
   @type row :: keyword(value()) | %{(atom() | String.t()) => value()}
-  @type table :: atom() | String.t()
+  @type table :: atom() | String.t() | {atom() | String.t() | nil, atom() | String.t()}
   @type where :: keyword(value())
 
   @doc """
@@ -59,6 +59,30 @@ defmodule QuackDB.DML do
   end
 
   def insert_into(table, row) when is_map(row), do: insert_into(table, [row])
+
+  @doc "Builds an `INSERT INTO ... SELECT ... FROM ...` statement."
+  @spec insert_into_select(
+          table(),
+          [atom() | String.t()],
+          table(),
+          [atom() | String.t()],
+          keyword()
+        ) ::
+          iodata()
+  def insert_into_select(table, columns, source, select_columns, options \\ [])
+      when is_list(columns) and is_list(select_columns) and is_list(options) do
+    [
+      "INSERT INTO ",
+      quote_table(table),
+      insert_columns(columns),
+      " SELECT ",
+      select_columns(select_columns),
+      " FROM ",
+      quote_table(source),
+      on_conflict(Keyword.get(options, :on_conflict, :raise)),
+      returning(Keyword.get(options, :returning, []))
+    ]
+  end
 
   defp delete_predicates!(:missing) do
     raise ArgumentError, "expected delete where: to be a non-empty keyword list"
@@ -136,6 +160,48 @@ defmodule QuackDB.DML do
   defp row_values(row, columns) do
     ["(", columns |> Enum.map(&value(row, &1)) |> Enum.intersperse(", "), ")"]
   end
+
+  defp insert_columns([]), do: []
+
+  defp insert_columns(columns) do
+    [" (", columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", "), ")"]
+  end
+
+  defp select_columns([]), do: "*"
+
+  defp select_columns(columns) do
+    columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", ")
+  end
+
+  defp on_conflict(:raise), do: []
+  defp on_conflict(:nothing), do: " ON CONFLICT DO NOTHING"
+
+  defp on_conflict({:nothing, targets}) when is_list(targets) do
+    [" ON CONFLICT ", conflict_target(targets), "DO NOTHING"]
+  end
+
+  defp conflict_target([]), do: []
+
+  defp conflict_target(targets) do
+    ["(", targets |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", "), ") "]
+  end
+
+  defp returning([]), do: []
+
+  defp returning(columns) when is_list(columns) do
+    [
+      " RETURNING ",
+      columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", ")
+    ]
+  end
+
+  defp quote_table({nil, name}), do: QuackDB.Type.quote_identifier(name)
+
+  defp quote_table({prefix, name}) do
+    [QuackDB.Type.quote_identifier(prefix), ?., QuackDB.Type.quote_identifier(name)]
+  end
+
+  defp quote_table(name), do: QuackDB.Type.quote_identifier(name)
 
   defp value(row, column) do
     row

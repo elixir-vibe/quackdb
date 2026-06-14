@@ -2,10 +2,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
   defmodule Ecto.Adapters.QuackDB.AppendInsert do
     @moduledoc false
 
-    import Ecto.Query, only: [from: 2]
-
-    @connection Ecto.Adapters.QuackDB.Connection
-
     def run(adapter_meta, schema_meta, header, rows, on_conflict, returning, placeholders, opts) do
       with :ok <- assert_supported!(schema_meta, rows, on_conflict, returning, placeholders, opts),
            conn <- ecto_connection(adapter_meta),
@@ -105,14 +101,12 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       "quackdb_append_#{hash}"
     end
 
-    defp append_columns!(schema_meta, header, options) do
+    defp append_columns!(_schema_meta, header, options) do
       types = Keyword.fetch!(options, :columns)
-      sources = schema_sources(schema_meta)
 
       Enum.map(header, fn source ->
         %{
           source: source,
-          query_field: temp_query_field!(source, sources),
           type: column_type!(types, source)
         }
       end)
@@ -128,22 +122,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp schema_source_order(%{schema: schema}) do
       Enum.map(schema.__schema__(:fields), &schema.__schema__(:field_source, &1))
-    end
-
-    defp schema_sources(%{schema: nil}), do: %{}
-
-    defp schema_sources(%{schema: schema}) do
-      Map.new(schema.__schema__(:fields), fn field ->
-        {schema.__schema__(:field_source, field), field}
-      end)
-    end
-
-    defp temp_query_field!(source, sources) when is_map_key(sources, source), do: source
-    defp temp_query_field!(source, _sources) when is_atom(source), do: source
-
-    defp temp_query_field!(source, _sources) do
-      raise ArgumentError,
-            "append insert returning requires atom column names for Ecto query generation, got: #{inspect(source)}"
     end
 
     defp create_temp_table(temp_table, columns) do
@@ -190,21 +168,19 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     defp insert_from_temp_statement(schema_meta, columns, temp_table, on_conflict, returning) do
       header = Enum.map(columns, & &1.source)
 
-      @connection.insert(
-        schema_meta.prefix,
-        schema_meta.source,
+      QuackDB.DML.insert_into_select(
+        {schema_meta.prefix, schema_meta.source},
         header,
-        temp_select_query(temp_table, columns),
-        on_conflict,
-        returning,
-        []
+        temp_table,
+        header,
+        on_conflict: dml_on_conflict(on_conflict),
+        returning: returning
       )
     end
 
-    defp temp_select_query(temp_table, columns) do
-      fields = Enum.map(columns, & &1.query_field)
-      from(row in temp_table, select: ^fields)
-    end
+    defp dml_on_conflict({:raise, _params, []}), do: :raise
+    defp dml_on_conflict({:nothing, _params, []}), do: :nothing
+    defp dml_on_conflict({:nothing, _params, targets}), do: {:nothing, targets}
 
     defp assert_supported!(
            _schema_meta,

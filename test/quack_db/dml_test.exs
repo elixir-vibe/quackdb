@@ -87,6 +87,19 @@ defmodule QuackDB.DMLTest do
     end
   end
 
+  test "builds INSERT INTO SELECT statements" do
+    assert DML.insert_into_select(
+             {"main", "events"},
+             [:id, :name],
+             "staged_events",
+             [:id, :name],
+             on_conflict: {:nothing, [:id]},
+             returning: [:id]
+           )
+           |> IO.iodata_to_binary() ==
+             ~s|INSERT INTO "main"."events" ("id", "name") SELECT "id", "name" FROM "staged_events" ON CONFLICT ("id") DO NOTHING RETURNING "id"|
+  end
+
   test "allows expression values" do
     assert DML.insert_into("places", id: 1, geom: {:expr, Spatial.point(1, 2)})
            |> IO.iodata_to_binary() ==
