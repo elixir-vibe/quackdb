@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.9 - 2026-06-14
+
+### Added
+
+- Added `QuackDB.DML.merge_into/2` for reusable `MERGE INTO ... USING ... WHEN NOT MATCHED THEN INSERT ... RETURNING ...` statement generation.
+
 ## 0.5.8 - 2026-06-14
 
 ### Added
