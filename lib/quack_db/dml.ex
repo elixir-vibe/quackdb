@@ -12,6 +12,7 @@ defmodule QuackDB.DML do
   @type row :: keyword(value()) | %{(atom() | String.t()) => value()}
   @type table :: atom() | String.t() | {atom() | String.t() | nil, atom() | String.t()}
   @type where :: keyword(value())
+  @type merge_insert :: {:insert, [atom() | String.t()]}
 
   @doc """
   Builds a parameterized `DELETE FROM ... WHERE ...` statement.
@@ -80,6 +81,31 @@ defmodule QuackDB.DML do
       " FROM ",
       quote_table(source),
       on_conflict(Keyword.get(options, :on_conflict, :raise)),
+      returning(Keyword.get(options, :returning, []))
+    ]
+  end
+
+  @doc "Builds a `MERGE INTO ... USING ...` statement."
+  @spec merge_into(table(), keyword()) :: iodata()
+  def merge_into(target, options) when is_list(options) do
+    source = Keyword.fetch!(options, :using)
+    target_alias = Keyword.get(options, :target_as, :target)
+    source_alias = Keyword.get(options, :source_as, :source)
+    on = Keyword.fetch!(options, :on)
+    not_matched = Keyword.get(options, :when_not_matched, :nothing)
+
+    [
+      "MERGE INTO ",
+      quote_table(target),
+      " AS ",
+      quote_table_alias(target_alias),
+      " USING ",
+      quote_table(source),
+      " AS ",
+      quote_table_alias(source_alias),
+      " ON ",
+      merge_on(on, target_alias, source_alias),
+      merge_not_matched(not_matched, source_alias),
       returning(Keyword.get(options, :returning, []))
     ]
   end
@@ -195,6 +221,62 @@ defmodule QuackDB.DML do
     ]
   end
 
+  defp merge_on(on, target_alias, source_alias) when is_list(on) and on != [] do
+    on
+    |> Enum.map(fn
+      {column, column} ->
+        merge_equality(target_alias, column, source_alias, column)
+
+      {target_column, source_column} ->
+        merge_equality(target_alias, target_column, source_alias, source_column)
+
+      column ->
+        merge_equality(target_alias, column, source_alias, column)
+    end)
+    |> Enum.intersperse(" AND ")
+  end
+
+  defp merge_on(on, _target_alias, _source_alias) do
+    raise ArgumentError, "expected MERGE :on to include at least one column, got: #{inspect(on)}"
+  end
+
+  defp merge_equality(target_alias, target_column, source_alias, source_column) do
+    [
+      quote_table_alias(target_alias),
+      ?.,
+      QuackDB.Type.quote_identifier(target_column),
+      " = ",
+      quote_table_alias(source_alias),
+      ?.,
+      QuackDB.Type.quote_identifier(source_column)
+    ]
+  end
+
+  defp merge_not_matched(:nothing, _source_alias), do: []
+
+  defp merge_not_matched({:insert, columns}, source_alias)
+       when is_list(columns) and columns != [] do
+    [
+      " WHEN NOT MATCHED THEN INSERT",
+      insert_columns(columns),
+      " VALUES (",
+      merge_insert_values(columns, source_alias),
+      ")"
+    ]
+  end
+
+  defp merge_not_matched(other, _source_alias) do
+    raise ArgumentError, "unsupported MERGE when_not_matched option: #{inspect(other)}"
+  end
+
+  defp merge_insert_values(columns, source_alias) do
+    columns
+    |> Enum.map(fn column ->
+      [quote_table_alias(source_alias), ?., QuackDB.Type.quote_identifier(column)]
+    end)
+    |> Enum.intersperse(", ")
+  end
+
   defp quote_table({nil, name}), do: QuackDB.Type.quote_identifier(name)
 
   defp quote_table({prefix, name}) do
@@ -202,6 +284,8 @@ defmodule QuackDB.DML do
   end
 
   defp quote_table(name), do: QuackDB.Type.quote_identifier(name)
+
+  defp quote_table_alias(name), do: QuackDB.Type.quote_identifier(name)
 
   defp value(row, column) do
     row

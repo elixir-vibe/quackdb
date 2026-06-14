@@ -100,6 +100,19 @@ defmodule QuackDB.DMLTest do
              ~s|INSERT INTO "main"."events" ("id", "name") SELECT "id", "name" FROM "staged_events" ON CONFLICT ("id") DO NOTHING RETURNING "id"|
   end
 
+  test "builds MERGE insert-if-missing statements" do
+    assert DML.merge_into("events",
+             using: "staged_events",
+             target_as: :target,
+             source_as: :source,
+             on: [:content_hash],
+             when_not_matched: {:insert, [:id, :content_hash, :name]},
+             returning: [:content_hash, :id]
+           )
+           |> IO.iodata_to_binary() ==
+             ~s|MERGE INTO "events" AS "target" USING "staged_events" AS "source" ON "target"."content_hash" = "source"."content_hash" WHEN NOT MATCHED THEN INSERT ("id", "content_hash", "name") VALUES ("source"."id", "source"."content_hash", "source"."name") RETURNING "content_hash", "id"|
+  end
+
   test "allows expression values" do
     assert DML.insert_into("places", id: 1, geom: {:expr, Spatial.point(1, 2)})
            |> IO.iodata_to_binary() ==
