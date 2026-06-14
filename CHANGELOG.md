@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.5.11 - 2026-06-14
+
+### Added
+
+- Added reusable SQL fragment helpers for table, column, alias, conflict, returning, join, and window expression generation.
+
+### Changed
+
+- Reused SQL fragments across DML, DDL, analytics, and append insert builders.
+
 ## 0.5.10 - 2026-06-14
 
 ### Fixed
