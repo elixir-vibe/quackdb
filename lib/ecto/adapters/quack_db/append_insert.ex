@@ -21,7 +21,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp insert_all(conn, schema_meta, header, rows, on_conflict, returning, options) do
       if insert_select?(schema_meta, header, on_conflict, returning) do
-        rows = append_rows(header, rows, options)
         insert_select(conn, schema_meta, header, rows, on_conflict, returning, options)
       else
         direct_insert_all(conn, schema_meta, header, rows, options)
@@ -91,7 +90,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       try do
         with {:ok, _result} <- QuackDB.query(conn, create_statement, [], options),
              {:ok, _result} <- QuackDB.query(conn, clear_statement, [], options),
-             {:ok, _result} <- QuackDB.insert_rows(conn, temp_table, rows, options),
+             {:ok, _result} <- append_temp_data(conn, temp_table, header, rows, options),
              {:ok, %QuackDB.Result{} = result} <-
                QuackDB.query(conn, insert_statement, [], options) do
           {:ok, result}
@@ -173,6 +172,18 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       |> case do
         {:ok, type} -> type
         nil -> raise KeyError, key: column, term: columns
+      end
+    end
+
+    defp append_temp_data(conn, temp_table, header, rows, options) do
+      case Keyword.get(options, :append_shape, :columns) do
+        :columns ->
+          columns = append_columns(header, rows, options)
+          QuackDB.insert_columns(conn, temp_table, columns, options)
+
+        :rows ->
+          rows = append_rows(header, rows, options)
+          QuackDB.insert_rows(conn, temp_table, rows, options)
       end
     end
 
