@@ -52,9 +52,11 @@ defmodule QuackDB.Protocol.DataChunk do
     with {:ok, values} <- normalize_column_values(column_values),
          {:ok, row_count} <- column_row_count(values),
          {:ok, columns} <- columns_from_column_values(values, options) do
+      values_by_name = column_values_by_name(values)
+
       vectors =
         Enum.map(columns, fn column ->
-          %Vector{type: column.type, values: column_values_for_name(values, column.name)}
+          %Vector{type: column.type, values: column_values_for_name(values_by_name, column.name)}
         end)
 
       {:ok,
@@ -196,24 +198,24 @@ defmodule QuackDB.Protocol.DataChunk do
     |> collect_ok()
   end
 
-  defp column_values_for_name(values, name) do
-    values
-    |> Enum.find_value(fn
-      {^name, column_values} ->
-        {:value, column_values}
-
-      {column_name, column_values} when is_binary(name) and is_atom(column_name) ->
-        if Atom.to_string(column_name) == name, do: {:value, column_values}
-
-      {column_name, column_values} when is_atom(name) and is_binary(column_name) ->
-        if column_name == Atom.to_string(name), do: {:value, column_values}
-
-      _entry ->
-        nil
+  defp column_values_by_name(values) do
+    Enum.reduce(values, %{}, fn {name, column_values}, acc ->
+      acc
+      |> Map.put_new(name, column_values)
+      |> maybe_put_string_name(name, column_values)
     end)
-    |> case do
-      {:value, column_values} -> column_values
-      nil -> []
+  end
+
+  defp maybe_put_string_name(acc, name, column_values) when is_atom(name),
+    do: Map.put_new(acc, Atom.to_string(name), column_values)
+
+  defp maybe_put_string_name(acc, _name, _column_values), do: acc
+
+  defp column_values_for_name(values_by_name, name) do
+    cond do
+      Map.has_key?(values_by_name, name) -> Map.fetch!(values_by_name, name)
+      is_atom(name) -> Map.get(values_by_name, Atom.to_string(name), [])
+      true -> []
     end
   end
 
