@@ -1,4 +1,6 @@
 defmodule QuackDB.DML do
+  alias QuackDB.SQL.Fragment
+
   @moduledoc """
   Small DuckDB DML SQL builders.
 
@@ -35,7 +37,7 @@ defmodule QuackDB.DML do
     {
       [
         "DELETE FROM ",
-        QuackDB.Type.quote_identifier(table),
+        Fragment.table(table),
         " WHERE ",
         Enum.intersperse(predicates, " AND ")
       ],
@@ -51,9 +53,9 @@ defmodule QuackDB.DML do
 
     [
       "INSERT INTO ",
-      QuackDB.Type.quote_identifier(table),
+      Fragment.table(table),
       " (",
-      columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", "),
+      Fragment.column_list(columns),
       ") VALUES ",
       rows |> Enum.map(&row_values(&1, columns)) |> Enum.intersperse(", ")
     ]
@@ -74,14 +76,14 @@ defmodule QuackDB.DML do
       when is_list(columns) and is_list(select_columns) and is_list(options) do
     [
       "INSERT INTO ",
-      quote_table(table),
-      insert_columns(columns),
+      Fragment.table(table),
+      Fragment.insert_columns(columns),
       " SELECT ",
-      select_columns(select_columns),
+      Fragment.select_columns(select_columns),
       " FROM ",
-      quote_table(source),
-      on_conflict(Keyword.get(options, :on_conflict, :raise)),
-      returning(Keyword.get(options, :returning, []))
+      Fragment.table(source),
+      Fragment.on_conflict(Keyword.get(options, :on_conflict, :raise)),
+      Fragment.returning(Keyword.get(options, :returning, []))
     ]
   end
 
@@ -96,17 +98,17 @@ defmodule QuackDB.DML do
 
     [
       "MERGE INTO ",
-      quote_table(target),
+      Fragment.table(target),
       " AS ",
-      quote_table_alias(target_alias),
+      Fragment.alias_name(target_alias),
       " USING ",
-      quote_table(source),
+      Fragment.table(source),
       " AS ",
-      quote_table_alias(source_alias),
+      Fragment.alias_name(source_alias),
       " ON ",
       merge_on(on, target_alias, source_alias),
       merge_not_matched(not_matched, source_alias),
-      returning(Keyword.get(options, :returning, []))
+      Fragment.returning(Keyword.get(options, :returning, []))
     ]
   end
 
@@ -134,15 +136,15 @@ defmodule QuackDB.DML do
   end
 
   defp delete_predicate({column, nil}) do
-    {[QuackDB.Type.quote_identifier(column), " IS NULL"], []}
+    {[Fragment.column(column), " IS NULL"], []}
   end
 
   defp delete_predicate({column, {:expr, expression}}) do
-    {[QuackDB.Type.quote_identifier(column), " = ", expression], []}
+    {[Fragment.column(column), " = ", expression], []}
   end
 
   defp delete_predicate({column, value}) do
-    {[QuackDB.Type.quote_identifier(column), " = ?"], [value]}
+    {[Fragment.column(column), " = ?"], [value]}
   end
 
   defp normalize_rows([]), do: []
@@ -187,40 +189,6 @@ defmodule QuackDB.DML do
     ["(", columns |> Enum.map(&value(row, &1)) |> Enum.intersperse(", "), ")"]
   end
 
-  defp insert_columns([]), do: []
-
-  defp insert_columns(columns) do
-    [" (", columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", "), ")"]
-  end
-
-  defp select_columns([]), do: "*"
-
-  defp select_columns(columns) do
-    columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", ")
-  end
-
-  defp on_conflict(:raise), do: []
-  defp on_conflict(:nothing), do: " ON CONFLICT DO NOTHING"
-
-  defp on_conflict({:nothing, targets}) when is_list(targets) do
-    [" ON CONFLICT ", conflict_target(targets), "DO NOTHING"]
-  end
-
-  defp conflict_target([]), do: []
-
-  defp conflict_target(targets) do
-    ["(", targets |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", "), ") "]
-  end
-
-  defp returning([]), do: []
-
-  defp returning(columns) when is_list(columns) do
-    [
-      " RETURNING ",
-      columns |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(", ")
-    ]
-  end
-
   defp merge_on(on, target_alias, source_alias) when is_list(on) and on != [] do
     on
     |> Enum.map(fn
@@ -241,15 +209,7 @@ defmodule QuackDB.DML do
   end
 
   defp merge_equality(target_alias, target_column, source_alias, source_column) do
-    [
-      quote_table_alias(target_alias),
-      ?.,
-      QuackDB.Type.quote_identifier(target_column),
-      " = ",
-      quote_table_alias(source_alias),
-      ?.,
-      QuackDB.Type.quote_identifier(source_column)
-    ]
+    Fragment.qualified_equality(target_alias, target_column, source_alias, source_column)
   end
 
   defp merge_not_matched(:nothing, _source_alias), do: []
@@ -258,7 +218,7 @@ defmodule QuackDB.DML do
        when is_list(columns) and columns != [] do
     [
       " WHEN NOT MATCHED THEN INSERT",
-      insert_columns(columns),
+      Fragment.insert_columns(columns),
       " VALUES (",
       merge_insert_values(columns, source_alias),
       ")"
@@ -270,22 +230,8 @@ defmodule QuackDB.DML do
   end
 
   defp merge_insert_values(columns, source_alias) do
-    columns
-    |> Enum.map(fn column ->
-      [quote_table_alias(source_alias), ?., QuackDB.Type.quote_identifier(column)]
-    end)
-    |> Enum.intersperse(", ")
+    Fragment.qualified_column_list(columns, source_alias)
   end
-
-  defp quote_table({nil, name}), do: QuackDB.Type.quote_identifier(name)
-
-  defp quote_table({prefix, name}) do
-    [QuackDB.Type.quote_identifier(prefix), ?., QuackDB.Type.quote_identifier(name)]
-  end
-
-  defp quote_table(name), do: QuackDB.Type.quote_identifier(name)
-
-  defp quote_table_alias(name), do: QuackDB.Type.quote_identifier(name)
 
   defp value(row, column) do
     row
