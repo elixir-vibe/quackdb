@@ -1,5 +1,5 @@
 defmodule QuackDB.DML do
-  alias QuackDB.SQL.Fragment
+  import QuackDB.SQL.Fragment
 
   @moduledoc """
   Small DuckDB DML SQL builders.
@@ -37,7 +37,7 @@ defmodule QuackDB.DML do
     {
       [
         "DELETE FROM ",
-        Fragment.table(table),
+        table(table),
         " WHERE ",
         Enum.intersperse(predicates, " AND ")
       ],
@@ -53,9 +53,9 @@ defmodule QuackDB.DML do
 
     [
       "INSERT INTO ",
-      Fragment.table(table),
+      table(table),
       " (",
-      Fragment.column_list(columns),
+      column_list(columns),
       ") VALUES ",
       rows |> Enum.map(&row_values(&1, columns)) |> Enum.intersperse(", ")
     ]
@@ -76,14 +76,14 @@ defmodule QuackDB.DML do
       when is_list(columns) and is_list(select_columns) and is_list(options) do
     [
       "INSERT INTO ",
-      Fragment.table(table),
-      Fragment.insert_columns(columns),
+      table(table),
+      insert_columns(columns),
       " SELECT ",
-      Fragment.select_columns(select_columns),
+      select_columns(select_columns),
       " FROM ",
-      Fragment.table(source),
-      Fragment.on_conflict(Keyword.get(options, :on_conflict, :raise)),
-      Fragment.returning(Keyword.get(options, :returning, []))
+      table(source),
+      on_conflict(Keyword.get(options, :on_conflict, :raise)),
+      returning(Keyword.get(options, :returning, []))
     ]
   end
 
@@ -98,17 +98,17 @@ defmodule QuackDB.DML do
 
     [
       "MERGE INTO ",
-      Fragment.table(target),
+      table(target),
       " AS ",
-      Fragment.alias_name(target_alias),
+      alias_name(target_alias),
       " USING ",
-      Fragment.table(source),
+      table(source),
       " AS ",
-      Fragment.alias_name(source_alias),
+      alias_name(source_alias),
       " ON ",
       merge_on(on, target_alias, source_alias),
       merge_not_matched(not_matched, source_alias),
-      Fragment.returning(Keyword.get(options, :returning, []))
+      returning(Keyword.get(options, :returning, []))
     ]
   end
 
@@ -136,15 +136,15 @@ defmodule QuackDB.DML do
   end
 
   defp delete_predicate({column, nil}) do
-    {[Fragment.column(column), " IS NULL"], []}
+    {[column(column), " IS NULL"], []}
   end
 
   defp delete_predicate({column, {:expr, expression}}) do
-    {[Fragment.column(column), " = ", expression], []}
+    {[column(column), " = ", expression], []}
   end
 
   defp delete_predicate({column, value}) do
-    {[Fragment.column(column), " = ?"], [value]}
+    {[column(column), " = ?"], [value]}
   end
 
   defp normalize_rows([]), do: []
@@ -209,7 +209,7 @@ defmodule QuackDB.DML do
   end
 
   defp merge_equality(target_alias, target_column, source_alias, source_column) do
-    Fragment.qualified_equality(target_alias, target_column, source_alias, source_column)
+    qualified_equality(target_alias, target_column, source_alias, source_column)
   end
 
   defp merge_not_matched(:nothing, _source_alias), do: []
@@ -218,7 +218,7 @@ defmodule QuackDB.DML do
        when is_list(columns) and columns != [] do
     [
       " WHEN NOT MATCHED THEN INSERT",
-      Fragment.insert_columns(columns),
+      insert_columns(columns),
       " VALUES (",
       merge_insert_values(columns, source_alias),
       ")"
@@ -230,7 +230,7 @@ defmodule QuackDB.DML do
   end
 
   defp merge_insert_values(columns, source_alias) do
-    Fragment.qualified_column_list(columns, source_alias)
+    qualified_column_list(columns, source_alias)
   end
 
   defp value(row, column) do

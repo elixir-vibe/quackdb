@@ -1,4 +1,6 @@
 defmodule QuackDB.DDL do
+  import QuackDB.SQL.Fragment, only: [column: 1, table: 1]
+
   @moduledoc """
   Small DuckDB DDL SQL builders.
 
@@ -86,7 +88,7 @@ defmodule QuackDB.DDL do
       temporary(options),
       "TABLE ",
       if_not_exists(options),
-      QuackDB.Type.quote_identifier(name),
+      table(name),
       " (",
       columns(columns),
       ")"
@@ -102,7 +104,7 @@ defmodule QuackDB.DDL do
       temporary(options),
       "TABLE ",
       if_not_exists(options),
-      QuackDB.Type.quote_identifier(name),
+      table(name),
       " AS ",
       table_query(query)
     ]
@@ -116,7 +118,7 @@ defmodule QuackDB.DDL do
   @doc "Builds a `DROP TABLE` statement."
   @spec drop_table(String.t() | atom(), keyword()) :: iodata()
   def drop_table(name, options \\ []) when is_list(options) do
-    ["DROP TABLE ", if_exists(options), QuackDB.Type.quote_identifier(name)]
+    ["DROP TABLE ", if_exists(options), table(name)]
   end
 
   defp table_query(%{__struct__: Ecto.Query} = query) do
@@ -208,24 +210,24 @@ defmodule QuackDB.DDL do
 
   defp columns(columns) do
     columns
-    |> Enum.map(&column/1)
+    |> Enum.map(&ddl_column/1)
     |> Enum.intersperse(", ")
   end
 
-  defp column({name, type}) do
-    [QuackDB.Type.quote_identifier(name), " ", QuackDB.Type.to_sql(type)]
+  defp ddl_column({name, type}) do
+    [column(name), " ", QuackDB.Type.to_sql(type)]
   end
 
-  defp column({name, type, options}) when is_list(options) do
+  defp ddl_column({name, type, options}) when is_list(options) do
     [
-      QuackDB.Type.quote_identifier(name),
+      column(name),
       " ",
       QuackDB.Type.to_sql(type),
       column_options(options)
     ]
   end
 
-  defp column(other) do
+  defp ddl_column(other) do
     raise ArgumentError, "expected column as {name, type}, got: #{inspect(other)}"
   end
 

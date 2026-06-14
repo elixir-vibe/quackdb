@@ -1,4 +1,6 @@
 defmodule QuackDB.Analytics do
+  import QuackDB.SQL.Fragment, only: [table: 1]
+
   @moduledoc """
   Direct SQL helpers for DuckDB analytical statements.
   """
@@ -8,7 +10,7 @@ defmodule QuackDB.Analytics do
   def summarize(source) when is_atom(source), do: summarize(Atom.to_string(source))
 
   def summarize(source) when is_binary(source) do
-    ["SUMMARIZE SELECT * FROM ", QuackDB.Type.quote_identifier(source)]
+    ["SUMMARIZE SELECT * FROM ", table(source)]
   end
 
   def summarize({:query, query}) do

@@ -2,6 +2,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
   defmodule Ecto.Adapters.QuackDB.AppendInsert do
     @moduledoc false
 
+    import QuackDB.SQL.Fragment, only: [table: 1]
+
     def run(adapter_meta, schema_meta, header, rows, on_conflict, returning, placeholders, opts) do
       with :ok <- assert_supported!(schema_meta, rows, on_conflict, returning, placeholders, opts),
            conn <- ecto_connection(adapter_meta),
@@ -130,7 +132,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     end
 
     defp clear_temp_table(temp_table) do
-      ["DELETE FROM ", QuackDB.Type.quote_identifier(temp_table)]
+      ["DELETE FROM ", table(temp_table)]
     end
 
     defp column_type!(columns, column) do
