@@ -228,10 +228,13 @@ defmodule QuackDB.Binary do
     arch = :erlang.system_info(:system_architecture) |> List.to_string()
 
     cond do
-      os == {:unix, :darwin} and arch in ["aarch64-apple-darwin", "arm64-apple-darwin"] ->
+      os == {:unix, :darwin} and String.starts_with?(arch, "aarch64-apple-darwin") ->
         {:ok, "osx-arm64"}
 
-      os == {:unix, :darwin} and arch == "x86_64-apple-darwin" ->
+      os == {:unix, :darwin} and String.starts_with?(arch, "arm64-apple-darwin") ->
+        {:ok, "osx-arm64"}
+
+      os == {:unix, :darwin} and String.starts_with?(arch, "x86_64-apple-darwin") ->
         {:ok, "osx-amd64"}
 
       match?({:unix, _}, os) and String.starts_with?(arch, "x86_64") ->
