@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.10 - 2026-06-14
+
+### Fixed
+
+- Fixed DuckDB binary target detection for Nix-style macOS architecture triples such as `aarch64-apple-darwin25.3.0`.
+
 ## 0.5.9 - 2026-06-14
 
 ### Added

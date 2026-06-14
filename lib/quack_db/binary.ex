@@ -227,6 +227,11 @@ defmodule QuackDB.Binary do
     os = :os.type()
     arch = :erlang.system_info(:system_architecture) |> List.to_string()
 
+    target_for_system(os, arch)
+  end
+
+  @doc false
+  def target_for_system(os, arch) do
     cond do
       os == {:unix, :darwin} and String.starts_with?(arch, "aarch64-apple-darwin") ->
         {:ok, "osx-arm64"}

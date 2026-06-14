@@ -10,6 +10,17 @@ defmodule QuackDB.BinaryTest do
     assert {"1.5.3", "osx-arm64"} in QuackDB.Binary.known_targets()
   end
 
+  test "detects Nix-style macOS architecture triples" do
+    assert QuackDB.Binary.target_for_system({:unix, :darwin}, "aarch64-apple-darwin25.3.0") ==
+             {:ok, "osx-arm64"}
+
+    assert QuackDB.Binary.target_for_system({:unix, :darwin}, "arm64-apple-darwin25.3.0") ==
+             {:ok, "osx-arm64"}
+
+    assert QuackDB.Binary.target_for_system({:unix, :darwin}, "x86_64-apple-darwin25.3.0") ==
+             {:ok, "osx-amd64"}
+  end
+
   test "respects explicit path option" do
     path = System.find_executable("duckdb")
 
