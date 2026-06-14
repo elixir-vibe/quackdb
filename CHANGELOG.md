@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added reusable `SELECT`, `UNION`, and projection alias SQL fragments.
+
 ## 0.5.11 - 2026-06-14
 
 ### Added
