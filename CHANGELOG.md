@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.5.6 - 2026-06-14
+
+### Changed
+
+- Optimized Ecto native append insert paths by keeping temporary append staging column-oriented when possible.
+- Avoided duplicate column append encoding when computing row counts for batched native appends.
+
 ## 0.5.5 - 2026-06-13
 
 ### Fixed
