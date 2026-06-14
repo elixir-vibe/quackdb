@@ -320,12 +320,13 @@ defmodule QuackDB.DBConnection do
   end
 
   defp append_batches(rows, options) do
-    batch_size = Keyword.get(options, :batch_size, length(rows))
+    row_count = length(rows)
+    batch_size = Keyword.get(options, :batch_size, row_count)
 
-    if is_integer(batch_size) and batch_size >= 1 do
-      {:ok, Enum.chunk_every(rows, batch_size)}
-    else
-      invalid_batch_size()
+    cond do
+      not (is_integer(batch_size) and batch_size >= 1) -> invalid_batch_size()
+      batch_size >= row_count -> {:ok, [rows]}
+      true -> {:ok, Enum.chunk_every(rows, batch_size)}
     end
   end
 
@@ -368,10 +369,57 @@ defmodule QuackDB.DBConnection do
     end
   end
 
-  defp column_row_count(columns, options) do
-    case DataChunk.from_columns(columns, options) do
-      {:ok, chunk} -> {:ok, chunk.row_count}
-      {:error, _error} = error -> error
+  defp column_row_count(columns, _options) do
+    columns
+    |> Enum.map(fn
+      {_name, values} when is_list(values) ->
+        {:ok, length(values)}
+
+      {name, values} ->
+        {:error,
+         Error.new(
+           :invalid_append_column,
+           "column #{inspect(name)} values must be a list, got #{inspect(values)}",
+           source: :client
+         )}
+
+      value ->
+        {:error,
+         Error.new(:invalid_append_column, "invalid append column values #{inspect(value)}",
+           source: :client
+         )}
+    end)
+    |> collect_column_counts()
+  end
+
+  defp collect_column_counts(counts) do
+    Enum.reduce_while(counts, {:ok, []}, fn
+      {:ok, count}, {:ok, counts} -> {:cont, {:ok, [count | counts]}}
+      {:error, _error} = error, {:ok, _counts} -> {:halt, error}
+    end)
+    |> case do
+      {:ok, []} ->
+        {:error,
+         Error.new(
+           :missing_append_columns,
+           "cannot infer append row count from an empty column set", source: :client)}
+
+      {:ok, counts} ->
+        case Enum.uniq(counts) do
+          [row_count] ->
+            {:ok, row_count}
+
+          counts ->
+            {:error,
+             Error.new(
+               :invalid_vector_size,
+               "append columns have mismatched row counts #{inspect(counts)}",
+               source: :client
+             )}
+        end
+
+      {:error, _error} = error ->
+        error
     end
   end
 
@@ -385,10 +433,15 @@ defmodule QuackDB.DBConnection do
   defp append_column_batches(columns, row_count, options) do
     batch_size = Keyword.get(options, :batch_size, row_count)
 
-    if is_integer(batch_size) and batch_size >= 1 do
-      {:ok, columns |> Enum.map(&chunk_column(&1, batch_size)) |> transpose_column_batches()}
-    else
-      invalid_batch_size()
+    cond do
+      not (is_integer(batch_size) and batch_size >= 1) ->
+        invalid_batch_size()
+
+      batch_size >= row_count ->
+        {:ok, [columns]}
+
+      true ->
+        {:ok, columns |> Enum.map(&chunk_column(&1, batch_size)) |> transpose_column_batches()}
     end
   end
 
