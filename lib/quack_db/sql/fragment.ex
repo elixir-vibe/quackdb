@@ -141,6 +141,31 @@ defmodule QuackDB.SQL.Fragment do
   def where(nil), do: []
   def where(predicate), do: [" WHERE ", predicate]
 
+  @doc "Renders `expression AS alias`."
+  @spec as(iodata(), column()) :: iodata()
+  def as(expression, alias_name), do: [expression, " AS ", column(alias_name)]
+
+  @doc "Builds a small `SELECT` query fragment."
+  @spec select([iodata()], keyword()) :: iodata()
+  def select(projections, options \\ []) when is_list(projections) and is_list(options) do
+    [
+      "SELECT ",
+      distinct(Keyword.get(options, :distinct, false)),
+      Enum.intersperse(projections, ", "),
+      from(Keyword.get(options, :from)),
+      where(Keyword.get(options, :where))
+    ]
+  end
+
+  @doc "Combines queries with `UNION` or `UNION ALL`, with optional ordering."
+  @spec union([iodata()], keyword()) :: iodata()
+  def union(queries, options \\ []) when is_list(queries) and queries != [] do
+    all? = Keyword.get(options, :all, false)
+    operator = if all?, do: " UNION ALL ", else: " UNION "
+
+    [Enum.intersperse(queries, operator), order_by(Keyword.get(options, :order_by, []))]
+  end
+
   @doc "Renders a simple joined table clause."
   @spec join(:inner | :left, table(), keyword()) :: iodata()
   def join(kind, joined_table, options) when kind in [:inner, :left] and is_list(options) do
@@ -172,6 +197,12 @@ defmodule QuackDB.SQL.Fragment do
   defp nulls_order(other) do
     raise ArgumentError, "expected :nulls to be :first or :last, got: #{inspect(other)}"
   end
+
+  defp distinct(true), do: "DISTINCT "
+  defp distinct(false), do: []
+
+  defp from(nil), do: []
+  defp from(source), do: [" FROM ", table(source)]
 
   defp join_kind(:inner), do: " INNER"
   defp join_kind(:left), do: " LEFT"

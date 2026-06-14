@@ -52,6 +52,28 @@ defmodule QuackDB.SQL.FragmentTest do
              ~s|row_number() OVER (PARTITION BY "content_hash" ORDER BY "file_id", "line" ASC, "end_line" ASC NULLS LAST) AS "stage_row"|
   end
 
+  test "builds select and union fragments" do
+    left =
+      Fragment.select([:term_id, :fragment_id] |> Enum.map(&Fragment.column/1),
+        from: "fragment_terms",
+        distinct: true
+      )
+
+    right =
+      Fragment.select(
+        [
+          Fragment.as(["unnest(", Fragment.column(:terms), ")"], :term_id),
+          Fragment.as(Fragment.column(:id), :fragment_id)
+        ],
+        from: "fragments",
+        distinct: true
+      )
+
+    assert Fragment.union([left, right], order_by: [:term_id, :fragment_id])
+           |> IO.iodata_to_binary() ==
+             ~s|SELECT DISTINCT "term_id", "fragment_id" FROM "fragment_terms" UNION SELECT DISTINCT unnest("terms") AS "term_id", "id" AS "fragment_id" FROM "fragments" ORDER BY "term_id", "fragment_id"|
+  end
+
   test "builds where and join fragments" do
     assert Fragment.where(~s|"id" IS NOT NULL|) |> IO.iodata_to_binary() ==
              ~s| WHERE "id" IS NOT NULL|
