@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.5.8 - 2026-06-14
+
+### Added
+
+- Added `QuackDB.DML.insert_into_select/5` for reusable `INSERT INTO ... SELECT ...` statement generation with `ON CONFLICT DO NOTHING` and `RETURNING` support.
+
+### Changed
+
+- Reused the DML builder for Ecto append temporary-table insert statements instead of hand-rolled adapter SQL.
+
 ## 0.5.7 - 2026-06-14
 
 ### Changed
