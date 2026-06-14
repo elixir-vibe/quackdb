@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.7 - 2026-06-14
+
+### Changed
+
+- Optimized column-oriented native append encoding by avoiding repeated column-value lookup scans.
+
 ## 0.5.6 - 2026-06-14
 
 ### Changed
