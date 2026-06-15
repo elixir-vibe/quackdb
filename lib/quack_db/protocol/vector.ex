@@ -65,9 +65,7 @@ defmodule QuackDB.Protocol.Vector do
     physical_type = LogicalType.physical_type(type)
 
     if LogicalType.fixed_size?(physical_type) do
-      blob =
-        values |> Enum.map(&encode_fixed_value(type, physical_type, &1)) |> IO.iodata_to_binary()
-
+      blob = encode_fixed_blob(type, physical_type, values)
       expected_size = LogicalType.fixed_size(physical_type) * row_count
 
       if byte_size(blob) == expected_size do
@@ -82,6 +80,31 @@ defmodule QuackDB.Protocol.Vector do
     else
       encode_variable_values(type, values, physical_type, row_count)
     end
+  end
+
+  defp encode_fixed_blob(%LogicalType{name: name}, :int64, values)
+       when name not in [
+              :decimal,
+              :time,
+              :time_ns,
+              :time_tz,
+              :timestamp,
+              :timestamp_ms,
+              :timestamp_ns,
+              :timestamp_sec,
+              :timestamp_tz
+            ] do
+    if Enum.any?(values, &is_nil/1) do
+      values
+      |> Enum.map(&encode_fixed_value(%LogicalType{name: name}, :int64, &1))
+      |> IO.iodata_to_binary()
+    else
+      for value <- values, into: <<>>, do: <<value::little-signed-64>>
+    end
+  end
+
+  defp encode_fixed_blob(type, physical_type, values) do
+    values |> Enum.map(&encode_fixed_value(type, physical_type, &1)) |> IO.iodata_to_binary()
   end
 
   defp encode_variable_values(type, values, :varchar, row_count) do

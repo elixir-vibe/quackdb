@@ -6,6 +6,10 @@
 
 - Added reusable `SELECT`, `UNION`, and projection alias SQL fragments.
 
+### Changed
+
+- Optimized native append encoding for ordinary signed 64-bit integer vectors, including large `BIGINT[]` child vectors.
+
 ## 0.5.11 - 2026-06-14
 
 ### Added
