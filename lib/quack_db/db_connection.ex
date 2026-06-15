@@ -402,7 +402,9 @@ defmodule QuackDB.DBConnection do
         {:error,
          Error.new(
            :missing_append_columns,
-           "cannot infer append row count from an empty column set", source: :client)}
+           "cannot infer append row count from an empty column set",
+           source: :client
+         )}
 
       {:ok, counts} ->
         case Enum.uniq(counts) do
