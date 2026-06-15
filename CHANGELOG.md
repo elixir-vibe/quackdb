@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added a synthetic wide-append benchmark for Exograph-style fragment staging payloads.
+
 ## 0.5.13 - 2026-06-15
 
 ### Added
