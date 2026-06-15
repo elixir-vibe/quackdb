@@ -53,6 +53,9 @@ defmodule QuackDB.SQL.FragmentTest do
   end
 
   test "builds select and union fragments" do
+    assert Fragment.select([], from: "events") |> IO.iodata_to_binary() ==
+             ~s|SELECT * FROM "events"|
+
     left =
       Fragment.select([:term_id, :fragment_id] |> Enum.map(&Fragment.column/1),
         from: "fragment_terms",

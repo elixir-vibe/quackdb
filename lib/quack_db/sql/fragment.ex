@@ -151,7 +151,7 @@ defmodule QuackDB.SQL.Fragment do
     [
       "SELECT ",
       distinct(Keyword.get(options, :distinct, false)),
-      Enum.intersperse(projections, ", "),
+      projection_list(projections),
       from(Keyword.get(options, :from)),
       where(Keyword.get(options, :where))
     ]
@@ -200,6 +200,9 @@ defmodule QuackDB.SQL.Fragment do
 
   defp distinct(true), do: "DISTINCT "
   defp distinct(false), do: []
+
+  defp projection_list([]), do: "*"
+  defp projection_list(projections), do: Enum.intersperse(projections, ", ")
 
   defp from(nil), do: []
   defp from(source), do: [" FROM ", table(source)]
