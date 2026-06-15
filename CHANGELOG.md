@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- Added query and fetch telemetry phase metrics for encode, transport, decode, normalize, request bytes, and response bytes.
+
 ## 0.5.12 - 2026-06-15
 
 ### Added

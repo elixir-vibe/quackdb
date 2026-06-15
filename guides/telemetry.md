@@ -51,9 +51,17 @@ Query stop metadata includes:
 %{
   command: :select,
   rows: 42,
-  result: :ok
+  result: :ok,
+  encode_duration: 120_000,
+  transport_duration: 8_000_000,
+  decode_duration: 300_000,
+  normalize_duration: 1_000_000,
+  request_bytes: 240,
+  response_bytes: 12_000_000
 }
 ```
+
+Duration values use Erlang native time units. Query `normalize_duration` covers response normalization, remaining fetches for non-streamed queries, and row materialization.
 
 Append start metadata includes:
 
@@ -93,7 +101,13 @@ Fetch stop metadata includes:
 ```elixir
 %{
   chunks: 3,
-  result: :ok
+  result: :ok,
+  encode_duration: 40_000,
+  transport_duration: 2_000_000,
+  decode_duration: 300_000,
+  normalize_duration: 50_000,
+  request_bytes: 80,
+  response_bytes: 12_000_000
 }
 ```
 

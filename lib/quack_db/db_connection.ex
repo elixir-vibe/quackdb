@@ -557,6 +557,19 @@ defmodule QuackDB.DBConnection do
     }
   end
 
+  defp query_metrics(encode_duration, request) do
+    %{
+      encode_duration: encode_duration,
+      request_bytes: IO.iodata_length(request)
+    }
+  end
+
+  defp put_transport_metrics(metrics, transport_duration, response) do
+    metrics
+    |> Map.put(:transport_duration, transport_duration)
+    |> Map.put(:response_bytes, byte_size(response))
+  end
+
   defp merge_append_metrics(left, right) do
     Map.merge(left, right, fn _key, left_value, right_value -> left_value + right_value end)
   end
@@ -617,24 +630,74 @@ defmodule QuackDB.DBConnection do
       :query,
       query_metadata(query, params, options, state),
       fn ->
-        request =
-          %PrepareRequest{sql_query: statement}
-          |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
+        {encode_duration, request} =
+          timed(fn ->
+            %PrepareRequest{sql_query: statement}
+            |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
+          end)
 
-        result =
-          with {:ok, response} <- state.transport.(state.uri, request, options),
-               {:ok, decoded} <- Codec.decode(response),
-               {:ok, query, result} <- normalize_query_response(decoded, query, state, options) do
-            {:ok, query, result, %{state | status: successful_status(state.status)}}
-          else
-            {:error, error} ->
-              {:error, annotate_error(error, query, state),
-               %{state | status: failed_status(state.status)}}
-          end
+        metrics = query_metrics(encode_duration, request)
 
-        {result, result_stop_metadata(result)}
+        {result, metrics} =
+          execute_query_request(query, request, options, state, metrics)
+
+        {result, query_stop_metadata(result, metrics)}
       end
     )
+  end
+
+  defp execute_query_request(query, request, options, state, metrics) do
+    {transport_duration, transport_result} =
+      timed(fn -> state.transport.(state.uri, request, options) end)
+
+    case transport_result do
+      {:ok, response} ->
+        metrics = put_transport_metrics(metrics, transport_duration, response)
+        decode_query_response(query, response, options, state, metrics)
+
+      {:error, error} ->
+        result =
+          {:error, annotate_error(error, query, state),
+           %{state | status: failed_status(state.status)}}
+
+        {result, Map.put(metrics, :transport_duration, transport_duration)}
+    end
+  end
+
+  defp decode_query_response(query, response, options, state, metrics) do
+    {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
+    metrics = Map.put(metrics, :decode_duration, decode_duration)
+
+    case decode_result do
+      {:ok, decoded} ->
+        normalize_query_result(query, decoded, options, state, metrics)
+
+      {:error, error} ->
+        result =
+          {:error, annotate_error(error, query, state),
+           %{state | status: failed_status(state.status)}}
+
+        {result, metrics}
+    end
+  end
+
+  defp normalize_query_result(query, decoded, options, state, metrics) do
+    {normalize_duration, normalize_result} =
+      timed(fn -> normalize_query_response(decoded, query, state, options) end)
+
+    metrics = Map.put(metrics, :normalize_duration, normalize_duration)
+
+    case normalize_result do
+      {:ok, query, result} ->
+        {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
+
+      {:error, error} ->
+        result =
+          {:error, annotate_error(error, query, state),
+           %{state | status: failed_status(state.status)}}
+
+        {result, metrics}
+    end
   end
 
   defp normalize_query_response(
@@ -696,18 +759,49 @@ defmodule QuackDB.DBConnection do
       :fetch,
       fetch_metadata(result_uuid, options, state),
       fn ->
-        request =
-          Codec.encode(%FetchRequest{uuid: result_uuid}, connection_id: state.connection_id)
+        {encode_duration, request} =
+          timed(fn ->
+            Codec.encode(%FetchRequest{uuid: result_uuid}, connection_id: state.connection_id)
+          end)
 
-        result =
-          with {:ok, response} <- state.transport.(state.uri, request, options),
-               {:ok, decoded} <- Codec.decode(response) do
-            normalize_fetch_response(decoded, result_uuid, state, options, chunks)
-          end
+        metrics = query_metrics(encode_duration, request)
 
-        {result, fetch_stop_metadata(result)}
+        {result, metrics} =
+          execute_fetch_request(result_uuid, request, options, state, chunks, metrics)
+
+        {result, fetch_stop_metadata(result, metrics)}
       end
     )
+  end
+
+  defp execute_fetch_request(result_uuid, request, options, state, chunks, metrics) do
+    {transport_duration, transport_result} =
+      timed(fn -> state.transport.(state.uri, request, options) end)
+
+    case transport_result do
+      {:ok, response} ->
+        metrics = put_transport_metrics(metrics, transport_duration, response)
+        decode_fetch_response(result_uuid, response, options, state, chunks, metrics)
+
+      {:error, error} ->
+        {{:error, error}, Map.put(metrics, :transport_duration, transport_duration)}
+    end
+  end
+
+  defp decode_fetch_response(result_uuid, response, options, state, chunks, metrics) do
+    {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
+    metrics = Map.put(metrics, :decode_duration, decode_duration)
+
+    case decode_result do
+      {:ok, decoded} ->
+        {normalize_duration, result} =
+          timed(fn -> normalize_fetch_response(decoded, result_uuid, state, options, chunks) end)
+
+        {result, Map.put(metrics, :normalize_duration, normalize_duration)}
+
+      {:error, error} ->
+        {{:error, error}, metrics}
+    end
   end
 
   defp normalize_fetch_response(
@@ -1073,6 +1167,12 @@ defmodule QuackDB.DBConnection do
     %{error: error, result: :error}
   end
 
+  defp query_stop_metadata(result, metrics) do
+    result
+    |> result_stop_metadata()
+    |> Map.merge(metrics)
+  end
+
   defp append_stop_metadata(result, metrics, duration) do
     result
     |> result_stop_metadata()
@@ -1093,12 +1193,14 @@ defmodule QuackDB.DBConnection do
 
   defp maybe_put_rows_per_second(metadata, _result, _duration), do: metadata
 
-  defp fetch_stop_metadata({:ok, chunks}) do
+  defp fetch_stop_metadata({:ok, chunks}, metrics) do
     %{chunks: length(chunks), result: :ok}
+    |> Map.merge(metrics)
   end
 
-  defp fetch_stop_metadata({:error, %Error{} = error}) do
+  defp fetch_stop_metadata({:error, %Error{} = error}, metrics) do
     %{error: error, result: :error}
+    |> Map.merge(metrics)
   end
 
   defp command(statement) do
