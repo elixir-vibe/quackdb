@@ -102,7 +102,7 @@ children =
   )
 ```
 
-`duckdb: :managed` downloads DuckDB's official CLI binary on first use, verifies known checksums for QuackDB's pinned DuckDB version, and caches it. QuackDB never downloads DuckDB during dependency compilation. `QuackDB.Server` installs and loads the `quack` extension by default before serving; set `install_quack?: false` only when the extension is already installed and startup must not attempt installation. Use `QUACKDB_BINARY_PATH`, `QUACKDB_BINARY_CACHE_DIR`, `duckdb: "/path/to/duckdb"`, or run the `quackdb.install` Mix task when you want explicit control. See the [managed DuckDB guide](guides/managed-duckdb.md).
+`duckdb: :managed` downloads DuckDB's official CLI binary on first use, verifies known checksums for QuackDB's pinned DuckDB version, and caches it. QuackDB never downloads DuckDB during dependency compilation. `QuackDB.Server` runs DuckDB's idempotent `INSTALL quack` and then `LOAD quack` by default before serving. Set `install_quack?: false` only for locked-down environments that preinstall extensions and forbid startup-time extension installation. Use `QUACKDB_BINARY_PATH`, `QUACKDB_BINARY_CACHE_DIR`, `duckdb: "/path/to/duckdb"`, or run the `quackdb.install` Mix task when you want explicit control. See the [managed DuckDB guide](guides/managed-duckdb.md).
 
 For rebuildable local artifacts, attach the persistent database with DuckDB's no-WAL recovery mode:
 

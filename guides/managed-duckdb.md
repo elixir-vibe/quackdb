@@ -12,7 +12,7 @@ children =
   )
 ```
 
-`QuackDB.Server` installs and loads the `quack` extension by default before serving. Set `install_quack?: false` only when the extension is already installed and startup must not attempt installation.
+`QuackDB.Server` runs DuckDB's idempotent `INSTALL quack` and then `LOAD quack` by default before serving. Set `install_quack?: false` only for locked-down environments that preinstall extensions and forbid startup-time extension installation.
 
 Omit `duckdb: :managed` to use `duckdb` from `PATH`, or pass a path explicitly:
 

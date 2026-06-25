@@ -119,7 +119,7 @@ defmodule QuackDB.ServerTest do
            } = QuackDB.Server.info(server)
   end
 
-  test "install_quack? false omits INSTALL statement" do
+  test "install_quack? false skips idempotent INSTALL statement" do
     server =
       start_supervised!(
         {QuackDB.Server,
