@@ -21,9 +21,10 @@ defmodule QuackDB.Server do
   `:token`, then injects the same token and URI into the server and client specs.
 
   By default the server runs DuckDB directly under MuonTrap with `-interactive`
-  so the process stays alive after `quack_serve/2` starts:
+  so the process stays alive after `quack_serve/2` starts. It installs and loads
+  the `quack` extension before serving, unless `load_quack?: false` is set:
 
-      duckdb :memory: -csv -noheader -interactive -init /dev/null -cmd "LOAD quack; ..."
+      duckdb :memory: -csv -noheader -interactive -init /dev/null -cmd "INSTALL quack; LOAD quack; ..."
 
   Startup waits until the Quack endpoint is ready. For the default DuckDB CLI
   command, readiness is detected from the `quack_serve/2` result row printed to
@@ -64,6 +65,7 @@ defmodule QuackDB.Server do
           | {:uri, String.t()}
           | {:token, String.t()}
           | {:load_quack?, boolean()}
+          | {:install_quack?, boolean()}
           | {:boot_sql, String.t()}
           | {:settings, keyword(QuackDB.SQL.parameter())}
           | {:global_settings, keyword(QuackDB.SQL.parameter())}
@@ -351,12 +353,25 @@ defmodule QuackDB.Server do
   defp boot_sql(endpoint, token, options) do
     [
       attach_database(options),
-      if(Keyword.get(options, :load_quack?, true), do: [QuackDB.SQL.load(:quack), " "], else: []),
+      quack_extension_sql(options),
       server_settings(options),
       server_global_settings(options),
       QuackDB.SQL.call(:quack_serve, [endpoint], token: token)
     ]
     |> IO.iodata_to_binary()
+  end
+
+  defp quack_extension_sql(options) do
+    if Keyword.get(options, :load_quack?, true) do
+      install =
+        if Keyword.get(options, :install_quack?, true),
+          do: [QuackDB.SQL.install(:quack), " "],
+          else: []
+
+      [install, QuackDB.SQL.load(:quack), " "]
+    else
+      []
+    end
   end
 
   defp attach_database(options) do

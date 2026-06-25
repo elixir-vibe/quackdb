@@ -62,7 +62,7 @@ defmodule QuackDB.ServerTest do
     assert QuackDB.Server.uri(server) == "http://127.0.0.1:9501"
 
     assert %{boot_sql: boot_sql} = QuackDB.Server.info(server)
-    assert boot_sql =~ "LOAD quack; SET threads = "
+    assert boot_sql =~ "INSTALL quack; LOAD quack; SET threads = "
     assert boot_sql =~ " SET GLOBAL quack_fetch_batch_chunks = 4; "
     assert boot_sql =~ "CALL quack_serve('quack:127.0.0.1:9501', token = 'secret');"
   end
@@ -94,7 +94,7 @@ defmodule QuackDB.ServerTest do
 
     assert %{
              boot_sql:
-               "LOAD quack; SET threads = 2; SET GLOBAL quack_fetch_batch_chunks = 1; CALL quack_serve('quack:localhost', token = 'secret');"
+               "INSTALL quack; LOAD quack; SET threads = 2; SET GLOBAL quack_fetch_batch_chunks = 1; CALL quack_serve('quack:localhost', token = 'secret');"
            } = QuackDB.Server.info(server)
   end
 
@@ -115,11 +115,27 @@ defmodule QuackDB.ServerTest do
     assert %{
              database: "/tmp/rebuildable.duckdb",
              boot_sql:
-               "ATTACH '/tmp/rebuildable.duckdb' AS \"index\" (RECOVERY_MODE no_wal_writes); USE \"index\"; LOAD quack; CALL quack_serve('quack:localhost', token = 'secret');"
+               "ATTACH '/tmp/rebuildable.duckdb' AS \"index\" (RECOVERY_MODE no_wal_writes); USE \"index\"; INSTALL quack; LOAD quack; CALL quack_serve('quack:localhost', token = 'secret');"
            } = QuackDB.Server.info(server)
   end
 
-  test "load_quack? false omits LOAD statement" do
+  test "install_quack? false omits INSTALL statement" do
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         token: "secret",
+         install_quack?: false,
+         settings: [],
+         global_settings: [],
+         wait: false,
+         daemon_command: {"tail", ["-f", "/dev/null"]}}
+      )
+
+    assert %{boot_sql: "LOAD quack; CALL quack_serve('quack:localhost', token = 'secret');"} =
+             QuackDB.Server.info(server)
+  end
+
+  test "load_quack? false omits extension statements" do
     server =
       start_supervised!(
         {QuackDB.Server,

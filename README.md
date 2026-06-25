@@ -102,7 +102,7 @@ children =
   )
 ```
 
-`duckdb: :managed` downloads DuckDB's official CLI binary on first use, verifies known checksums for QuackDB's pinned DuckDB version, and caches it. QuackDB never downloads DuckDB during dependency compilation. Use `QUACKDB_BINARY_PATH`, `QUACKDB_BINARY_CACHE_DIR`, `duckdb: "/path/to/duckdb"`, or run the `quackdb.install` Mix task when you want explicit control. See the [managed DuckDB guide](guides/managed-duckdb.md).
+`duckdb: :managed` downloads DuckDB's official CLI binary on first use, verifies known checksums for QuackDB's pinned DuckDB version, and caches it. QuackDB never downloads DuckDB during dependency compilation. `QuackDB.Server` installs and loads the `quack` extension by default before serving; set `install_quack?: false` only when the extension is already installed and startup must not attempt installation. Use `QUACKDB_BINARY_PATH`, `QUACKDB_BINARY_CACHE_DIR`, `duckdb: "/path/to/duckdb"`, or run the `quackdb.install` Mix task when you want explicit control. See the [managed DuckDB guide](guides/managed-duckdb.md).
 
 For rebuildable local artifacts, attach the persistent database with DuckDB's no-WAL recovery mode:
 
@@ -125,7 +125,7 @@ You can also start DuckDB manually:
 
 ```sh
 duckdb -csv -noheader -interactive -init /dev/null \
-  -cmd "LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
+  -cmd "INSTALL quack; LOAD quack; CALL quack_serve('quack:localhost', token='super_secret');"
 ```
 
 `quack:localhost` often binds on IPv6 localhost, so examples use `http://[::1]:9494`. The supervised server detects readiness from the `quack_serve` result row printed by the DuckDB CLI and falls back to HTTP probes for custom daemon commands or output handling.

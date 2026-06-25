@@ -12,6 +12,8 @@ children =
   )
 ```
 
+`QuackDB.Server` installs and loads the `quack` extension by default before serving. Set `install_quack?: false` only when the extension is already installed and startup must not attempt installation.
+
 Omit `duckdb: :managed` to use `duckdb` from `PATH`, or pass a path explicitly:
 
 ```elixir
