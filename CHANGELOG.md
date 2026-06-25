@@ -6,6 +6,12 @@
 
 - Added a synthetic wide-append benchmark for Exograph-style fragment staging payloads.
 
+## 0.5.14 - 2026-06-25
+
+### Changed
+
+- `QuackDB.Server` now runs DuckDB's idempotent `INSTALL quack` before `LOAD quack` by default.
+
 ## 0.5.13 - 2026-06-15
 
 ### Added
