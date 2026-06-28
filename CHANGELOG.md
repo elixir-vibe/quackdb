@@ -6,6 +6,12 @@
 
 - Added a synthetic wide-append benchmark for Exograph-style fragment staging payloads.
 
+## 0.5.15 - 2026-06-28
+
+### Changed
+
+- `QuackDB.Server` now writes default boot SQL to an Elixir-managed temporary init file so generated local server tokens are not embedded in process arguments.
+
 ## 0.5.14 - 2026-06-25
 
 ### Changed

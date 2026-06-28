@@ -12,7 +12,7 @@ children =
   )
 ```
 
-`QuackDB.Server` runs DuckDB's idempotent `INSTALL quack` and then `LOAD quack` by default before serving. Set `install_quack?: false` only for locked-down environments that preinstall extensions and forbid startup-time extension installation.
+`QuackDB.Server` runs DuckDB's idempotent `INSTALL quack` and then `LOAD quack` by default before serving. It writes generated boot SQL to an Elixir-managed temporary init file by default, so generated local server tokens are not embedded in process arguments. Set `install_quack?: false` only for locked-down environments that preinstall extensions and forbid startup-time extension installation.
 
 Omit `duckdb: :managed` to use `duckdb` from `PATH`, or pass a path explicitly:
 

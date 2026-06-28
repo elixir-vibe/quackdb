@@ -6,13 +6,18 @@ defmodule QuackDB.Integration.ServerTest do
   test "starts a local DuckDB Quack server under supervision" do
     token = "quackdb_server_test_#{System.unique_integer([:positive])}"
     port = 19_000 + System.unique_integer([:positive, :monotonic])
-    endpoint = "quack:localhost:#{port}"
-    uri = "http://[::1]:#{port}"
+    endpoint = "quack:127.0.0.1:#{port}"
+    uri = "http://127.0.0.1:#{port}"
 
     server =
       start_supervised!(
         {QuackDB.Server,
-         token: token, endpoint: endpoint, uri: uri, wait: true, wait_timeout: 10_000}
+         duckdb: test_duckdb(),
+         token: token,
+         endpoint: endpoint,
+         uri: uri,
+         wait: true,
+         wait_timeout: 10_000}
       )
 
     connection = start_supervised!({QuackDB, uri: QuackDB.Server.uri(server), token: token})
@@ -28,8 +33,8 @@ defmodule QuackDB.Integration.ServerTest do
     if duckdb do
       token = "quackdb_managed_server_test_#{System.unique_integer([:positive])}"
       port = 20_000 + System.unique_integer([:positive, :monotonic])
-      endpoint = "quack:localhost:#{port}"
-      uri = "http://[::1]:#{port}"
+      endpoint = "quack:127.0.0.1:#{port}"
+      uri = "http://127.0.0.1:#{port}"
 
       server =
         start_supervised!(
@@ -47,6 +52,14 @@ defmodule QuackDB.Integration.ServerTest do
 
       assert {:ok, %QuackDB.Result{rows: [[42]]}} = QuackDB.query(connection, "SELECT 42 AS n")
       assert QuackDB.Server.info(server).duckdb == duckdb
+    end
+  end
+
+  defp test_duckdb do
+    case System.get_env("QUACKDB_TEST_DUCKDB") do
+      "managed" -> :managed
+      path when is_binary(path) and path != "" -> path
+      _other -> "duckdb"
     end
   end
 end

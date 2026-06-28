@@ -151,6 +151,50 @@ defmodule QuackDB.ServerTest do
              QuackDB.Server.info(server)
   end
 
+  test "default daemon command keeps boot SQL token out of arguments" do
+    script = sleep_script!()
+
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         duckdb: System.find_executable("elixir"),
+         database: script,
+         token: "secret-token",
+         wait: false}
+      )
+
+    state = :sys.get_state(server)
+
+    refute Enum.any?(state.daemon_args, &String.contains?(&1, "secret-token"))
+    refute Enum.member?(state.daemon_args, "-cmd")
+    assert Enum.member?(state.daemon_args, "-init")
+    assert is_binary(state.boot_sql_path)
+    assert File.read!(state.boot_sql_path) =~ "token = 'secret-token'"
+
+    stop_supervised!(QuackDB.Server)
+    refute File.exists?(state.boot_sql_path)
+  end
+
+  test "boot_sql_source: :cmd keeps the legacy argument form when explicitly requested" do
+    script = sleep_script!()
+
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         duckdb: System.find_executable("elixir"),
+         database: script,
+         token: "secret-token",
+         wait: false,
+         boot_sql_source: :cmd}
+      )
+
+    state = :sys.get_state(server)
+
+    assert Enum.member?(state.daemon_args, "-cmd")
+    assert Enum.any?(state.daemon_args, &String.contains?(&1, "token = 'secret-token'"))
+    assert is_nil(state.boot_sql_path)
+  end
+
   test "missing DuckDB executable returns a clean start error" do
     Process.flag(:trap_exit, true)
 
@@ -198,5 +242,17 @@ defmodule QuackDB.ServerTest do
 
     assert os_pid == :error or is_integer(os_pid)
     assert %{output_byte_count: _} = QuackDB.Server.statistics(server)
+  end
+
+  defp sleep_script! do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "quackdb-server-test-#{System.unique_integer([:positive])}.exs"
+      )
+
+    File.write!(path, "Process.sleep(:infinity)\n")
+    on_exit(fn -> File.rm(path) end)
+    path
   end
 end

@@ -22,9 +22,9 @@ defmodule QuackDB.Server do
 
   By default the server runs DuckDB directly under MuonTrap with `-interactive`
   so the process stays alive after `quack_serve/2` starts. It installs and loads
-  the `quack` extension before serving, unless `load_quack?: false` is set:
-
-      duckdb :memory: -csv -noheader -interactive -init /dev/null -cmd "INSTALL quack; LOAD quack; ..."
+  the `quack` extension before serving, unless `load_quack?: false` is set. Boot
+  SQL is written to an Elixir-owned temporary init file by default so generated
+  local tokens are not embedded in the operating-system argument vector.
 
   Startup waits until the Quack endpoint is ready. For the default DuckDB CLI
   command, readiness is detected from the `quack_serve/2` result row printed to
@@ -51,6 +51,8 @@ defmodule QuackDB.Server do
     :uri,
     :token,
     :boot_sql,
+    :boot_sql_path,
+    :boot_sql_dir,
     :daemon_command,
     :daemon_args,
     :daemon_options
@@ -67,6 +69,7 @@ defmodule QuackDB.Server do
           | {:load_quack?, boolean()}
           | {:install_quack?, boolean()}
           | {:boot_sql, String.t()}
+          | {:boot_sql_source, :init_file | :cmd}
           | {:settings, keyword(QuackDB.SQL.parameter())}
           | {:global_settings, keyword(QuackDB.SQL.parameter())}
           | {:recovery_mode, :no_wal_writes | String.t()}
@@ -135,20 +138,40 @@ defmodule QuackDB.Server do
 
   @impl true
   def init(options) do
+    Process.flag(:trap_exit, true)
     state = build_state(options)
 
-    with {:ok, daemon} <- start_daemon(state) do
-      state = %{state | daemon: daemon}
+    case start_daemon(state) do
+      {:ok, daemon} ->
+        state = %{state | daemon: daemon}
 
-      if Keyword.get(options, :wait, true) do
-        wait_ready!(
-          state,
-          Keyword.get(options, :wait_timeout, 5_000),
-          Keyword.get(options, :poll_interval, 100)
-        )
-      end
+        try do
+          if Keyword.get(options, :wait, true) do
+            wait_ready!(
+              state,
+              Keyword.get(options, :wait_timeout, 5_000),
+              Keyword.get(options, :poll_interval, 100)
+            )
 
-      {:ok, state}
+            cleanup_boot_sql_file(state)
+          end
+
+          {:ok, state}
+        rescue
+          error in [QuackDB.Error, RuntimeError, ErlangError, ArgumentError, File.Error] ->
+            stop_daemon(daemon)
+            cleanup_boot_sql_file(state)
+            reraise error, __STACKTRACE__
+        catch
+          kind, reason ->
+            stop_daemon(daemon)
+            cleanup_boot_sql_file(state)
+            :erlang.raise(kind, reason, __STACKTRACE__)
+        end
+
+      {:error, reason} ->
+        cleanup_boot_sql_file(state)
+        {:stop, reason}
     end
   end
 
@@ -164,6 +187,7 @@ defmodule QuackDB.Server do
       uri: state.uri,
       token: state.token,
       boot_sql: state.boot_sql,
+      boot_sql_path: state.boot_sql_path,
       os_pid: daemon_os_pid(state.daemon),
       statistics: daemon_statistics(state.daemon)
     }
@@ -177,13 +201,23 @@ defmodule QuackDB.Server do
   @impl true
   def handle_info({:quackdb_server_output, _line}, state), do: {:noreply, state}
 
+  def handle_info({:EXIT, daemon, reason}, %{daemon: daemon} = state) when is_pid(daemon),
+    do: {:stop, reason, state}
+
+  def handle_info({:EXIT, port, :normal}, state) when is_port(port), do: {:noreply, state}
+  def handle_info({:EXIT, pid, :normal}, state) when is_pid(pid), do: {:noreply, state}
+
   @impl true
-  def terminate(_reason, %{daemon: daemon}) when is_pid(daemon) do
-    Process.exit(daemon, :shutdown)
+  def terminate(_reason, %{daemon: daemon} = state) when is_pid(daemon) do
+    stop_daemon(daemon)
+    cleanup_boot_sql_file(state)
     :ok
   end
 
-  def terminate(_reason, _state), do: :ok
+  def terminate(_reason, state) do
+    cleanup_boot_sql_file(state)
+    :ok
+  end
 
   defp build_state(options) do
     duckdb = duckdb_path(options)
@@ -196,10 +230,7 @@ defmodule QuackDB.Server do
 
     cli_database = if Keyword.has_key?(options, :recovery_mode), do: ":memory:", else: database
 
-    {command, args} =
-      Keyword.get_lazy(options, :daemon_command, fn ->
-        daemon_command(duckdb, cli_database, boot_sql)
-      end)
+    {command, args, boot_sql_file} = daemon_command(options, duckdb, cli_database, boot_sql)
 
     %__MODULE__{
       duckdb: duckdb,
@@ -208,6 +239,8 @@ defmodule QuackDB.Server do
       uri: uri,
       token: token,
       boot_sql: boot_sql,
+      boot_sql_path: boot_sql_file && boot_sql_file.path,
+      boot_sql_dir: boot_sql_file && boot_sql_file.dir,
       daemon_command: command,
       daemon_args: args,
       daemon_options: daemon_options
@@ -228,9 +261,36 @@ defmodule QuackDB.Server do
     |> Keyword.put_new(:log_prefix, "[quackdb-server] ")
   end
 
-  defp daemon_command(duckdb, database, boot_sql) do
+  defp daemon_command(options, duckdb, database, boot_sql) do
+    case Keyword.fetch(options, :daemon_command) do
+      {:ok, {command, args}} ->
+        {command, args, nil}
+
+      :error ->
+        default_daemon_command(
+          duckdb,
+          database,
+          boot_sql,
+          Keyword.get(options, :boot_sql_source, :init_file)
+        )
+    end
+  end
+
+  defp default_daemon_command(duckdb, database, boot_sql, :init_file) do
+    boot_sql_file = write_boot_sql_file!(boot_sql)
+
+    {duckdb, [database, "-csv", "-noheader", "-interactive", "-init", boot_sql_file.path],
+     boot_sql_file}
+  end
+
+  defp default_daemon_command(duckdb, database, boot_sql, :cmd) do
     {duckdb,
-     [database, "-csv", "-noheader", "-interactive", "-init", "/dev/null", "-cmd", boot_sql]}
+     [database, "-csv", "-noheader", "-interactive", "-init", "/dev/null", "-cmd", boot_sql], nil}
+  end
+
+  defp default_daemon_command(_duckdb, _database, _boot_sql, other) do
+    raise ArgumentError,
+          "expected :boot_sql_source to be :init_file or :cmd, got: #{inspect(other)}"
   end
 
   defp start_daemon(state) do
@@ -240,6 +300,38 @@ defmodule QuackDB.Server do
       daemon_options_with_ready_signal(state.daemon_options, self())
     )
   end
+
+  defp stop_daemon(pid) when is_pid(pid), do: Process.exit(pid, :shutdown)
+
+  defp write_boot_sql_file!(boot_sql) do
+    dir = boot_sql_dir()
+    path = Path.join(dir, "boot.sql")
+
+    File.mkdir!(dir)
+    chmod_best_effort(dir, 0o700)
+    File.write!(path, boot_sql)
+    chmod_best_effort(path, 0o600)
+
+    %{dir: dir, path: path}
+  end
+
+  defp boot_sql_dir do
+    suffix = 16 |> :crypto.strong_rand_bytes() |> Base.url_encode64(padding: false)
+    Path.join(System.tmp_dir!(), "quackdb-boot-#{suffix}")
+  end
+
+  defp chmod_best_effort(path, mode) do
+    _ignored = File.chmod(path, mode)
+    :ok
+  end
+
+  defp cleanup_boot_sql_file(%{boot_sql_path: path, boot_sql_dir: dir}) do
+    if is_binary(path), do: File.rm(path)
+    if is_binary(dir), do: File.rmdir(dir)
+    :ok
+  end
+
+  defp cleanup_boot_sql_file(_state), do: :ok
 
   defp daemon_options_with_ready_signal(options, parent) do
     cond do
@@ -298,7 +390,7 @@ defmodule QuackDB.Server do
   end
 
   defp ready_output?(line, state) when is_binary(line) do
-    String.starts_with?(line, state.endpoint <> ",")
+    String.starts_with?(line, state.endpoint <> ",") or String.contains?(line, state.endpoint)
   end
 
   defp ready_output?(_line, _state), do: false
