@@ -28,6 +28,12 @@ defmodule QuackDB.ListTest do
     assert DuckList.position(~s|"terms"|, "42") |> IO.iodata_to_binary() ==
              ~s|list_position("terms", 42)|
 
+    assert DuckList.append(~s|"terms"|, "42") |> IO.iodata_to_binary() ==
+             ~s|list_append("terms", 42)|
+
+    assert DuckList.prepend("0", ~s|"terms"|) |> IO.iodata_to_binary() ==
+             ~s|list_prepend(0, "terms")|
+
     assert DuckList.contains(~s|"terms"|, "42") |> IO.iodata_to_binary() ==
              ~s|list_contains("terms", 42)|
 

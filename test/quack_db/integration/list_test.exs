@@ -44,6 +44,18 @@ defmodule QuackDB.Integration.ListTest do
              ])
   end
 
+  test "list append and prepend helpers run against DuckDB" do
+    conn = start_connection!()
+
+    assert %{rows: [[[1, 2, 3], [0, 1, 2]]]} =
+             QuackDB.query!(conn, [
+               "SELECT ",
+               DuckList.append("[1, 2]", "3"),
+               ", ",
+               DuckList.prepend("0", "[1, 2]")
+             ])
+  end
+
   test "Ecto list lambda helpers query LIST columns" do
     start_repo!()
     table = TestHelper.unique_table("quackdb_list_lambda_helpers")

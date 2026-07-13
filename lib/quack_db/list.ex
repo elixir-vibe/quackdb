@@ -50,6 +50,18 @@ defmodule QuackDB.List do
     call("list_position", [list_expression, value_expression])
   end
 
+  @doc "Builds `list_append(list, value)`."
+  @spec append(iodata(), iodata()) :: iodata()
+  def append(list_expression, value_expression) do
+    call("list_append", [list_expression, value_expression])
+  end
+
+  @doc "Builds `list_prepend(value, list)`."
+  @spec prepend(iodata(), iodata()) :: iodata()
+  def prepend(value_expression, list_expression) do
+    call("list_prepend", [value_expression, list_expression])
+  end
+
   @doc "Builds `list_contains(list, value)`."
   @spec contains(iodata(), iodata()) :: iodata()
   def contains(list_expression, value_expression) do

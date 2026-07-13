@@ -76,6 +76,20 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       end
     end
 
+    @doc "Builds `list_append(list, value)`."
+    defmacro append(list, value) do
+      quote do
+        fragment("list_append(?, ?)", unquote(list), unquote(value))
+      end
+    end
+
+    @doc "Builds `list_prepend(value, list)`."
+    defmacro prepend(value, list) do
+      quote do
+        fragment("list_prepend(?, ?)", unquote(value), unquote(list))
+      end
+    end
+
     @doc "Builds `list_filter(list, lambda x : ...)`."
     defmacro list_filter(list, lambda) do
       lambda_fragment("list_filter", list, lambda, "list_filter/2", [1, 2])

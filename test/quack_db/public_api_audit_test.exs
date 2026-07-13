@@ -39,6 +39,8 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       assert exported_macro?(QuackDB.Ecto.WindowFrames, :rows_between, 2)
       assert exported_macro?(QuackDB.Ecto.WindowFrames, :range_between, 2)
       assert exported_macro?(QuackDB.Ecto.WindowFrames, :groups_between, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :append, 2)
+      assert exported_macro?(QuackDB.Ecto.List, :prepend, 2)
       assert exported_macro?(QuackDB.Ecto.List, :contains_list, 2)
       assert exported_macro?(QuackDB.Ecto.List, :has_any, 2)
       assert exported_macro?(QuackDB.Ecto.List, :has_all, 2)
