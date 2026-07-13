@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.17 - 2026-07-13
+
+### Added
+
+- Added `append/2` and `prepend/2` helpers to `QuackDB.List` and `QuackDB.Ecto.List`.
+
 ## 0.5.16 - 2026-07-13
 
 ### Added
