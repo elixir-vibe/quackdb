@@ -2,9 +2,21 @@
 
 ## Unreleased
 
+## 0.5.16 - 2026-07-13
+
 ### Added
 
 - Added a synthetic wide-append benchmark for Exograph-style fragment staging payloads.
+- Added Ecto `JSON[]` migration and round-trip support for `{:array, :map}` fields.
+
+### Changed
+
+- DuckDB transaction conflicts are now classified as retriable `:transaction_conflict` errors.
+
+### Fixed
+
+- Fixed Ecto JSON map dumping across SQL and native append insert paths.
+- Fixed managed-binary selection in the session failure integration test.
 
 ## 0.5.15 - 2026-06-28
 
