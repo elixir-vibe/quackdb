@@ -9,9 +9,14 @@ end
 defmodule QuackDB.QuackServerCase do
   @moduledoc false
 
-  def start_connection! do
+  def start_connection!(options \\ []) do
     {uri, token} = server_uri_and_token!()
-    ExUnit.Callbacks.start_supervised!({QuackDB, uri: uri, token: token})
+    {id, options} = Keyword.pop_lazy(options, :id, &make_ref/0)
+
+    child_spec =
+      Supervisor.child_spec({QuackDB, Keyword.merge([uri: uri, token: token], options)}, id: id)
+
+    ExUnit.Callbacks.start_supervised!(child_spec)
   end
 
   def start_repo! do
@@ -55,7 +60,7 @@ defmodule QuackDB.QuackServerCase do
     {uri, token}
   end
 
-  defp test_duckdb do
+  def test_duckdb do
     case System.get_env("QUACKDB_TEST_DUCKDB") do
       nil -> System.find_executable("duckdb") || :managed
       "managed" -> :managed

@@ -34,7 +34,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     def loaders(:binary_id, type), do: [Ecto.UUID, type]
     def loaders(_, type), do: [type]
 
-    def dumpers({:map, _}, type), do: [&Ecto.Type.embedded_dump(type, &1, :json)]
+    def dumpers({:map, _}, type),
+      do: [&Ecto.Type.embedded_dump(type, &1, :json), &json_dump/1]
+
+    def dumpers(:map, type), do: [type, &json_dump/1]
     def dumpers(:binary_id, type), do: [type, Ecto.UUID]
     def dumpers(_, type), do: [type]
 
@@ -107,6 +110,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     defp json_decode(value) when is_binary(value), do: JSON.decode(value)
     defp json_decode(value), do: {:ok, value}
+
+    defp json_dump(value), do: {:ok, {:json, value}}
 
     defp unsupported!(feature, message) do
       raise QuackDB.Error.new(:ecto_feature_not_supported, message,

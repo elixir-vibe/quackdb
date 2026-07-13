@@ -33,6 +33,7 @@ if Code.ensure_loaded?(Ecto.Type) do
     defp base_type!(type) when type in [:time, :time_usec], do: :time
     defp base_type!(type) when type in [:naive_datetime, :naive_datetime_usec], do: :timestamp
     defp base_type!(type) when type in [:utc_datetime, :utc_datetime_usec], do: :timestamp_tz
+    defp base_type!(:map), do: :json
     defp base_type!({:array, type}), do: {:list, base_type!(type)}
 
     defp base_type!(type) do

@@ -40,6 +40,16 @@ defmodule QuackDB.Error do
     }
   end
 
+  @doc false
+  @spec server(String.t()) :: t()
+  def server(message) when is_binary(message) do
+    if transaction_conflict?(message) do
+      new(:transaction_conflict, message, source: :server, retriable?: true)
+    else
+      new(:server_error, message, source: :server)
+    end
+  end
+
   @impl true
   def message(%__MODULE__{} = error) do
     [
@@ -55,6 +65,9 @@ defmodule QuackDB.Error do
 
   defp connection_message(nil), do: []
   defp connection_message(connection_id), do: ["\n    connection_id: ", connection_id]
+
+  defp transaction_conflict?("Conflict on " <> _rest), do: true
+  defp transaction_conflict?(message), do: String.contains?(message, "Transaction conflict")
 end
 
 defimpl Inspect, for: QuackDB.Error do

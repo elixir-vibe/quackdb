@@ -12,7 +12,12 @@ defmodule QuackDB.Integration.SessionFailureTest do
     server =
       start_supervised!(
         {QuackDB.Server,
-         token: token, endpoint: endpoint, uri: uri, wait: true, wait_timeout: 10_000}
+         duckdb: QuackDB.QuackServerCase.test_duckdb(),
+         token: token,
+         endpoint: endpoint,
+         uri: uri,
+         wait: true,
+         wait_timeout: 10_000}
       )
 
     connection = start_supervised!({QuackDB, uri: QuackDB.Server.uri(server), token: token})

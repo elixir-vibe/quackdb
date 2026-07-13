@@ -348,6 +348,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     end
 
     defp normalize_append_value(nil, _type), do: nil
+    defp normalize_append_value({:json, value}, :varchar) when is_binary(value), do: value
+    defp normalize_append_value({:json, value}, :varchar), do: JSON.encode!(value)
 
     defp normalize_append_value(value, :varchar) when is_map(value) and not is_struct(value) do
       JSON.encode!(value)

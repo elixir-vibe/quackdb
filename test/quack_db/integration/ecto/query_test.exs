@@ -25,6 +25,50 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     assert insert.metadata[:duckdb_rows] == [[2]]
   end
 
+  test "Ecto schemas round trip maps nested in arrays" do
+    start_repo!()
+
+    QuackDB.IntegrationRepo.query!("DROP TABLE IF EXISTS array_map_events")
+
+    QuackDB.IntegrationRepo.query!("""
+    CREATE TABLE array_map_events (
+      id INTEGER PRIMARY KEY,
+      metadata JSON NOT NULL,
+      errors JSON[] NOT NULL DEFAULT []
+    )
+    """)
+
+    first_error = %{"attempt" => 1, "error" => "oops"}
+    second_error = %{"attempt" => 2, "error" => "still oops"}
+
+    event = %QuackDB.TestSchemas.ArrayMapEvent{
+      id: 1,
+      metadata: %{"source" => "oban"},
+      errors: [first_error]
+    }
+
+    assert {:ok, %QuackDB.TestSchemas.ArrayMapEvent{id: 1}} =
+             QuackDB.IntegrationRepo.insert(event)
+
+    query =
+      from(event in QuackDB.TestSchemas.ArrayMapEvent,
+        where: event.id == 1,
+        update: [
+          set: [errors: fragment("list_append(?, ?)", event.errors, type(^second_error, :map))]
+        ]
+      )
+
+    assert {1, nil} = QuackDB.IntegrationRepo.update_all(query, [])
+
+    assert %QuackDB.TestSchemas.ArrayMapEvent{
+             metadata: %{"source" => "oban"},
+             errors: [^first_error, ^second_error]
+           } =
+             QuackDB.IntegrationRepo.one!(
+               from(event in QuackDB.TestSchemas.ArrayMapEvent, where: event.id == 1)
+             )
+  end
+
   test "Ecto spatial helpers accept pinned Geo structs" do
     start_repo!()
     table = unique_table("quackdb_ecto_spatial")

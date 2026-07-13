@@ -232,7 +232,7 @@ defmodule QuackDB.DBConnection do
          _options,
          _state
        ) do
-    {:error, Error.new(:server_error, message, source: :server)}
+    {:error, Error.server(message)}
   end
 
   defp normalize_declare_response({_header, %PrepareResponse{} = response}, query, options, state) do
@@ -496,7 +496,7 @@ defmodule QuackDB.DBConnection do
   end
 
   defp normalize_append_response({_header, %ErrorResponse{message: message}}) do
-    {:error, Error.new(:server_error, message, source: :server)}
+    {:error, Error.server(message)}
   end
 
   defp normalize_append_response({_header, %QuackDB.Protocol.Message.SuccessResponse{}}), do: :ok
@@ -706,7 +706,7 @@ defmodule QuackDB.DBConnection do
          _state,
          _options
        ) do
-    {:error, Error.new(:server_error, message, source: :server)}
+    {:error, Error.server(message)}
   end
 
   defp normalize_query_response({_header, %PrepareResponse{} = response}, query, state, options) do
@@ -831,7 +831,7 @@ defmodule QuackDB.DBConnection do
          _options,
          _chunks
        ) do
-    {:error, Error.new(:server_error, message, source: :server)}
+    {:error, Error.server(message)}
   end
 
   defp normalize_fetch_response({header, _body}, _result_uuid, _state, _options, _chunks) do
@@ -920,7 +920,7 @@ defmodule QuackDB.DBConnection do
          _cursor_state,
          _cursor
        ) do
-    {:error, Error.new(:server_error, message, source: :server)}
+    {:error, Error.server(message)}
   end
 
   defp update_cursor_from_fetch({header, _body}, _cursor_state, _cursor) do
@@ -1023,7 +1023,7 @@ defmodule QuackDB.DBConnection do
   end
 
   defp normalize_connect_response({_header, %ErrorResponse{message: message}}, _state) do
-    {:error, Error.new(:server_error, message, source: :server)}
+    {:error, Error.server(message)}
   end
 
   defp normalize_connect_response({header, _body}, _state) do

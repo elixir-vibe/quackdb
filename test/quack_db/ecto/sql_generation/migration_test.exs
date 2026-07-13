@@ -37,6 +37,15 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
     assert sql == ~s|CREATE TABLE "events" ("tags" VARCHAR[] DEFAULT [])|
   end
 
+  test "generates arrays of maps as JSON lists" do
+    sql =
+      {:create, %Table{name: "events"}, [{:add, :errors, {:array, :map}, [default: []]}]}
+      |> Connection.execute_ddl()
+      |> single_sql()
+
+    assert sql == ~s|CREATE TABLE "events" ("errors" JSON[] DEFAULT [])|
+  end
+
   test "generates map defaults as JSON" do
     sql =
       {:create, %Table{name: "events"}, [{:add, :metadata, :map, [default: %{kind: "duck"}]}]}
