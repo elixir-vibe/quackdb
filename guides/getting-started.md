@@ -5,7 +5,7 @@ QuackDB connects Elixir applications to a remote DuckDB process through DuckDB's
 ## Requirements
 
 - Elixir 1.19 or newer
-- DuckDB 1.5.3 or newer for the current Quack extension behavior
+- DuckDB 1.5.4 or newer for the current Quack extension behavior
 - A running Quack server
 
 ## Install

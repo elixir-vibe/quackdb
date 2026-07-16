@@ -13,16 +13,16 @@ defmodule QuackDB.Binary do
 
   alias QuackDB.Error
 
-  @default_version "1.5.3"
+  @default_version "1.5.4"
   @default_base_url "https://install.duckdb.org"
   @probe_sql "SELECT 2*3*7"
   @checksums %{
-    {"1.5.3", "linux-amd64"} =>
-      "f05f3b448a9a1bc6e7ac27ff14dfe67bf5761b153c2002723365a456618ef35b",
-    {"1.5.3", "linux-arm64"} =>
-      "65b3135fb25d9a46cb4752c0638dd688819e64cb1c96bc71ffb8cca04083509f",
-    {"1.5.3", "osx-amd64"} => "e14bbce5356e5398d67155c4147cb7e85288c0308636d6e034215dcd74302ec3",
-    {"1.5.3", "osx-arm64"} => "fe3dcc3822c72147ca7b5fa56eeedd3b7d30e09cb268f056cf3355289773d8f0"
+    {"1.5.4", "linux-amd64"} =>
+      "c1d6db2294895c97849bee574b21eb462528857ccf8a23617dd3e0a05dd4b770",
+    {"1.5.4", "linux-arm64"} =>
+      "32fea57520b1ae6caa291717d5f5d4d478fb6f8ed2d2c7054096a038fc6be833",
+    {"1.5.4", "osx-amd64"} => "26fcb43d88474fea3e403bcab4196254e7121d3bb06d5bf4d42c53164a0dc682",
+    {"1.5.4", "osx-arm64"} => "f61268ba2708d26de51540bcf1104afac4968824e5acc0dcc51ebe633d8291ec"
   }
 
   @type option ::
