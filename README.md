@@ -81,7 +81,7 @@ def deps do
 end
 ```
 
-DuckDB's Quack protocol is experimental. For local development, use DuckDB 1.5.4 or newer with the `quack` extension.
+DuckDB's Quack protocol is experimental. For local development, use DuckDB 1.5.5 or newer with the `quack` extension.
 
 ## Supervised DuckDB
 

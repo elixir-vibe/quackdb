@@ -73,6 +73,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
     start_repo!()
     table = unique_table("quackdb_ecto_spatial")
 
+    QuackDB.IntegrationRepo.query!(QuackDB.Spatial.install())
     QuackDB.IntegrationRepo.query!(QuackDB.Spatial.load())
 
     QuackDB.IntegrationRepo.query!(

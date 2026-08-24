@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+
+- Updated the managed DuckDB binary from 1.5.4 to 1.5.5.
+
+### Fixed
+
+- Fixed Ecto migration DDL for adding `null: false` columns by translating the unsupported inline DuckDB constraint into compatible `ADD COLUMN` and `SET NOT NULL` operations.
+
+### Security
+
+- Updated Mint to 1.9.3 to address HTTP/1 response smuggling through sign-tolerant chunk-size parsing.
+
 ## 0.5.18 - 2026-07-16
 
 ### Changed

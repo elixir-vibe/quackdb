@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Quackdb.Install do
   Downloads DuckDB's official CLI binary for local QuackDB servers.
 
       mix quackdb.install
-      mix quackdb.install --version 1.5.4 --force
+      mix quackdb.install --version 1.5.5 --force
       mix quackdb.install --target linux-amd64 --print-path
 
   The binary is cached under the user's cache directory by default. Set
