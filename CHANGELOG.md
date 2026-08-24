@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.20 - 2026-08-24
+
 ### Fixed
 
 - Cast Ecto `:integer` expressions and parameters to DuckDB `BIGINT`, matching Ecto's

@@ -4,7 +4,7 @@ defmodule QuackDB.MixProject do
   def project do
     [
       app: :quackdb,
-      version: "0.5.19",
+      version: "0.5.20",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
