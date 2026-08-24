@@ -77,7 +77,7 @@ defmodule QuackDB.Integration.TypeMatrixTest do
              Decimal.new("12.34"),
              Decimal.new("1234567.89"),
              Decimal.new("1234567890123456.78"),
-             Decimal.new("123456789012345678901234567890123456.78")
+             %Decimal{sign: 1, coef: 12_345_678_901_234_567_890_123_456_789_012_345_678, exp: -2}
            ]
   end
 
@@ -147,6 +147,7 @@ defmodule QuackDB.Integration.TypeMatrixTest do
   test "decodes spatial geometry as WKB-compatible bytes" do
     connection = start_connection!()
 
+    QuackDB.query!(connection, QuackDB.Spatial.install())
     QuackDB.query!(connection, QuackDB.Spatial.load())
 
     geometry = QuackDB.Spatial.point(1, 2)

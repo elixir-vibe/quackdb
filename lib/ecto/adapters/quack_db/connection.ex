@@ -189,9 +189,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     def execute_ddl({:alter, %Table{} = table, changes}) do
-      Enum.map(changes, fn change ->
-        ["ALTER TABLE ", quote_name(table.prefix, table.name), " ", column_change(change)]
-      end)
+      Enum.flat_map(changes, &column_change_ddl(table, &1))
     end
 
     def execute_ddl({command, %Index{} = index})
@@ -570,6 +568,31 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     defp column_definition(_table, {:add, name, type, options}) do
       [quote_name(name), " ", column_type(type), column_options(options)]
+    end
+
+    defp column_change_ddl(table, {:add, name, type, options} = change) do
+      case Keyword.fetch(options, :null) do
+        {:ok, false} ->
+          [
+            alter_table_ddl(table, {:add, name, type, Keyword.delete(options, :null)}),
+            [
+              "ALTER TABLE ",
+              quote_name(table.prefix, table.name),
+              " ALTER COLUMN ",
+              quote_name(name),
+              " SET NOT NULL"
+            ]
+          ]
+
+        _other ->
+          [alter_table_ddl(table, change)]
+      end
+    end
+
+    defp column_change_ddl(table, change), do: [alter_table_ddl(table, change)]
+
+    defp alter_table_ddl(table, change) do
+      ["ALTER TABLE ", quote_name(table.prefix, table.name), " ", column_change(change)]
     end
 
     defp column_change({:add, name, %Reference{} = reference, options}) do

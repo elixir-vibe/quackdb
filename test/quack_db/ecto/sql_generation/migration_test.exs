@@ -130,6 +130,18 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
            ]
   end
 
+  test "splits not-null added columns into DuckDB-compatible DDL" do
+    sql =
+      {:alter, %Table{name: "events"}, [{:add, :active, :boolean, [default: false, null: false]}]}
+      |> Connection.execute_ddl()
+      |> Enum.map(&IO.iodata_to_binary/1)
+
+    assert sql == [
+             ~s|ALTER TABLE "events" ADD COLUMN "active" BOOLEAN DEFAULT false|,
+             ~s|ALTER TABLE "events" ALTER COLUMN "active" SET NOT NULL|
+           ]
+  end
+
   test "generates constraint DDL" do
     sql =
       {:create, %Constraint{table: "events", name: "positive_score", check: "score >= 0"}}

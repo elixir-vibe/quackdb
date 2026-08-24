@@ -24,12 +24,29 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
     )
 
     execute_ddl!({:create, %Index{table: table, name: index, columns: [:name]}})
-    execute_ddl!({:alter, %Table{name: table}, [{:add, :active, :boolean, [default: true]}]})
 
     assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 1, name: "duck"]])
 
-    assert %{rows: [[1, "duck", 0, true]]} =
-             QuackDB.IntegrationRepo.query!("SELECT id, name, score, active FROM #{table}")
+    execute_ddl!({:drop, %Index{name: index}})
+
+    execute_ddl!(
+      {:alter, %Table{name: table}, [{:add, :active, :boolean, [default: true, null: false]}]}
+    )
+
+    execute_ddl!({:create, %Index{table: table, name: index, columns: [:name]}})
+
+    assert {1, nil} = QuackDB.IntegrationRepo.insert_all(table, [[id: 2, name: "goose"]])
+
+    assert %{rows: [[1, "duck", 0, true], [2, "goose", 0, true]]} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT id, name, score, active FROM #{table} ORDER BY id"
+             )
+
+    assert_raise QuackDB.Error, ~r/NOT NULL constraint failed/, fn ->
+      QuackDB.IntegrationRepo.insert_all(table, [
+        [id: 3, name: "swan", active: nil]
+      ])
+    end
 
     execute_ddl!({:drop, %Index{name: index}})
     execute_ddl!({:drop, %Table{name: table}, :restrict})

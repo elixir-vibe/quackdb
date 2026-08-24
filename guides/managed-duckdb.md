@@ -53,11 +53,11 @@ mix quackdb.install --cache-dir /opt/quackdb/duckdb
 Other DuckDB versions must pass an explicit checksum:
 
 ```sh
-mix quackdb.install --version 1.5.4 --sha256 SHA256_HEX
+mix quackdb.install --version 1.5.5 --sha256 SHA256_HEX
 ```
 
 ```elixir
-QuackDB.Binary.install(version: "1.5.4", sha256: "SHA256_HEX")
+QuackDB.Binary.install(version: "1.5.5", sha256: "SHA256_HEX")
 ```
 
 ## Target prefetching
