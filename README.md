@@ -502,26 +502,6 @@ The adapter currently covers:
 - `Ecto.Adapters.SQL.explain/4`;
 - basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames.
 
-DuckDB cannot alter a table while secondary indexes depend on it, and adding a defaulted column before setting `NOT NULL` must cross a transaction boundary. For a populated indexed table, use standard Ecto migration operations to disable the DDL transaction, drop the indexes, alter the table, and recreate the indexes:
-
-```elixir
-defmodule MyApp.Repo.Migrations.AddEventActive do
-  use Ecto.Migration
-
-  @disable_ddl_transaction true
-
-  def change do
-    drop(index(:events, [:name]))
-
-    alter table(:events) do
-      add(:active, :boolean, default: false, null: false)
-    end
-
-    create(index(:events, [:name]))
-  end
-end
-```
-
 DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/3`. See the [Ecto coverage matrix](docs/ecto-analytical-coverage.md).
 
 ## Examples
