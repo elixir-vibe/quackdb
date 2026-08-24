@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Cast Ecto `:integer` expressions and parameters to DuckDB `BIGINT`, matching Ecto's
+  64-bit integer contract and allowing `Ecto.Migrator.down/4` to remove timestamped
+  migration versions without a 32-bit overflow.
+
 ## 0.5.19 - 2026-08-24
 
 ### Changed

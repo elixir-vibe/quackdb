@@ -1040,7 +1040,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp ecto_cast_type!(:id), do: QuackDB.Type.to_sql(:bigint)
     defp ecto_cast_type!(:binary_id), do: QuackDB.Type.to_sql(:uuid)
-    defp ecto_cast_type!(:integer), do: QuackDB.Type.to_sql(:integer)
+    defp ecto_cast_type!(:integer), do: QuackDB.Type.to_sql(:bigint)
     defp ecto_cast_type!(:float), do: QuackDB.Type.to_sql(:double)
     defp ecto_cast_type!(:boolean), do: QuackDB.Type.to_sql(:boolean)
     defp ecto_cast_type!(:string), do: QuackDB.Type.to_sql(:varchar)
@@ -1064,7 +1064,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp ecto_cast_type_spec!(:id), do: :bigint
     defp ecto_cast_type_spec!(:binary_id), do: :uuid
-    defp ecto_cast_type_spec!(:integer), do: :integer
+    defp ecto_cast_type_spec!(:integer), do: :bigint
     defp ecto_cast_type_spec!(:float), do: :double
     defp ecto_cast_type_spec!(:boolean), do: :boolean
     defp ecto_cast_type_spec!(:string), do: :varchar

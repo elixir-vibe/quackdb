@@ -51,6 +51,6 @@ defmodule QuackDB.Ecto.SQLGeneration.TaggedParamsTest do
     }
 
     assert planned |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             "SELECT q0.\"id\" FROM \"fragments\" AS q0 WHERE q0.\"terms\" @> CAST(? AS INTEGER[]) LIMIT CAST(? AS INTEGER)"
+             "SELECT q0.\"id\" FROM \"fragments\" AS q0 WHERE q0.\"terms\" @> CAST(? AS BIGINT[]) LIMIT CAST(? AS BIGINT)"
   end
 end

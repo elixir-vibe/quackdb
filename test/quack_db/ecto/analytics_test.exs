@@ -144,7 +144,7 @@ defmodule QuackDB.Ecto.AnalyticsTest do
       )
 
     assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
-             ~S[SELECT json_extract_string(q0."payload", '$.user.name') AS "name", CAST(json_extract_string(q0."payload", '$.active') AS BOOLEAN) AS "active" FROM "events" AS q0 WHERE ((json_extract_string(q0."payload", '$.user.name') = 'duck') AND (CAST(json_extract_string(q0."payload", '$.score') AS INTEGER) > 10))]
+             ~S[SELECT json_extract_string(q0."payload", '$.user.name') AS "name", CAST(json_extract_string(q0."payload", '$.active') AS BOOLEAN) AS "active" FROM "events" AS q0 WHERE ((json_extract_string(q0."payload", '$.user.name') = 'duck') AND (CAST(json_extract_string(q0."payload", '$.score') AS BIGINT) > 10))]
   end
 
   test "builds JSON path-list expressions" do
