@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.5.19 - 2026-08-24
+
 ### Changed
 
 - Updated the managed DuckDB binary from 1.5.4 to 1.5.5.
