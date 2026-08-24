@@ -77,5 +77,32 @@ defmodule QuackDB.Integration.Ecto.MigratorTest do
 
     assert :already_up =
              Ecto.Migrator.up(QuackDB.IntegrationRepo, 20_260_526_000_001, CreateMigratorEvents)
+
+    assert :ok =
+             Ecto.Migrator.down(
+               QuackDB.IntegrationRepo,
+               20_260_526_000_002,
+               AddMigratorEventActive
+             )
+
+    assert [20_260_526_000_001] =
+             QuackDB.IntegrationRepo.all(
+               from(m in "schema_migrations", order_by: m.version, select: m.version)
+             )
+
+    assert %{rows: []} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT column_name FROM information_schema.columns WHERE table_name = 'quackdb_migrator_events' AND column_name = 'active'"
+             )
+
+    assert :ok =
+             Ecto.Migrator.down(QuackDB.IntegrationRepo, 20_260_526_000_001, CreateMigratorEvents)
+
+    assert %{rows: []} =
+             QuackDB.IntegrationRepo.query!(
+               "SELECT table_name FROM information_schema.tables WHERE table_name = 'quackdb_migrator_events'"
+             )
+
+    assert [] = QuackDB.IntegrationRepo.all(from(m in "schema_migrations", select: m.version))
   end
 end

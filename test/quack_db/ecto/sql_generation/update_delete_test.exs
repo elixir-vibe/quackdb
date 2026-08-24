@@ -71,6 +71,20 @@ defmodule QuackDB.Ecto.SQLGeneration.UpdateDeleteTest do
     assert sql == ~s|DELETE FROM "events" AS q0 WHERE (q0."id" IN ?)|
   end
 
+  test "casts Ecto integer parameters to BIGINT for timestamped migration versions" do
+    version = 20_260_824_000_003
+
+    query =
+      from(migration in "schema_migrations",
+        where: migration.version == type(^version, :integer)
+      )
+
+    sql = query |> Connection.delete_all() |> IO.iodata_to_binary()
+
+    assert sql ==
+             ~s|DELETE FROM "schema_migrations" AS q0 WHERE (q0."version" = CAST(? AS BIGINT))|
+  end
+
   test "generates joined delete_all SQL" do
     query =
       from(event in "events",
