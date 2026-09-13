@@ -7,7 +7,7 @@ defmodule QuackDB.Integration.UUIDTest do
   import QuackDB.SQL.Fragment, only: [table: 1]
 
   alias QuackDB.IntegrationRepo, as: Repo
-  alias QuackDB.TestSchemas.UUIDRecord
+  alias QuackDB.TestSchemas.{CustomUUIDRecord, UUIDRecord}
 
   @moduletag :integration
   @uuid "550e8400-e29b-41d4-a716-446655440000"
@@ -52,6 +52,53 @@ defmodule QuackDB.Integration.UUIDTest do
                "SELECT id, external_id, parent_id, related_ids, external_ids FROM ",
                table(name)
              ])
+  end
+
+  test "custom UUID types round trip through schema reads, pins and returning" do
+    start_repo!()
+    name = unique_table("custom_uuid_record")
+
+    create_table!(Repo, name, [
+      {:id, :uuid, primary_key: true},
+      {:other_id, :uuid},
+      {:ids, {:list, :uuid}},
+      {:checked_id, :uuid},
+      {:checked_ids, {:list, :uuid}}
+    ])
+
+    uuid = CustomUUIDRecord.UUID.autogenerate()
+    checked = {:uuid_v7, uuid}
+
+    record =
+      %CustomUUIDRecord{
+        other_id: nil,
+        ids: [uuid, nil],
+        checked_id: checked,
+        checked_ids: [checked, nil]
+      }
+      |> Ecto.put_meta(source: name)
+      |> Repo.insert!(returning: true)
+
+    assert record.id == uuid
+    assert record.checked_id == checked
+    assert record.checked_ids == [checked, nil]
+    query = from(record in {name, CustomUUIDRecord})
+    assert [^record] = Repo.all(query)
+    assert ^record = Repo.get!(query, uuid)
+    assert ^record = Repo.one!(from(record in query, where: record.checked_id == ^checked))
+
+    updated =
+      record
+      |> Ecto.Changeset.change(other_id: uuid, checked_id: nil, checked_ids: [])
+      |> Repo.update!(returning: true)
+
+    assert updated.other_id == uuid
+    assert updated.checked_id == nil
+    assert updated.checked_ids == []
+    assert ^updated = Repo.get!(query, uuid)
+
+    assert %{rows: [[^uuid, ^uuid, [^uuid, nil], nil, []]]} =
+             Repo.query!(["SELECT id, other_id, ids, checked_id, checked_ids FROM ", table(name)])
   end
 
   test "nullable UUIDs and UUID arrays round trip through bulk SQL and append" do
