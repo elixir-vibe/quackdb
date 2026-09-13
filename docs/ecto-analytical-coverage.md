@@ -6,7 +6,7 @@ QuackDB's Ecto adapter covers analytical reads plus common write and setup workf
 - **Helper/source**: expressible through `QuackDB.Ecto.Analytics`, `QuackDB.Ecto.Spatial`, Ecto `fragment/1`, or QuackDB source helpers.
 - **Raw SQL**: DuckDB-native syntax that should be exercised through `Repo.query/3` or `QuackDB.query/4`.
 
-This file is a roadmap, not a claim of complete DuckDB support.
+The adapter does not cover all DuckDB features.
 
 ## Coverage matrix
 
@@ -55,28 +55,6 @@ This file is a roadmap, not a claim of complete DuckDB support.
 Basic migration DDL is generated for table creation/drop, column add/drop/modify, table and column renames, references, primary keys, composite primary keys, and ordinary/unique indexes. DuckDB-incompatible index options such as concurrent indexes, covering indexes, raw index options, index comments, custom `USING`, and `nulls_distinct` raise explicit QuackDB errors instead of being ignored.
 
 Advanced constraints and comments should be added only where DuckDB can enforce the same semantics. Until then, prefer raw SQL for DuckDB-specific DDL.
-
-## Test organization
-
-Coverage should stay split by expression path:
-
-```text
-test/quack_db/ecto/sql_generation/
-  analytical_test.exs
-  aggregates_test.exs
-  fragments_test.exs
-  migration_test.exs
-  source_analytics_test.exs
-  sources_test.exs
-  update_delete_test.exs
-  window_functions_test.exs
-
-test/quack_db/integration/ecto/
-  migration_test.exs
-  query_test.exs
-```
-
-Use SQL generation tests to pin what QuackDB emits for Ecto-native queries. Use real-server tests for DuckDB-native semantics and raw SQL pass-through.
 
 ## QUALIFY-style filters
 
@@ -279,5 +257,3 @@ QuackDB should not try to reimplement all DuckDB syntax as Ecto macros. For Duck
 4. source helpers for table functions such as CSV/Parquet/JSON;
 5. `fragment/1` for expressions inside otherwise-normal Ecto queries;
 6. explicit unsupported errors for Ecto AST shapes that would generate misleading SQL.
-
-Future adapter-specific helpers may make sense for repeated patterns such as `QUALIFY`, lakehouse sources, or Arrow handoff, but those should be added only after the protocol and result semantics are stable.

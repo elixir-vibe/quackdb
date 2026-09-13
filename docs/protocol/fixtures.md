@@ -33,12 +33,4 @@ Malformed fixtures are intentionally invalid protocol messages used to verify th
 | `test/fixtures/quackdb_malformed/data_chunk_extra_vector.bin` | `:data_chunk_type_mismatch` | Chunk declares zero logical types but encodes one `INTEGER` vector. |
 | `test/fixtures/quackdb_malformed/data_chunk_missing_vector.bin` | `:data_chunk_type_mismatch` | Chunk declares one `INTEGER` logical type but encodes zero vectors. |
 
-## Backlog
-
-- Malformed vector bodies for unsupported compressed vector encodings.
-- Malformed logical type metadata fixtures for unsupported or partial type families.
-- `UNION` and `VARIANT` logical type fixtures if DuckDB Quack exposes stable payloads that can be captured or generated independently.
-- Extension/custom type metadata fixtures once DuckDB exposes stable payloads.
-- FSST vector fixtures once DuckDB Quack serializes compressed FSST vectors instead of flattening them.
-
 Every new fixture should document the exact invariant it covers. Avoid arbitrary random corrupt bytes.
