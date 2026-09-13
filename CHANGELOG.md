@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.5.24 - 2026-09-13
+
+### Added
+
+- Add `QuackDB.DDL.check/1` for safe inline CHECK expressions in `create_table/3`, supporting combined or separate constraints, comparisons, boolean operators, NULL checks, quoted identifiers, and pinned runtime values.
+
 ## 0.5.23 - 2026-09-13
 
 ### Added

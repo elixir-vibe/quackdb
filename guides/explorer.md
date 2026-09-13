@@ -5,7 +5,7 @@ QuackDB can hand query results to Explorer and can append Explorer dataframes th
 The Explorer integration is optional. Add Explorer when you want dataframe helpers:
 
 ```elixir
-{:quackdb, "~> 0.5.23"},
+{:quackdb, "~> 0.5.24"},
 {:explorer, "~> 0.11"}
 ```
 
