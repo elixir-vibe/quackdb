@@ -32,6 +32,19 @@ defmodule QuackDB.Integration.QueryTest do
     assert report =~ "Rows scanned:"
   end
 
+  test "detailed profiles retain dynamically named optimizer metrics" do
+    connection = start_connection!()
+    QuackDB.query!(connection, "SET profiling_mode = 'detailed'")
+    profile = QuackDB.Profile.analyze!(connection, "SELECT sum(i) FROM range(100) t(i)")
+    assert map_size(profile.optimizers) > 0
+
+    assert Enum.all?(profile.optimizers, fn {key, value} ->
+             is_binary(key) and is_number(value)
+           end)
+
+    assert Enum.all?(QuackDB.Profile.flatten(profile), &is_binary(&1.name))
+  end
+
   test "creates and drops a standalone sequence without a backing column" do
     alias QuackDB.{DDL, Sequence}
     connection = start_connection!()

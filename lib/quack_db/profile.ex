@@ -1,6 +1,8 @@
 defmodule QuackDB.Profile.Operator do
   @moduledoc "A DuckDB profiling operator node."
 
+  use JSONCodec
+
   defstruct [
     :cpu_time,
     :cumulative_cardinality,
@@ -27,8 +29,10 @@ defmodule QuackDB.Profile.Operator do
           cumulative_cardinality: non_neg_integer() | nil,
           cumulative_rows_scanned: non_neg_integer() | nil,
           result_set_size: non_neg_integer() | nil,
-          extra_info: map(),
-          children: [t()]
+          system_peak_buffer_memory: non_neg_integer() | nil,
+          system_peak_temp_dir_size: non_neg_integer() | nil,
+          extra_info: %{String.t() => term()} | nil,
+          children: [__MODULE__.t()]
         }
 end
 
@@ -37,13 +41,14 @@ defmodule QuackDB.Profile do
   DuckDB query profiling helpers.
 
   `analyze/4` runs `EXPLAIN (ANALYZE, FORMAT json)` and decodes DuckDB's
-  profile with Elixir's built-in `JSON.decode/3`. Known DuckDB profile keys are
-  decoded with `String.to_existing_atom/1` and loaded into structs. DuckDB's
-  open-ended `extra_info` maps keep their own keys.
+  profile into typed structs using JSONCodec. DuckDB's open-ended `extra_info`
+  maps and optimizer metric names retain string keys.
 
   Use `flatten/1`, `slowest/2`, and `report/2` when you want a profiler-style
   operator view.
   """
+
+  use JSONCodec
 
   alias QuackDB.Profile.Operator
 
@@ -89,8 +94,30 @@ defmodule QuackDB.Profile do
           result_set_size: non_neg_integer() | nil,
           cumulative_cardinality: non_neg_integer() | nil,
           cumulative_rows_scanned: non_neg_integer() | nil,
+          all_optimizers: number() | nil,
+          attach_load_storage_latency: number() | nil,
+          attach_replay_wal_latency: number() | nil,
+          blocked_thread_time: number() | nil,
+          checkpoint_latency: number() | nil,
+          commit_local_storage_latency: number() | nil,
+          cumulative_optimizer_timing: number() | nil,
+          extra_info: %{String.t() => term()} | nil,
+          physical_planner: number() | nil,
+          physical_planner_column_binding: number() | nil,
+          physical_planner_create_plan: number() | nil,
+          physical_planner_resolve_types: number() | nil,
+          planner: number() | nil,
+          planner_binding: number() | nil,
+          system_peak_buffer_memory: non_neg_integer() | nil,
+          system_peak_temp_dir_size: non_neg_integer() | nil,
+          total_bytes_read: non_neg_integer() | nil,
+          total_bytes_written: non_neg_integer() | nil,
+          total_memory_allocated: non_neg_integer() | nil,
+          waiting_to_attach_latency: number() | nil,
+          wal_replay_entry_count: non_neg_integer() | nil,
+          write_to_wal_latency: number() | nil,
           children: [Operator.t()],
-          optimizers: map()
+          optimizers: %{String.t() => number()}
         }
 
   @typedoc "A flattened DuckDB operator row with its tree path and timing share."
@@ -118,7 +145,7 @@ defmodule QuackDB.Profile do
     with {:ok, sql, params} <- profile_statement(connection, statement, params, analyze: false),
          {:ok, result} <- QuackDB.query(connection, sql, params, options),
          {:ok, profile} <- decode_result(result) do
-      {:ok, build_profile(profile)}
+      build_profile(profile)
     end
   end
 
@@ -140,7 +167,7 @@ defmodule QuackDB.Profile do
     with {:ok, sql, params} <- profile_statement(connection, statement, params, analyze: true),
          {:ok, result} <- QuackDB.query(connection, sql, params, options),
          {:ok, profile} <- decode_result(result) do
-      {:ok, build_profile(profile)}
+      build_profile(profile)
     end
   end
 
@@ -193,22 +220,18 @@ defmodule QuackDB.Profile do
   end
 
   defp build_profile(%{} = decoded) do
-    profile_fields = Map.keys(%__MODULE__{}) -- [:__struct__, :children, :optimizers]
+    case from_map(Map.put(decoded, "optimizers", optimizer_metrics(decoded))) do
+      {:ok, profile} ->
+        {:ok, profile}
 
-    decoded
-    |> Map.take(profile_fields)
-    |> Map.put(:children, Enum.map(Map.get(decoded, :children, []), &build_operator/1))
-    |> Map.put(:optimizers, optimizer_metrics(decoded))
-    |> then(&struct!(__MODULE__, &1))
-  end
-
-  defp build_operator(%{} = decoded) do
-    operator_fields = Map.keys(%Operator{}) -- [:__struct__, :children]
-
-    decoded
-    |> Map.take(operator_fields)
-    |> Map.put(:children, Enum.map(Map.get(decoded, :children, []), &build_operator/1))
-    |> then(&struct!(Operator, &1))
+      {:error, error} ->
+        {:error,
+         QuackDB.Error.new(
+           :invalid_profile,
+           "could not decode DuckDB profile: #{Exception.message(error)}",
+           source: :client
+         )}
+    end
   end
 
   defp normalize_arguments(statement, params, []) when is_list(params) do
@@ -272,14 +295,14 @@ defmodule QuackDB.Profile do
   defp fallback_explain_value([]), do: nil
 
   defp decode_json(json) do
-    case JSON.decode(json, [], profile_decoders()) do
-      {[profile], _acc, ""} when is_map(profile) ->
+    case JSON.decode(json) do
+      {:ok, [profile]} when is_map(profile) ->
         {:ok, profile}
 
-      {profile, _acc, ""} when is_map(profile) ->
+      {:ok, profile} when is_map(profile) ->
         {:ok, profile}
 
-      {other, _acc, ""} ->
+      {:ok, other} ->
         {:error,
          %QuackDB.Error{message: "expected DuckDB profile JSON object, got: #{inspect(other)}"}}
 
@@ -287,21 +310,6 @@ defmodule QuackDB.Profile do
         {:error,
          %QuackDB.Error{message: "could not decode DuckDB profile JSON: #{inspect(error)}"}}
     end
-  end
-
-  defp profile_decoders do
-    [
-      object_push: fn key, value, acc -> [{existing_profile_key(key), value} | acc] end,
-      object_finish: fn acc, old_acc -> {Map.new(acc), old_acc} end
-    ]
-  end
-
-  defp existing_profile_key("optimizer_" <> _ = key), do: key
-
-  defp existing_profile_key(key) do
-    String.to_existing_atom(key)
-  rescue
-    ArgumentError -> key
   end
 
   defp optimizer_metrics(decoded) do

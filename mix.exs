@@ -39,6 +39,7 @@ defmodule QuackDB.MixProject do
       {:mint, "~> 1.10"},
       {:castore, "~> 1.0"},
       {:decimal, "~> 2.0 or ~> 3.0"},
+      {:json_codec, "~> 0.2.4"},
       {:muontrap, "~> 1.5"},
       {:telemetry, "~> 1.0"},
       {:varint, "~> 1.6"},

@@ -1,6 +1,11 @@
 defmodule QuackDB.Error do
   @moduledoc """
   Structured error returned by the QuackDB client.
+
+  When DuckDB returns an `errors_as_json` payload, `metadata` includes
+  `:exception_type` and `:exception_message`. The original `message` is preserved,
+  including any native-append prefix. QuackDB does not enable this server setting
+  automatically or infer constraint names from error text.
   """
 
   @type code :: atom()
@@ -43,11 +48,14 @@ defmodule QuackDB.Error do
   @doc false
   @spec server(String.t()) :: t()
   def server(message) when is_binary(message) do
-    if transaction_conflict?(message) do
-      new(:transaction_conflict, message, source: :server, retriable?: true)
-    else
-      new(:server_error, message, source: :server)
-    end
+    metadata = server_metadata(message)
+    conflict? = transaction_conflict?(Map.get(metadata, :exception_message, message))
+
+    new(if(conflict?, do: :transaction_conflict, else: :server_error), message,
+      source: :server,
+      retriable?: conflict?,
+      metadata: metadata
+    )
   end
 
   @impl true
@@ -58,6 +66,17 @@ defmodule QuackDB.Error do
       connection_message(error.connection_id)
     ]
     |> IO.iodata_to_binary()
+  end
+
+  defp server_metadata("Failed to append: " <> message), do: server_metadata(message)
+
+  defp server_metadata(message) do
+    with {:ok, decoded} when is_map(decoded) <- JSON.decode(message),
+         {:ok, exception} <- QuackDB.Error.ServerException.from_map(decoded) do
+      Map.from_struct(exception)
+    else
+      _ -> %{}
+    end
   end
 
   defp query_message(nil), do: []
