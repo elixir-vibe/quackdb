@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.5.22 - 2026-09-13
+
+### Fixed
+
+- Fix Ecto UUID schema reads and native appends, including nullable fields and arrays.
+- Honor decimal precision and scale in Ecto create, add, and modify migrations, and reject invalid decimal options instead of silently losing precision.
+- Preserve SQL NULL for nil Ecto map values instead of storing JSON null. Existing stored values are unchanged.
+- Fix native appends for nested map arrays and type mapping for arrays of parameterized Ecto enums.
+- Reject unsupported Ecto constraint creation and removal with actionable errors instead of generating unsupported ALTER TABLE statements.
+
 ## 0.5.21 - 2026-09-13
 
 ### Added

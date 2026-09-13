@@ -15,7 +15,7 @@ Add `:quackdb` to your dependencies:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.21"}
+    {:quackdb, "~> 0.5.22"}
   ]
 end
 ```
@@ -25,7 +25,7 @@ Optional integrations are compiled only when their packages are available. Add E
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.21"},
+    {:quackdb, "~> 0.5.22"},
     {:explorer, "~> 0.11"}
   ]
 end
@@ -406,7 +406,7 @@ QuackDB includes an initial Ecto SQL adapter for raw SQL queries. The Ecto adapt
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.21"},
+    {:quackdb, "~> 0.5.22"},
     {:ecto_sql, "~> 3.13"}
   ]
 end
