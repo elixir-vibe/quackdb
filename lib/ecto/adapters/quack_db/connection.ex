@@ -217,36 +217,21 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         when command in [:create, :create_if_not_exists] do
       assert_constraint_options!(constraint)
 
-      if is_binary(constraint.check) do
-        [
-          [
-            "ALTER TABLE ",
-            quote_name(constraint.prefix, constraint.table),
-            " ADD CONSTRAINT ",
-            quote_name(constraint.name),
-            " CHECK (",
-            constraint.check,
-            ")"
-          ]
-        ]
-      else
+      [
         unsupported_iodata!(
           :migration_constraint,
-          "DuckDB constraint DDL only supports check constraints"
+          "DuckDB does not support ALTER TABLE ADD CONSTRAINT; create CHECK constraints inline with CREATE TABLE using Ecto.Migration.execute/2"
         )
-      end
+      ]
     end
 
-    def execute_ddl({command, %Constraint{} = constraint, _mode})
+    def execute_ddl({command, %Constraint{}, _mode})
         when command in [:drop, :drop_if_exists] do
       [
-        [
-          "ALTER TABLE ",
-          quote_name(constraint.prefix, constraint.table),
-          " DROP CONSTRAINT ",
-          if_do(command == :drop_if_exists, "IF EXISTS "),
-          quote_name(constraint.name)
-        ]
+        unsupported_iodata!(
+          :migration_constraint,
+          "DuckDB does not support ALTER TABLE DROP CONSTRAINT; rebuild the table without the constraint using an explicit SQL migration, preserving data, indexes, and dependent objects"
+        )
       ]
     end
 

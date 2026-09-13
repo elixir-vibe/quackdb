@@ -795,12 +795,31 @@ defmodule MyApp.Repo.Migrations.CreateEvents do
     end
 
     create(index(:events, [:name]))
-    create(constraint(:events, :positive_score, check: "score >= 0"))
   end
 end
 ```
 
-Supported DDL includes create/drop/alter table, add/modify/drop columns, references, ordinary and unique indexes, primary keys, composite primary keys, check constraints, and table/column renames. DuckDB-incompatible options such as concurrent indexes, covering indexes, exclude constraints, constraint comments, and `NOT VALID` constraints raise explicit QuackDB errors.
+Supported DDL includes create/drop/alter table, add/modify/drop columns, references, ordinary and unique indexes, primary keys, composite primary keys, and table/column renames. DuckDB-incompatible options such as concurrent indexes, covering indexes, exclude constraints, constraint comments, and `NOT VALID` constraints raise explicit QuackDB errors.
+
+DuckDB does not support `ALTER TABLE ADD CONSTRAINT` or `DROP CONSTRAINT`, so the Ecto `create constraint(...)` and `drop constraint(...)` forms raise explicit unsupported-feature errors. For CHECK constraints, create the table with inline constraints using `execute/2` inside a migration instead:
+
+```elixir
+execute(
+  """
+  CREATE TABLE events (
+    id INTEGER PRIMARY KEY,
+    name VARCHAR NOT NULL,
+    score INTEGER DEFAULT 0,
+    CONSTRAINT positive_score CHECK (score >= 0)
+  )
+  """,
+  "DROP TABLE events"
+)
+```
+
+Constraint violations currently raise database errors rather than returning changeset errors through `unique_constraint/3`, `foreign_key_constraint/3`, or `check_constraint/3`. DuckDB's violation messages do not reliably identify the constraint name Ecto needs; QuackDB does not guess names.
+
+On DuckDB 1.5.5, catalog lookup does not solve this reliably: supplied CHECK names are not preserved, and multiple checks on the same column can share a generated catalog name. A failed write also prevents catalog queries in the same aborted transaction. For these reasons, QuackDB does not automatically rebuild a table to drop a named constraint. Use an explicit SQL migration with a reviewed replacement table definition, preserving data, indexes, and dependent objects.
 
 ## Current limitations
 

@@ -350,6 +350,11 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     defp normalize_append_value(nil, _type), do: nil
     defp normalize_append_value({:blob, value}, :blob), do: value
 
+    # Ecto dumps UUIDs as network-order bytes. DuckDB stores a signed int128
+    # with the top bit flipped to preserve UUID ordering.
+    defp normalize_append_value(<<value::unsigned-big-128>>, :uuid),
+      do: value - 0x80000000000000000000000000000000
+
     defp normalize_append_value(values, {:list, type}) when is_list(values) do
       Enum.map(values, &normalize_append_value(&1, type))
     end

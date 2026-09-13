@@ -142,13 +142,20 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
            ]
   end
 
-  test "generates constraint DDL" do
-    sql =
-      {:create, %Constraint{table: "events", name: "positive_score", check: "score >= 0"}}
-      |> Connection.execute_ddl()
-      |> single_sql()
+  test "rejects unsupported constraint creation and removal explicitly" do
+    constraint = %Constraint{table: "events", name: "positive_score", check: "score >= 0"}
 
-    assert sql == ~s|ALTER TABLE "events" ADD CONSTRAINT "positive_score" CHECK (score >= 0)|
+    for command <- [:create, :create_if_not_exists] do
+      assert_raise QuackDB.Error, ~r/ALTER TABLE ADD CONSTRAINT/, fn ->
+        Connection.execute_ddl({command, constraint})
+      end
+    end
+
+    for command <- [:drop, :drop_if_exists], mode <- [:restrict, :cascade] do
+      assert_raise QuackDB.Error, ~r/ALTER TABLE DROP CONSTRAINT/, fn ->
+        Connection.execute_ddl({command, constraint, mode})
+      end
+    end
   end
 
   test "rejects unsupported table options explicitly" do

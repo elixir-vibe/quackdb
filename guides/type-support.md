@@ -28,6 +28,8 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `BIGNUM` | `integer()` | Supported | Decodes DuckDB's variable-length integer payload into an Elixir integer. |
 | `GEOMETRY` | `binary()` | Partial | Decoded as WKB-compatible bytes when DuckDB's spatial extension returns geometry values; semantic geometry structs are not implemented. |
 
+Ecto schemas can use `:binary_id` or `Ecto.UUID` for UUID fields, including nullable fields and arrays. Schema reads return canonical UUID strings; SQL inserts and native append inserts preserve UUID values. Direct SQL results also remain canonical strings rather than Ecto's dumped 16-byte representation.
+
 ## Temporal types
 
 | DuckDB type | Elixir value | Status | Notes |

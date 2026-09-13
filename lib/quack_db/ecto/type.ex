@@ -21,6 +21,7 @@ if Code.ensure_loaded?(Ecto.Type) do
     defp base_type!(:bigserial), do: :bigint
     defp base_type!(:serial), do: :integer
     defp base_type!(:binary_id), do: :uuid
+    defp base_type!(Ecto.UUID), do: :uuid
     defp base_type!(:integer), do: :integer
     defp base_type!(:bigint), do: :bigint
     defp base_type!(:float), do: :double
