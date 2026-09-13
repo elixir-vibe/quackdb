@@ -3,6 +3,19 @@ defmodule QuackDB.Ecto.SQLGeneration.TaggedParamsTest do
 
   import Ecto.Query
 
+  test "binary dumpers distinguish binary data from UTF-8 text, including nested arrays" do
+    adapter = Ecto.Adapters.QuackDB
+    bytes = ~S(\x41) <> " 🦆"
+    assert {:ok, {:blob, ^bytes}} = Ecto.Type.adapter_dump(adapter, :binary, bytes)
+    assert {:ok, nil} = Ecto.Type.adapter_dump(adapter, :binary, nil)
+    assert {:ok, ^bytes} = Ecto.Type.adapter_dump(adapter, :string, bytes)
+
+    assert {:ok, [[{:blob, ^bytes}, nil], []]} =
+             Ecto.Type.adapter_dump(adapter, {:array, {:array, :binary}}, [[bytes, nil], []])
+
+    assert :error = Ecto.Type.adapter_dump(adapter, :binary, 123)
+  end
+
   test "uses placeholders for planner tagged field params" do
     name = "phoenix"
 

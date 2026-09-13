@@ -2,6 +2,12 @@
 
 This audit tracks public API changes and records accepted naming decisions before release cuts. No open naming decisions remain for the current release candidate.
 
+## 0.5.21 API additions
+
+- `QuackDB.Server.child_specs/1` accepts `client: {Module, options}` as well as the existing QuackDB pool keyword shorthand. It returns ordinary child specs with matching URI/token options; no separate spec-and-options API is exposed.
+- `QuackDB.DDL.create_sequence/2` and `drop_sequence/2` build standalone sequence DDL using the shared identifier fragments. Sequence allocation remains in `QuackDB.Sequence`.
+- Server startup errors expose `:server_start_failed`, `:server_start_timeout`, and recognized `:database_locked` failures, with bounded, redacted diagnostics in metadata.
+
 ## Unreleased API additions after 0.5.2
 
 New public surfaces since `0.5.2`:

@@ -82,7 +82,9 @@ Both encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-valu
 
 ## SQL parameter literals
 
-QuackDB formats query parameters as DuckDB SQL literals client-side because the current Quack request path does not expose server-side bind parameters.
+QuackDB formats query parameters as DuckDB SQL literals client-side because the current Quack request path does not expose server-side bind parameters. Pass values separately rather than interpolating them into SQL.
+
+For direct queries, use `{:blob, bytes}` whenever the value is binary data, even if those bytes are valid UTF-8. Plain valid UTF-8 binaries without NUL are treated as text; relying on DuckDB to cast text into BLOB can interpret backslash escapes or reject non-ASCII bytes. Ecto schema `:binary` fields are explicitly encoded as blobs, including in native append inserts. Ecto `:naive_datetime_usec` and `:utc_datetime_usec` preserve microseconds; `TIMESTAMPTZ` results normalize to UTC rather than retaining the original time-zone name.
 
 Supported parameter values:
 

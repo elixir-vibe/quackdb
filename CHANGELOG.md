@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.5.21 - 2026-09-13
+
+### Added
+
+- Allow `QuackDB.Server.child_specs/1` to accept `client: {Module, options}` for pairing a local server with an Ecto Repo or another client using shared credentials.
+- Add `QuackDB.DDL.create_sequence/2` and `drop_sequence/2` for standalone sequences, including schema-qualified names.
+
+### Fixed
+
+- Report daemon exits during server startup promptly, with recognized database-lock conflicts classified as `:database_locked` and bounded, token-redacted UTF-8 diagnostics.
+- Prevent log messages mentioning the endpoint from falsely signaling readiness, and cancel stalled readiness probes when the startup deadline expires.
+- Preserve Ecto `:binary` values as BLOBs rather than SQL strings, including UTF-8 bytes, backslash escapes, null values, and arrays across SQL and native append inserts.
+- Fix schema-based table creation when the schema module has not yet been loaded.
+
+### Security
+
+- Require Mint 1.10 or newer to address HTTP/1 response-parser denial-of-service vulnerabilities [CVE-2026-82728](https://github.com/elixir-mint/mint/security/advisories/GHSA-g83f-2j6r-q6m4) and [CVE-2026-82729](https://github.com/elixir-mint/mint/security/advisories/GHSA-7p8w-j234-7qc8).
+
 ## 0.5.20 - 2026-08-24
 
 ### Fixed

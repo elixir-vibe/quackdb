@@ -29,8 +29,26 @@ defmodule QuackDB.Server do
   Startup waits until the Quack endpoint is ready. For the default DuckDB CLI
   command, readiness is detected from the `quack_serve/2` result row printed to
   stdout. `:poll_interval` is only the fallback probe interval for custom daemon
-  output handling or custom commands that do not expose that row.
+  output handling or custom commands that do not expose that row. Probes run in
+  a cancellable task so daemon exits and output remain visible while HTTP waits;
+  the startup deadline also cancels an in-flight probe.
 
+  Startup failures report `:server_start_failed`, `:server_start_timeout`, or
+  `:database_locked` for recognized DuckDB file-lock conflicts. Error metadata
+  includes `:database`, `:uri`, `:last_error`, an `:output_tail` of at most 8 KiB,
+  and `:exit_reason` when the daemon exits. The retained output redacts the
+  server token, replaces invalid UTF-8, and truncates on a character boundary.
+  Explicitly configured logger callbacks still receive original output.
+  Capture is best-effort, newline-delimited MuonTrap output; disabling
+  stderr forwarding can omit diagnostics. Other secrets in custom boot output
+  are not automatically redacted.
+
+  Stopping this process signals the daemon; it does not run `CHECKPOINT` or
+  guarantee an immediately copyable database file. Preserve a remaining WAL for
+  recovery. Quiesce writers and explicitly checkpoint before a single-file copy,
+  then stop clients and the supervised server and verify OS-process termination.
+  A supervised server is a permanent child: use `Supervisor.terminate_child/2`
+  rather than `GenServer.stop/1` to stop it without automatic restart.
   """
 
   use GenServer
@@ -41,7 +59,10 @@ defmodule QuackDB.Server do
   alias QuackDB.Protocol.Message.Disconnect
   alias QuackDB.Protocol.Message.ErrorResponse
 
+  require Logger
+
   @ready_check_timeout 1_000
+  @output_tail_bytes 8_192
 
   defstruct [
     :daemon,
@@ -80,10 +101,30 @@ defmodule QuackDB.Server do
           | {:daemon_options, Keyword.t()}
           | {:daemon_command, {String.t(), [String.t()]}}
 
+  @doc """
+  Returns matching server and client child specs, in startup order.
+
+  `:server` is a list of Server options. `:client` accepts a keyword list for a
+  QuackDB pool, or `{module, options}` for another client such as an Ecto Repo.
+  The client must accept `:uri` and `:token` options. URI/token precedence is
+  server, then client, then generated defaults. Both specs retain the generated
+  credentials across restarts.
+
+      alias QuackDB.Server
+
+      children =
+        Server.child_specs(
+          server: [name: MyApp.DuckDB],
+          client: {MyApp.Repo, pool_size: 2}
+        )
+
+  A `:rest_for_one` supervisor can restart the client when its server restarts
+  and invalidates existing sessions.
+  """
   @spec child_specs(keyword()) :: [Supervisor.child_spec()]
   def child_specs(options \\ []) do
     server_options = Keyword.get(options, :server, [])
-    client_options = Keyword.get(options, :client, [])
+    {client_module, client_options} = client_child(Keyword.get(options, :client, []))
     endpoint = Keyword.get(server_options, :endpoint, "quack:localhost")
 
     uri =
@@ -100,8 +141,17 @@ defmodule QuackDB.Server do
       |> Keyword.put(:token, token)
 
     client_options = client_options |> Keyword.put(:uri, uri) |> Keyword.put(:token, token)
+    [child_spec(server_options), Supervisor.child_spec({client_module, client_options}, [])]
+  end
 
-    [child_spec(server_options), QuackDB.child_spec(client_options)]
+  defp client_child(options) when is_list(options), do: {QuackDB, options}
+
+  defp client_child({module, options}) when is_atom(module) and is_list(options),
+    do: {module, options}
+
+  defp client_child(other) do
+    raise ArgumentError,
+          "expected :client to be a keyword list or {module, keyword}, got: #{inspect(other)}"
   end
 
   @spec child_spec([option()]) :: Supervisor.child_spec()
@@ -130,6 +180,11 @@ defmodule QuackDB.Server do
   @spec info(GenServer.server()) :: map()
   def info(server), do: GenServer.call(server, :info)
 
+  @doc """
+  Returns the local MuonTrap wrapper's OS PID, not the DuckDB child PID.
+
+  This does not identify the process holding a conflicting database file lock.
+  """
   @spec os_pid(GenServer.server()) :: non_neg_integer() | :error
   def os_pid(server), do: GenServer.call(server, :os_pid)
 
@@ -201,6 +256,9 @@ defmodule QuackDB.Server do
   @impl true
   def handle_info({:quackdb_server_output, _line}, state), do: {:noreply, state}
 
+  # A probe report can already be queued when stdout signals readiness.
+  def handle_info({:quackdb_server_probe_error, _probe, _error}, state), do: {:noreply, state}
+
   def handle_info({:EXIT, daemon, reason}, %{daemon: daemon} = state) when is_pid(daemon),
     do: {:stop, reason, state}
 
@@ -259,6 +317,7 @@ defmodule QuackDB.Server do
     |> Keyword.get(:daemon_options, [])
     |> Keyword.put_new(:stderr_to_stdout, true)
     |> Keyword.put_new(:log_prefix, "[quackdb-server] ")
+    |> Keyword.put_new(:exit_status_to_reason, fn status -> {:exit_status, status} end)
   end
 
   defp daemon_command(options, duckdb, database, boot_sql) do
@@ -309,7 +368,8 @@ defmodule QuackDB.Server do
 
     File.mkdir!(dir)
     chmod_best_effort(dir, 0o700)
-    File.write!(path, boot_sql)
+    # DuckDB may execute -init before applying the CLI output-format flags.
+    File.write!(path, [".mode csv\n.headers off\n", boot_sql])
     chmod_best_effort(path, 0o600)
 
     %{dir: dir, path: path}
@@ -334,22 +394,23 @@ defmodule QuackDB.Server do
   defp cleanup_boot_sql_file(_state), do: :ok
 
   defp daemon_options_with_ready_signal(options, parent) do
-    cond do
-      Keyword.has_key?(options, :logger_fun) ->
-        logger_fun = Keyword.fetch!(options, :logger_fun)
+    logger_fun = Keyword.get_lazy(options, :logger_fun, fn -> output_logger(options) end)
 
-        Keyword.put(options, :logger_fun, fn line ->
-          send(parent, {:quackdb_server_output, line})
-          call_logger_fun(logger_fun, line)
-        end)
+    Keyword.put(options, :logger_fun, fn line ->
+      send(parent, {:quackdb_server_output, line})
+      call_logger_fun(logger_fun, line)
+    end)
+  end
 
-      Keyword.has_key?(options, :log_output) ->
-        options
+  defp output_logger(options) do
+    case Keyword.get(options, :log_output) do
+      nil ->
+        fn _line -> :ok end
 
-      true ->
-        Keyword.put(options, :logger_fun, fn line ->
-          send(parent, {:quackdb_server_output, line})
-        end)
+      level ->
+        prefix = Keyword.fetch!(options, :log_prefix)
+        transform = Keyword.get(options, :log_transform, &String.replace_invalid/1)
+        fn line -> Logger.log(level, [prefix, transform.(line)]) end
     end
   end
 
@@ -358,42 +419,172 @@ defmodule QuackDB.Server do
 
   defp wait_ready!(state, timeout, poll_interval) do
     deadline = System.monotonic_time(:millisecond) + timeout
-    do_wait_ready!(state, deadline, poll_interval, nil)
+    parent = self()
+    probe = Task.async(fn -> probe_until_ready(state, poll_interval, parent) end)
+
+    try do
+      do_wait_ready!(state, deadline, probe, %{
+        last_error: nil,
+        output_tail: "",
+        database_locked?: false
+      })
+    after
+      Task.shutdown(probe, :brutal_kill)
+    end
   end
 
-  defp do_wait_ready!(state, deadline, poll_interval, last_error) do
+  defp do_wait_ready!(state, deadline, probe, diagnostics) do
     remaining = deadline - System.monotonic_time(:millisecond)
 
     if remaining <= 0 do
-      raise QuackDB.Error.new(
+      raise startup_error(
+              state,
+              diagnostics,
               :server_start_timeout,
-              "DuckDB Quack server did not become ready",
-              source: :client,
-              metadata: %{last_error: last_error, uri: state.uri}
+              "DuckDB Quack server did not become ready"
             )
     end
 
+    daemon = state.daemon
+    %Task{ref: ref, pid: probe_pid} = probe
+
     receive do
+      {:EXIT, ^daemon, reason} ->
+        raise startup_error(
+                state,
+                Map.put(diagnostics, :exit_reason, reason),
+                :server_start_failed,
+                "DuckDB Quack server exited before becoming ready"
+              )
+
+      {^ref, :ok} ->
+        :ok
+
+      {:DOWN, ^ref, :process, ^probe_pid, reason} ->
+        raise startup_error(
+                state,
+                Map.put(diagnostics, :probe_exit_reason, reason),
+                :server_start_failed,
+                "DuckDB Quack readiness probe failed"
+              )
+
+      {:quackdb_server_probe_error, ^probe_pid, error} ->
+        do_wait_ready!(state, deadline, probe, %{diagnostics | last_error: error})
+
       {:quackdb_server_output, line} ->
         if ready_output?(line, state) do
           :ok
         else
-          do_wait_ready!(state, deadline, poll_interval, last_error)
+          do_wait_ready!(state, deadline, probe, capture_output(diagnostics, line, state.token))
         end
     after
-      min(poll_interval, remaining) ->
-        case check_ready(state) do
-          :ok -> :ok
-          {:error, error} -> do_wait_ready!(state, deadline, poll_interval, error || last_error)
-        end
+      max(remaining, 0) ->
+        raise startup_error(
+                state,
+                diagnostics,
+                :server_start_timeout,
+                "DuckDB Quack server did not become ready"
+              )
+    end
+  end
+
+  defp probe_until_ready(state, poll_interval, parent) do
+    Process.sleep(poll_interval)
+
+    case check_ready(state) do
+      :ok ->
+        :ok
+
+      {:error, error} ->
+        send(parent, {:quackdb_server_probe_error, self(), error})
+        probe_until_ready(state, poll_interval, parent)
     end
   end
 
   defp ready_output?(line, state) when is_binary(line) do
-    String.starts_with?(line, state.endpoint <> ",") or String.contains?(line, state.endpoint)
+    case parse_endpoint(state.endpoint) do
+      {:ok, host, port} ->
+        expected =
+          Enum.map_join(
+            [state.endpoint, "http://#{host}:#{port}", state.token],
+            ",",
+            &csv_field/1
+          )
+
+        line |> String.replace(~r/\e\[[0-9;]*m/, "") |> String.trim_trailing("\r") == expected
+
+      :error ->
+        false
+    end
   end
 
   defp ready_output?(_line, _state), do: false
+
+  defp csv_field(value) do
+    if String.contains?(value, [",", "\"", "\n", "\r"]) do
+      "\"" <> String.replace(value, "\"", "\"\"") <> "\""
+    else
+      value
+    end
+  end
+
+  defp capture_output(diagnostics, line, token) when is_binary(line) do
+    output =
+      diagnostics.output_tail <>
+        (line |> redact_output(token) |> String.replace_invalid()) <> "\n"
+
+    offset = max(byte_size(output) - @output_tail_bytes, 0)
+
+    %{
+      diagnostics
+      | output_tail:
+          output
+          |> binary_part(offset, byte_size(output) - offset)
+          |> trim_utf8_prefix()
+          |> :binary.copy(),
+        database_locked?: diagnostics.database_locked? or database_lock_output?(line)
+    }
+  end
+
+  defp capture_output(diagnostics, _line, _token), do: diagnostics
+
+  # Truncating valid UTF-8 can leave up to three leading continuation bytes.
+  defp trim_utf8_prefix(<<byte, rest::binary>>) when byte in 0x80..0xBF,
+    do: trim_utf8_prefix(rest)
+
+  defp trim_utf8_prefix(value), do: value
+
+  defp redact_output(line, token) do
+    [token, String.replace(token, "'", "''"), String.replace(token, "\"", "\"\"")]
+    |> Enum.flat_map(&String.split(&1, ["\n", "\r"], trim: true))
+    |> Enum.uniq()
+    |> Enum.sort_by(&byte_size/1, :desc)
+    |> Enum.reduce(line, &String.replace(&2, &1, "[REDACTED]"))
+  end
+
+  defp database_lock_output?(line) do
+    String.contains?(line, ["Could not set lock on file", "Could not obtain lock on file"]) and
+      String.contains?(line, [
+        "Conflicting lock is held",
+        "Resource temporarily unavailable",
+        "another process"
+      ])
+  end
+
+  defp startup_error(state, diagnostics, code, message) do
+    {code, message} =
+      if diagnostics.database_locked?,
+        do: {:database_locked, "DuckDB database is locked by another process"},
+        else: {code, message}
+
+    QuackDB.Error.new(code, message,
+      source: :client,
+      metadata:
+        diagnostics
+        |> Map.delete(:database_locked?)
+        |> Map.merge(%{uri: state.uri, database: state.database})
+    )
+  end
 
   defp check_ready(state) do
     with {:ok, uri} <- QuackDB.URI.normalize(state.uri),

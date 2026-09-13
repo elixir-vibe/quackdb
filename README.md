@@ -63,7 +63,7 @@ Add QuackDB to your dependencies:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.3.0"}
+    {:quackdb, "~> 0.5.21"}
   ]
 end
 ```
@@ -73,7 +73,7 @@ Optional integrations are enabled when their packages are present:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.3.0"},
+    {:quackdb, "~> 0.5.21"},
     {:ecto_sql, "~> 3.13"},
     {:explorer, "~> 0.11"},
     {:geo, "~> 4.1"}
@@ -103,6 +103,20 @@ children =
 ```
 
 `duckdb: :managed` downloads DuckDB's official CLI binary on first use, verifies known checksums for QuackDB's pinned DuckDB version, and caches it. QuackDB never downloads DuckDB during dependency compilation. `QuackDB.Server` runs DuckDB's idempotent `INSTALL quack` and then `LOAD quack` by default before serving. It writes generated boot SQL to an Elixir-managed temporary init file by default, so generated local server tokens are not embedded in process arguments. Set `install_quack?: false` only for locked-down environments that preinstall extensions and forbid startup-time extension installation. Use `QUACKDB_BINARY_PATH`, `QUACKDB_BINARY_CACHE_DIR`, `duckdb: "/path/to/duckdb"`, or run the `quackdb.install` Mix task when you want explicit control. See the [managed DuckDB guide](guides/managed-duckdb.md).
+
+For an Ecto Repo, pass a standard child tuple as `:client`:
+
+```elixir
+alias QuackDB.Server
+
+children =
+  Server.child_specs(
+    server: [name: MyApp.DuckDB, duckdb: :managed],
+    client: {MyApp.AnalyticsRepo, pool_size: 2}
+  )
+```
+
+Start the server first; consider `:rest_for_one` supervision so its clients restart with it. See the managed DuckDB guide for [startup diagnostics](guides/managed-duckdb.md#startup-diagnostics) and [shutdown/WAL safety](guides/managed-duckdb.md#concurrency-shutdown-and-copying-files). Separate commands can share one Quack server; separate read-only DuckDB processes cannot coexist with a writer on the same native database file.
 
 For rebuildable local artifacts, attach the persistent database with DuckDB's no-WAL recovery mode:
 

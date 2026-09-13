@@ -32,6 +32,24 @@ defmodule QuackDB.Integration.QueryTest do
     assert report =~ "Rows scanned:"
   end
 
+  test "creates and drops a standalone sequence without a backing column" do
+    alias QuackDB.{DDL, Sequence}
+    connection = start_connection!()
+    sequence = "standalone_keys_#{System.unique_integer([:positive])}"
+    QuackDB.query!(connection, DDL.create_sequence({:main, sequence}, start: 10, increment: 2))
+
+    try do
+      assert Sequence.next_values(connection, sequence, 3) == [10, 12, 14]
+      QuackDB.query!(connection, DDL.create_sequence(sequence, if_not_exists: true))
+      assert Sequence.next_values(connection, sequence, 1) == [16]
+    after
+      QuackDB.query!(connection, DDL.drop_sequence({:main, sequence}))
+    end
+
+    QuackDB.query!(connection, DDL.drop_sequence(sequence, if_exists: true))
+    assert {:error, _error} = QuackDB.query(connection, "SELECT nextval(?)", [sequence])
+  end
+
   test "finds and allocates sequence values from a real Quack server" do
     connection = start_connection!()
     sequence = "quackdb_sequence_test_#{System.unique_integer([:positive])}"

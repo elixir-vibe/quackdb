@@ -1,6 +1,8 @@
 defmodule QuackDB.ServerTest do
   use ExUnit.Case, async: true
 
+  alias QuackDB.ServerFixture
+
   test "child_spec uses provided name as supervisor id" do
     assert %{id: MyApp.DuckDB, start: {QuackDB.Server, :start_link, [options]}} =
              QuackDB.Server.child_spec(name: MyApp.DuckDB, token: "secret")
@@ -242,6 +244,297 @@ defmodule QuackDB.ServerTest do
 
     assert os_pid == :error or is_integer(os_pid)
     assert %{output_byte_count: _} = QuackDB.Server.statistics(server)
+  end
+
+  @tag capture_log: true
+  test "startup reports daemon exit promptly with its output and status" do
+    fixture = ServerFixture.start!("boot failed")
+    error = ServerFixture.finish!(fixture, 7)
+
+    assert error.code == :server_start_failed
+    assert error.metadata.exit_reason == {:exit_status, 7}
+    assert error.metadata.output_tail == fixture.output
+  end
+
+  @tag capture_log: true
+  test "preserves exit status and custom mappings when MuonTrap supplies the status" do
+    error = startup_error!(daemon_command: {"sh", ["-c", "exit 7"]})
+    assert error.metadata.exit_reason == {:exit_status, 7}
+
+    error =
+      startup_error!(
+        daemon_command: {"sh", ["-c", "exit 2"]},
+        daemon_options: [exit_status_to_reason: fn status -> {:custom_exit, status} end]
+      )
+
+    assert error.metadata.exit_reason == {:custom_exit, 2}
+  end
+
+  @tag capture_log: true
+  test "normal daemon exit before readiness is a startup failure" do
+    error = startup_error!(daemon_command: {"sh", ["-c", "exit 0"]})
+    assert error.code == :server_start_failed
+    assert error.metadata.exit_reason == :normal
+  end
+
+  @tag capture_log: true
+  test "classifies lock conflicts but not unrelated file errors" do
+    message =
+      "IO Error: Could not set lock on file db: Conflicting lock is held by another process"
+
+    error = message |> ServerFixture.start!() |> ServerFixture.finish!()
+
+    assert error.code == :database_locked
+    assert error.metadata.output_tail =~ message
+
+    error =
+      "Could not set lock on file: Permission denied"
+      |> ServerFixture.start!()
+      |> ServerFixture.finish!()
+
+    assert error.code == :server_start_failed
+  end
+
+  @tag capture_log: true
+  test "startup output is bounded and redacts tokens before truncation" do
+    token = "private'\"token"
+    output = String.duplicate("old output\n", 1_000) <> token <> "\nlatest output"
+
+    error = output |> ServerFixture.start!(token: token) |> ServerFixture.finish!()
+
+    assert byte_size(error.metadata.output_tail) <= 8_192
+    assert error.metadata.output_tail =~ "[REDACTED]\nlatest output\n"
+    refute error.metadata.output_tail =~ token
+  end
+
+  @tag capture_log: true
+  test "endpoint mentions and incomplete result rows do not signal readiness" do
+    for output <- ["Error binding quack:localhost", "quack:localhost,not-a-ready-row"] do
+      error = output |> ServerFixture.start!() |> ServerFixture.finish!()
+
+      assert error.code == :server_start_failed
+    end
+  end
+
+  @tag capture_log: true
+  test "preserves an explicitly induced daemon failure without inventing an exit status" do
+    fixture = ServerFixture.start!("transport failed")
+    Process.exit(fixture.daemon, :epipe)
+    error = ServerFixture.await_error!(fixture)
+
+    assert error.code == :server_start_failed
+    assert error.metadata.exit_reason == :epipe
+    assert error.metadata.output_tail == fixture.output
+  end
+
+  @tag capture_log: true
+  test "daemon exit interrupts a stalled readiness probe without losing diagnostics" do
+    fixture = ServerFixture.start!("boot failed", uri: stalled_endpoint!(), poll_interval: 1)
+    assert_receive :probe_connected, 5_000
+    {probe, monitor} = ServerFixture.suspend_probe!(fixture)
+
+    error = ServerFixture.finish!(fixture, 7)
+
+    assert error.code == :server_start_failed
+    assert error.metadata.exit_reason == {:exit_status, 7}
+    assert error.metadata.output_tail == fixture.output
+    assert_receive {:DOWN, ^monitor, :process, ^probe, :killed}, 5_000
+    assert_receive :probe_closed, 5_000
+  end
+
+  test "late probe reports do not crash a server that has become ready" do
+    server =
+      start_supervised!(
+        {QuackDB.Server,
+         daemon_command:
+           {"sh",
+            ["-c", "echo 'quack:localhost,http://localhost:9494,secret'; exec tail -f /dev/null"]},
+         token: "secret",
+         uri: "http://127.0.0.1:1",
+         poll_interval: 10_000}
+      )
+
+    send(server, {:quackdb_server_probe_error, self(), :closed})
+    assert QuackDB.Server.uri(server) == "http://127.0.0.1:1"
+  end
+
+  @tag capture_log: true
+  test "deadline cancels a stalled probe and closes its socket" do
+    # The only real-clock deadline test. The producer is never released and the
+    # probe cannot finish by itself. Startup must end through its own deadline.
+    fixture =
+      ServerFixture.start!("still booting",
+        uri: stalled_endpoint!(fail_first: true),
+        poll_interval: 1,
+        wait_timeout: 5_000
+      )
+
+    assert_receive :probe_connected, 5_000
+    {probe, monitor} = ServerFixture.suspend_probe!(fixture)
+    error = ServerFixture.await_error!(fixture)
+
+    assert error.code == :server_start_timeout
+    assert error.metadata.output_tail == fixture.output
+    assert error.metadata.last_error
+    refute Map.has_key?(error.metadata, :exit_reason)
+    assert_receive {:DOWN, ^monitor, :process, ^probe, :killed}, 5_000
+    assert_receive :probe_closed, 5_000
+  end
+
+  @tag capture_log: true
+  test "bounded diagnostic tails remain valid UTF-8 and JSON encodable" do
+    output = String.duplicate("🦆\n", 2_000)
+
+    for suffix <- ["", <<255>> <> "invalid byte"] do
+      fixture = ServerFixture.start!(output <> suffix)
+      # The uncorrected byte slice must be invalid, independent of random seed.
+      raw_tail = binary_part(fixture.output, byte_size(fixture.output) - 8_192, 8_192)
+      refute String.valid?(raw_tail)
+      error = ServerFixture.finish!(fixture)
+      tail = error.metadata.output_tail
+
+      assert byte_size(tail) <= 8_192
+      assert String.valid?(tail)
+      assert JSON.decode!(JSON.encode!(%{output_tail: tail})) == %{"output_tail" => tail}
+      if suffix != "", do: assert(tail =~ "�invalid byte\n")
+    end
+  end
+
+  @tag capture_log: true
+  test "captures output while preserving logger callbacks and exit status overrides" do
+    parent = self()
+
+    fixture =
+      ServerFixture.start!("custom logging",
+        daemon_options: [
+          logger_fun: fn line -> send(parent, {:logged, line}) end,
+          exit_status_to_reason: fn status -> {:custom_exit, status} end
+        ]
+      )
+
+    error = ServerFixture.finish!(fixture, 2)
+
+    assert_receive {:logged, "custom logging"}
+    assert error.metadata.output_tail == fixture.output
+    assert error.metadata.exit_reason == {:custom_exit, 2}
+  end
+
+  test "captures output without bypassing log_output transforms and metadata" do
+    log =
+      ExUnit.CaptureLog.capture_log([format: "$metadata$message", metadata: [:review]], fn ->
+        fixture =
+          ServerFixture.start!("logging failure",
+            daemon_options: [
+              log_output: :warning,
+              log_prefix: "prefix: ",
+              log_transform: &String.upcase/1,
+              logger_metadata: [review: "kept"]
+            ]
+          )
+
+        error = ServerFixture.finish!(fixture, 2)
+        assert error.metadata.output_tail == fixture.output
+      end)
+
+    assert log =~ "prefix: LOGGING FAILURE"
+    assert log =~ "review=kept"
+  end
+
+  test "child_specs accepts a Repo child tuple and retains shared credentials" do
+    [server_spec, repo_spec] =
+      QuackDB.Server.child_specs(
+        server: [endpoint: "quack:127.0.0.1:9503"],
+        client: {QuackDB.IntegrationRepo, pool_size: 2}
+      )
+
+    assert %{start: {QuackDB.Server, :start_link, [server_options]}} = server_spec
+    assert %{start: {QuackDB.IntegrationRepo, :start_link, [options]}} = repo_spec
+    assert options[:uri] == "http://127.0.0.1:9503"
+    assert options[:token] == server_options[:token]
+    assert options[:pool_size] == 2
+    assert is_binary(options[:token])
+    assert repo_spec == Supervisor.child_spec({QuackDB.IntegrationRepo, options}, [])
+
+    assert [^server_spec, ^repo_spec] =
+             QuackDB.Server.child_specs(
+               server: server_options,
+               client: {QuackDB.IntegrationRepo, options}
+             )
+  end
+
+  test "pairing respects client defaults and server overrides" do
+    client = {QuackDB.IntegrationRepo, uri: "http://example.test", token: "client"}
+    [server, _repo] = QuackDB.Server.child_specs(client: client)
+    assert %{start: {QuackDB.Server, :start_link, [options]}} = server
+    assert options[:uri] == "http://example.test"
+    assert options[:token] == "client"
+
+    [_server, repo] =
+      QuackDB.Server.child_specs(
+        server: [uri: "http://server.test", token: "server"],
+        client: client
+      )
+
+    assert %{start: {QuackDB.IntegrationRepo, :start_link, [options]}} = repo
+    assert options[:uri] == "http://server.test"
+    assert options[:token] == "server"
+  end
+
+  test "child_specs rejects invalid client shapes" do
+    for client <- [QuackDB.IntegrationRepo, {QuackDB.IntegrationRepo, %{}}, :invalid] do
+      assert_raise ArgumentError, ~r/expected :client/, fn ->
+        QuackDB.Server.child_specs(client: client)
+      end
+    end
+  end
+
+  defp stalled_endpoint!(options \\ []) do
+    {:ok, listener} = :gen_tcp.listen(0, [:binary, active: false, ip: {127, 0, 0, 1}])
+    {:ok, port} = :inet.port(listener)
+    on_exit(fn -> :gen_tcp.close(listener) end)
+    parent = self()
+
+    start_supervised!(
+      {Task,
+       fn ->
+         if Keyword.get(options, :fail_first, false) do
+           {:ok, socket} = :gen_tcp.accept(listener)
+
+           :ok =
+             :gen_tcp.send(
+               socket,
+               "HTTP/1.1 503 Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+             )
+
+           :ok = :gen_tcp.close(socket)
+         end
+
+         {:ok, socket} = :gen_tcp.accept(listener)
+         send(parent, :probe_connected)
+         await_socket_close(socket)
+         send(parent, :probe_closed)
+       end}
+    )
+
+    "http://127.0.0.1:#{port}"
+  end
+
+  defp await_socket_close(socket) do
+    case :gen_tcp.recv(socket, 0, 15_000) do
+      {:ok, _request} -> await_socket_close(socket)
+      {:error, :closed} -> :ok
+      other -> flunk("expected readiness probe socket to close, got: #{inspect(other)}")
+    end
+  end
+
+  defp startup_error!(options) do
+    Process.flag(:trap_exit, true)
+
+    options =
+      Keyword.merge([uri: "http://127.0.0.1:1", token: "secret", wait_timeout: 2_000], options)
+
+    assert {:error, {%QuackDB.Error{} = error, _stack}} = QuackDB.Server.start_link(options)
+    error
   end
 
   defp sleep_script! do

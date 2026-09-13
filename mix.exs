@@ -4,7 +4,7 @@ defmodule QuackDB.MixProject do
   def project do
     [
       app: :quackdb,
-      version: "0.5.20",
+      version: "0.5.21",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -36,7 +36,7 @@ defmodule QuackDB.MixProject do
   defp deps do
     [
       {:db_connection, "~> 2.7"},
-      {:mint, "~> 1.8"},
+      {:mint, "~> 1.10"},
       {:castore, "~> 1.0"},
       {:decimal, "~> 2.0 or ~> 3.0"},
       {:muontrap, "~> 1.5"},

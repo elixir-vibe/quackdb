@@ -43,7 +43,8 @@ defmodule QuackDB.DDL do
       Keyword.has_key?(options_or_columns, :as) ->
         create_table_as_options(schema_or_name, options_or_columns)
 
-      is_atom(schema_or_name) and function_exported?(schema_or_name, :__schema__, 1) ->
+      is_atom(schema_or_name) and Code.ensure_loaded?(schema_or_name) and
+          function_exported?(schema_or_name, :__schema__, 1) ->
         create_table(
           schema_or_name.__schema__(:source),
           schema_columns(schema_or_name),
@@ -72,7 +73,7 @@ defmodule QuackDB.DDL do
   def create_table(name, schema_or_columns, options \\ [])
 
   def create_table(name, schema, options) when is_atom(schema) and is_list(options) do
-    if function_exported?(schema, :__schema__, 1) do
+    if Code.ensure_loaded?(schema) and function_exported?(schema, :__schema__, 1) do
       create_table(name, schema_columns(schema), options)
     else
       create_table(name, [{schema, options}], [])
@@ -120,6 +121,48 @@ defmodule QuackDB.DDL do
   def drop_table(name, options \\ []) when is_list(options) do
     ["DROP TABLE ", if_exists(options), table(name)]
   end
+
+  @doc """
+  Builds a standalone `CREATE SEQUENCE` statement.
+
+  Names may be atoms, strings, or `{prefix, name}` tuples. Supported options are
+  `:start` (integer), `:increment` (nonzero integer), and `:if_not_exists` (boolean).
+  Other options raise rather than being silently ignored. Sequences can have
+  gaps; do not use them when a gapless transactional counter is required.
+
+      alias QuackDB.{DDL, Sequence}
+
+      QuackDB.query!(conn, DDL.create_sequence(:task_keys, start: 1))
+      Sequence.next_values(conn, :task_keys, 3)
+      #=> [1, 2, 3]
+  """
+  @spec create_sequence(QuackDB.SQL.Fragment.table(), keyword()) :: iodata()
+  def create_sequence(name, options \\ []) do
+    options = Keyword.validate!(options, [:start, :increment, :if_not_exists])
+    clauses = Enum.map(options, &sequence_option/1)
+    ["CREATE SEQUENCE ", if_not_exists(options), table(name), clauses]
+  end
+
+  @doc "Builds a `DROP SEQUENCE` statement, optionally with `if_exists: true`."
+  @spec drop_sequence(QuackDB.SQL.Fragment.table(), keyword()) :: iodata()
+  def drop_sequence(name, options \\ []) do
+    options = Keyword.validate!(options, [:if_exists])
+    Enum.each(options, &sequence_option/1)
+    ["DROP SEQUENCE ", if_exists(options), table(name)]
+  end
+
+  defp sequence_option({:start, value}) when is_integer(value),
+    do: [" START ", Integer.to_string(value)]
+
+  defp sequence_option({:increment, value}) when is_integer(value) and value != 0,
+    do: [" INCREMENT ", Integer.to_string(value)]
+
+  defp sequence_option({key, value})
+       when key in [:if_exists, :if_not_exists] and is_boolean(value),
+       do: []
+
+  defp sequence_option(option),
+    do: raise(ArgumentError, "invalid sequence option: #{inspect(option)}")
 
   defp table_query(%{__struct__: Ecto.Query} = query) do
     assert_unparameterized_query!(query)

@@ -39,6 +39,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     def dumpers(:map, type), do: [type, &json_dump/1]
     def dumpers(:binary_id, type), do: [type, Ecto.UUID]
+    def dumpers(:binary, type), do: [type, &blob_dump/1]
     def dumpers(_, type), do: [type]
 
     @impl Ecto.Adapter.Schema
@@ -112,6 +113,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     defp json_decode(value), do: {:ok, value}
 
     defp json_dump(value), do: {:ok, {:json, value}}
+    defp blob_dump(nil), do: {:ok, nil}
+    defp blob_dump(value), do: {:ok, {:blob, value}}
 
     defp unsupported!(feature, message) do
       raise QuackDB.Error.new(:ecto_feature_not_supported, message,

@@ -511,11 +511,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         _other -> false
       end)
       |> Enum.map(fn {:add, name, _type, _options} ->
-        [
-          "CREATE SEQUENCE ",
-          if_do(command == :create_if_not_exists, "IF NOT EXISTS "),
-          quote_name(serial_sequence_name(table, name))
-        ]
+        QuackDB.DDL.create_sequence(serial_sequence_name(table, name),
+          if_not_exists: command == :create_if_not_exists
+        )
       end)
     end
 

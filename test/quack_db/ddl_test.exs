@@ -34,6 +34,40 @@ defmodule QuackDB.DDLTest do
                  fn -> QuackDB.DDL.create_table(UnsupportedSchema, temporary: true) end
   end
 
+  test "sequence builders quote standalone and qualified names" do
+    alias QuackDB.DDL
+    assert IO.iodata_to_binary(DDL.create_sequence(:task_keys)) == ~s(CREATE SEQUENCE "task_keys")
+
+    assert IO.iodata_to_binary(
+             DDL.create_sequence({"my schema", "task\"keys"},
+               start: 10,
+               increment: -2,
+               if_not_exists: true
+             )
+           ) ==
+             ~s(CREATE SEQUENCE IF NOT EXISTS "my schema"."task""keys" START 10 INCREMENT -2)
+
+    assert IO.iodata_to_binary(DDL.drop_sequence({:main, :task_keys}, if_exists: true)) ==
+             ~s(DROP SEQUENCE IF EXISTS "main"."task_keys")
+
+    assert IO.iodata_to_binary(DDL.drop_sequence(:task_keys)) == ~s(DROP SEQUENCE "task_keys")
+  end
+
+  test "sequence builders reject invalid and unsupported options" do
+    for options <- [
+          [increment: 0],
+          [start: "1; DROP TABLE users"],
+          [increment: 1.5],
+          [if_not_exists: :yes],
+          [cycle: true]
+        ] do
+      assert_raise ArgumentError, fn -> QuackDB.DDL.create_sequence(:keys, options) end
+    end
+
+    assert_raise ArgumentError, fn -> QuackDB.DDL.drop_sequence(:keys, cascade: true) end
+    assert_raise ArgumentError, fn -> QuackDB.DDL.drop_sequence(:keys, if_exists: :yes) end
+  end
+
   test "create_table builds regular table DDL" do
     assert QuackDB.DDL.create_table("events", id: :integer, name: :varchar)
            |> IO.iodata_to_binary() == ~S[CREATE TABLE "events" ("id" INTEGER, "name" VARCHAR)]
