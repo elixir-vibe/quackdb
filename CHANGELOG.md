@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.5.23 - 2026-09-13
+
+### Added
+
+- Expose DuckDB JSON exception type and message in error metadata while preserving the original server message. The `errors_as_json` setting remains opt-in.
+- Add recursive JSON Schema export for profiling structs.
+
+### Fixed
+
+- Preserve declared Ecto type loading callbacks for custom UUID types such as UUIDv7, including nullable fields and arrays.
+- Preserve string keys in open-ended profiling `extra_info` maps and reject malformed known profile fields instead of returning undecoded values.
+
 ## 0.5.22 - 2026-09-13
 
 ### Fixed
