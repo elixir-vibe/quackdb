@@ -35,6 +35,48 @@ defmodule QuackDB.SQL.Fragment do
   @spec column(column()) :: iodata()
   def column(name), do: QuackDB.Type.quote_identifier(name)
 
+  @doc "Renders an inline CHECK built by `QuackDB.DDL.check/1`."
+  @spec check_constraint(QuackDB.DDL.Check.t()) :: iodata()
+  def check_constraint(%QuackDB.DDL.Check{expression: expression}) do
+    ["CHECK (", check_expression(expression), ")"]
+  end
+
+  defp check_expression({:compare, operator, left, right}) do
+    if left == {:value, nil} or right == {:value, nil} do
+      raise ArgumentError,
+            "CHECK comparisons with nil are not supported; use is_nil/1 or null: false"
+    end
+
+    operators = %{==: "=", !=: "<>", >: ">", >=: ">=", <: "<", <=: "<="}
+    [check_operand(left), " ", Map.fetch!(operators, operator), " ", check_operand(right)]
+  end
+
+  defp check_expression({operator, left, right}) when operator in [:and, :or] do
+    sql = if operator == :and, do: " AND ", else: " OR "
+    [check_group(left), sql, check_group(right)]
+  end
+
+  defp check_expression({:not, expression}), do: ["NOT (", check_expression(expression), ")"]
+  defp check_expression({:is_null, value}), do: [check_operand(value), " IS NULL"]
+
+  defp check_group({operator, _, _} = expression) when operator in [:and, :or],
+    do: ["(", check_expression(expression), ")"]
+
+  defp check_group(expression), do: check_expression(expression)
+
+  defp check_operand({:column, name}) when is_atom(name) or is_binary(name), do: column(name)
+
+  defp check_operand({:value, value}) do
+    case QuackDB.SQL.literal(value) do
+      {:ok, literal} -> literal
+      {:error, error} -> raise error
+    end
+  end
+
+  defp check_operand(other) do
+    raise ArgumentError, "invalid CHECK operand: #{inspect(other)}"
+  end
+
   @doc "Quotes a qualified column reference such as `source.id`."
   @spec qualified_column(alias_name(), column()) :: iodata()
   def qualified_column(table_alias, column) do

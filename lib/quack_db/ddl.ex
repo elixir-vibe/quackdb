@@ -1,5 +1,6 @@
 defmodule QuackDB.DDL do
-  import QuackDB.SQL.Fragment, only: [column: 1, table: 1]
+  import QuackDB.SQL.Fragment, only: [column: 1, table: 1, check_constraint: 1]
+  alias QuackDB.DDL.Check
 
   @moduledoc """
   Small DuckDB DDL SQL builders.
@@ -31,16 +32,46 @@ defmodule QuackDB.DDL do
           | {:if_not_exists, boolean()}
           | {:or_replace, boolean()}
           | {:as, iodata()}
+          | Check.t()
+
+  @doc """
+  Builds one inline CHECK constraint from an expression.
+
+  Bare identifiers refer to columns. Pin runtime values with `^`; use
+  `field("column name")` or `field(^name)` for other column names. Supports
+  comparisons (`==`, `!=`, `>`, `>=`, `<`, `<=`), `and`, `or`, `not`, and
+  `is_nil/1`. Arithmetic, arbitrary function calls, and raw SQL are rejected.
+
+      import QuackDB.DDL, only: [create_table: 3, check: 1]
+
+      maximum = 100
+      create_table(:events, [score: :integer],
+        check(score >= 0 and score < ^maximum)
+      )
+
+  Return values are composable: pass a single check or a list of checks as
+  `create_table/3`'s third argument. Table options can follow checks in that list:
+  `[check(score >= 0), temporary: true]`.
+  """
+  defmacro check(expression) do
+    expression = Check.expression_ast!(expression)
+    quote do: %QuackDB.DDL.Check{expression: unquote(expression)}
+  end
 
   @doc "Builds a `CREATE TABLE` statement from an Ecto schema module."
   @spec create_table(module()) :: iodata()
   def create_table(schema) when is_atom(schema), do: create_table(schema, [])
 
-  @spec create_table(module() | String.t() | atom(), [create_table_option()] | [column()]) ::
+  @spec create_table(
+          module() | String.t() | atom(),
+          Check.t() | [create_table_option()] | [column()]
+        ) ::
           iodata()
+  def create_table(schema, %Check{} = check), do: create_table(schema, [check])
+
   def create_table(schema_or_name, options_or_columns) when is_list(options_or_columns) do
     cond do
-      Keyword.has_key?(options_or_columns, :as) ->
+      Enum.any?(options_or_columns, &match?({:as, _}, &1)) ->
         create_table_as_options(schema_or_name, options_or_columns)
 
       is_atom(schema_or_name) and Code.ensure_loaded?(schema_or_name) and
@@ -63,14 +94,36 @@ defmodule QuackDB.DDL do
       QuackDB.DDL.create_table("events", [id: :integer], temporary: true)
       QuackDB.DDL.create_table("temp_events", EventSchema, temporary: true)
 
+  Pass a single `check/1` value or a list for inline constraints:
+
+      import QuackDB.DDL, only: [create_table: 3, check: 1]
+
+      create_table(:events, [{:score, :integer, null: false}],
+        [check(score >= 0), check(score < 100)]
+      )
+
+  Checks also work with schema-derived columns. Column names are quoted and
+  values use the SQL literal codec, not raw predicate strings. CHECK permits
+  NULL when its expression is unknown; use `null: false` to require a value.
+  Checks cannot be combined with `:as`. DuckDB does not preserve supplied CHECK
+  names reliably, so this API does not name checks or promise Ecto changeset
+  constraint mapping. ALTER ADD/DROP CONSTRAINT remains unsupported.
+
   Pass `:as` to build `CREATE TABLE AS` from iodata or an Ecto query without pinned params:
 
       QuackDB.DDL.create_table("docs", as: query, temporary: true)
       QuackDB.DDL.create_table("docs", as: query, or_replace: true)
   """
-  @spec create_table(String.t() | atom(), module() | [column()], [create_table_option()]) ::
+  @spec create_table(
+          String.t() | atom(),
+          module() | [column()],
+          Check.t() | [create_table_option()]
+        ) ::
           iodata()
   def create_table(name, schema_or_columns, options \\ [])
+
+  def create_table(name, schema_or_columns, %Check{} = check),
+    do: create_table(name, schema_or_columns, [check])
 
   def create_table(name, schema, options) when is_atom(schema) and is_list(options) do
     if Code.ensure_loaded?(schema) and function_exported?(schema, :__schema__, 1) do
@@ -81,6 +134,7 @@ defmodule QuackDB.DDL do
   end
 
   def create_table(name, columns, options) when is_list(columns) and is_list(options) do
+    {options, checks} = table_options!(options)
     assert_create_options!(options)
 
     [
@@ -92,6 +146,7 @@ defmodule QuackDB.DDL do
       table(name),
       " (",
       columns(columns),
+      Enum.map(checks, &[", ", check_constraint(&1)]),
       ")"
     ]
   end
@@ -112,6 +167,12 @@ defmodule QuackDB.DDL do
   end
 
   defp create_table_as_options(name, options) do
+    {options, checks} = table_options!(options)
+
+    if checks != [] do
+      raise ArgumentError, "CHECK constraints require explicit columns, not CREATE TABLE AS"
+    end
+
     {query, options} = Keyword.pop!(options, :as)
     create_table_as(name, query, options)
   end
@@ -247,6 +308,12 @@ defmodule QuackDB.DDL do
 
   defp if_exists(options) do
     if Keyword.get(options, :if_exists, false), do: "IF EXISTS ", else: []
+  end
+
+  defp table_options!(options) do
+    {checks, options} = Enum.split_with(options, &is_struct(&1, Check))
+    options = Keyword.validate!(options, [:temporary, :if_not_exists, :or_replace, :as])
+    {options, checks}
   end
 
   defp columns([]), do: raise(ArgumentError, "expected at least one column")

@@ -1,6 +1,8 @@
 defmodule QuackDB.DDLTest do
   use ExUnit.Case, async: true
 
+  require QuackDB.DDL, as: DDL
+
   defmodule EventSchema do
     use Ecto.Schema
 
@@ -71,6 +73,111 @@ defmodule QuackDB.DDLTest do
   test "create_table builds regular table DDL" do
     assert QuackDB.DDL.create_table("events", id: :integer, name: :varchar)
            |> IO.iodata_to_binary() == ~S[CREATE TABLE "events" ("id" INTEGER, "name" VARCHAR)]
+  end
+
+  test "create_table accepts a combined CHECK or separate CHECK values" do
+    maximum = 100
+    columns = [{:score, :integer, null: false}]
+
+    assert IO.iodata_to_binary(
+             DDL.create_table(:scores, columns, DDL.check(score >= 0 and score < ^maximum))
+           ) ==
+             ~s|CREATE TABLE "scores" ("score" INTEGER NOT NULL, CHECK ("score" >= 0 AND "score" < 100))|
+
+    assert IO.iodata_to_binary(
+             DDL.create_table(:scores, columns, [
+               DDL.check(score >= 0),
+               DDL.check(score < ^maximum)
+             ])
+           ) ==
+             ~s|CREATE TABLE "scores" ("score" INTEGER NOT NULL, CHECK ("score" >= 0), CHECK ("score" < 100))|
+
+    assert IO.iodata_to_binary(DDL.create_table(EventSchema, DDL.check(score > 0))) ==
+             ~s|CREATE TABLE "events" ("id" INTEGER, "name" VARCHAR, "score" DOUBLE, CHECK ("score" > 0))|
+
+    assert IO.iodata_to_binary(
+             DDL.create_table(:scores, [score: :integer], [DDL.check(score > 0), temporary: true])
+           ) ==
+             ~s|CREATE TEMP TABLE "scores" ("score" INTEGER, CHECK ("score" > 0))|
+  end
+
+  test "CHECK expressions quote fields, encode pins, and preserve grouping" do
+    alias QuackDB.SQL.Fragment
+    column_name = "a\"b"
+    value = "duck's"
+
+    assert IO.iodata_to_binary(
+             Fragment.check_constraint(DDL.check(field(^column_name) == ^value))
+           ) ==
+             ~s|CHECK ("a""b" = 'duck''s')|
+
+    assert IO.iodata_to_binary(Fragment.check_constraint(DDL.check(field("a\"b") != "duck's"))) ==
+             ~s|CHECK ("a""b" <> 'duck''s')|
+
+    assert IO.iodata_to_binary(
+             Fragment.check_constraint(
+               DDL.check((score >= -1 or score == 10) and not is_nil(score))
+             )
+           ) ==
+             ~s|CHECK (("score" >= -1 OR "score" = 10) AND NOT ("score" IS NULL))|
+
+    assert IO.iodata_to_binary(Fragment.check_constraint(DDL.check(lower <= upper))) ==
+             ~s|CHECK ("lower" <= "upper")|
+  end
+
+  test "CHECK pins are evaluated once when the constraint is built" do
+    import QuackDB.DDL, only: [check: 1]
+    alias QuackDB.SQL.Fragment
+    ref = make_ref()
+
+    value = fn ->
+      send(self(), ref)
+      100
+    end
+
+    constraint = check(score < ^value.())
+    assert_received ^ref
+    refute_received ^ref
+    assert IO.iodata_to_binary(Fragment.check_constraint(constraint)) == ~s|CHECK ("score" < 100)|
+    refute_received ^ref
+
+    value = nil
+
+    assert IO.iodata_to_binary(Fragment.check_constraint(check(is_nil(^value)))) ==
+             "CHECK (NULL IS NULL)"
+  end
+
+  test "CHECK expressions reject unsupported syntax without evaluating it" do
+    for expression <- [
+          quote(do: score in [1, 2]),
+          quote(do: score + 1 > 0),
+          quote(do: unknown(score)),
+          quote(do: score == nil),
+          "score > 0"
+        ] do
+      assert_raise ArgumentError, fn ->
+        Code.eval_quoted(
+          quote do
+            require QuackDB.DDL
+            QuackDB.DDL.check(unquote(expression))
+          end
+        )
+      end
+    end
+
+    value = nil
+
+    assert_raise ArgumentError, ~r/comparisons with nil/, fn ->
+      DDL.create_table(:scores, [score: :integer], DDL.check(score == ^value))
+    end
+
+    assert_raise ArgumentError, fn ->
+      DDL.create_table(:scores, [score: :integer], checks: [{:score, :>, 0}])
+    end
+
+    assert_raise ArgumentError, ~r/CREATE TABLE AS/, fn ->
+      DDL.create_table(:scores, [DDL.check(score > 0), as: "SELECT 1 AS score"])
+    end
   end
 
   test "create_table supports temporary and if_not_exists options" do

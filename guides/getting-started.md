@@ -801,21 +801,47 @@ end
 
 Supported DDL includes create/drop/alter table, add/modify/drop columns, references, ordinary and unique indexes, primary keys, composite primary keys, and table/column renames. DuckDB-incompatible options such as concurrent indexes, covering indexes, exclude constraints, constraint comments, and `NOT VALID` constraints raise explicit QuackDB errors.
 
-DuckDB does not support `ALTER TABLE ADD CONSTRAINT` or `DROP CONSTRAINT`, so the Ecto `create constraint(...)` and `drop constraint(...)` forms raise explicit unsupported-feature errors. For CHECK constraints, create the table with inline constraints using `execute/2` inside a migration instead:
+DuckDB does not support `ALTER TABLE ADD CONSTRAINT` or `DROP CONSTRAINT`, so the Ecto `create constraint(...)` and `drop constraint(...)` forms raise explicit unsupported-feature errors. Use `QuackDB.DDL.check/1` with `create_table/3` inside a reversible migration:
 
 ```elixir
+import QuackDB.DDL, only: [create_table: 3, drop_table: 1, check: 1]
+
 execute(
-  """
-  CREATE TABLE events (
-    id INTEGER PRIMARY KEY,
-    name VARCHAR NOT NULL,
-    score INTEGER DEFAULT 0,
-    CONSTRAINT positive_score CHECK (score >= 0)
-  )
-  """,
-  "DROP TABLE events"
+  fn ->
+    repo().query!(
+      create_table(:events,
+        [
+          {:id, :integer, primary_key: true},
+          {:name, :varchar, null: false},
+          {:score, :integer, default: 0}
+        ],
+        check(score >= 0)
+      )
+    )
+  end,
+  fn -> repo().query!(drop_table(:events)) end
 )
 ```
+
+Pass one combined constraint or a list of separate constraints:
+
+```elixir
+import QuackDB.DDL, only: [create_table: 3, check: 1]
+
+maximum = 100
+
+create_table(:events, [score: :integer],
+  check(score >= 0 and score < ^maximum)
+)
+
+create_table(:events, [score: :integer],
+  [check(score >= 0), check(score < ^maximum)]
+)
+```
+
+Bare identifiers refer to columns; pin runtime values with `^`. Use `field("column name")` or `field(^name)` for other identifiers. Comparisons, `and`, `or`, `not`, and `is_nil/1` are supported, with identifiers and literal values encoded separately. Table options can follow check values in a list, such as `[check(score >= 0), temporary: true]`. Raw predicates, arithmetic, arbitrary function calls, and CHECKs on `CREATE TABLE AS` are rejected. CHECK permits NULL when its expression is unknown; also declare `null: false` if NULL must be rejected. More complex checks require explicit inline SQL through `execute/2`.
+
+Adding a column with `null: false` uses `ADD COLUMN` followed by `SET NOT NULL`. DuckDB can refuse the second statement when other tables reference the altered table. QuackDB propagates this dependency error; the default transactional Ecto migration rolls back the added column and does not record the migration as applied. Outside a transaction, the first statement can remain applied. For new tables, declare required columns in the initial CREATE TABLE before creating dependent tables; QuackDB does not silently remove NOT NULL or automatically rebuild existing tables.
 
 Constraint violations currently raise database errors rather than returning changeset errors through `unique_constraint/3`, `foreign_key_constraint/3`, or `check_constraint/3`. DuckDB's violation messages do not reliably identify the constraint name Ecto needs; QuackDB does not guess names.
 
