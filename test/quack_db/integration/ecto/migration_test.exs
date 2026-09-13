@@ -167,6 +167,38 @@ defmodule QuackDB.Integration.Ecto.MigrationTest do
     execute_ddl!({:drop_if_exists, %Table{name: categories}, :restrict})
   end
 
+  test "decimal migration precision and scale preserve persisted values" do
+    start_repo!()
+    name = QuackDB.TestHelper.unique_table("decimal_precision")
+    table = %Table{name: name}
+    quoted = QuackDB.SQL.Fragment.table(name)
+    repo = QuackDB.IntegrationRepo
+
+    execute_ddl!({:create, table, [{:add, :amount, :decimal, [precision: 12, scale: 6]}]})
+    repo.query!(["INSERT INTO ", quoted, " VALUES (?)"], [Decimal.new("1.123456")])
+
+    assert %{rows: [["1.123456", "DECIMAL(12,6)"]]} =
+             repo.query!(["SELECT CAST(amount AS VARCHAR), typeof(amount) FROM ", quoted])
+
+    execute_ddl!({:alter, table, [{:add, :extra, :decimal, [precision: 15, scale: 8]}]})
+    repo.query!(["UPDATE ", quoted, " SET extra = ?"], [Decimal.new("2.12345678")])
+
+    assert %{rows: [["2.12345678", "DECIMAL(15,8)"]]} =
+             repo.query!(["SELECT CAST(extra AS VARCHAR), typeof(extra) FROM ", quoted])
+
+    execute_ddl!({:alter, table, [{:modify, :amount, :decimal, [precision: 18, scale: 9]}]})
+
+    assert %{rows: [["1.123456000", "DECIMAL(18,9)"]]} =
+             repo.query!(["SELECT CAST(amount AS VARCHAR), typeof(amount) FROM ", quoted])
+
+    repo.query!(["UPDATE ", quoted, " SET amount = ?"], [Decimal.new("3.123456789")])
+
+    assert %{rows: [["3.123456789"]]} =
+             repo.query!(["SELECT CAST(amount AS VARCHAR) FROM ", quoted])
+
+    execute_ddl!({:drop, table, :restrict})
+  end
+
   defp execute_ddl!(command) do
     command
     |> Connection.execute_ddl()

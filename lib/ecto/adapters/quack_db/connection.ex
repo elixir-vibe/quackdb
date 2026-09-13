@@ -530,7 +530,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       [
         quote_name(name),
         " ",
-        column_type(reference.type),
+        column_type(reference.type, options),
         column_options(options),
         reference_expr(reference)
       ]
@@ -541,7 +541,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
       [
         quote_name(name),
         " ",
-        column_type(type),
+        column_type(type, options),
         " DEFAULT nextval('",
         serial_sequence_name(table, name),
         "')",
@@ -550,7 +550,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     end
 
     defp column_definition(_table, {:add, name, type, options}) do
-      [quote_name(name), " ", column_type(type), column_options(options)]
+      [quote_name(name), " ", column_type(type, options), column_options(options)]
     end
 
     defp column_change_ddl(table, {:add, name, type, options} = change) do
@@ -583,14 +583,14 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         "ADD COLUMN ",
         quote_name(name),
         " ",
-        column_type(reference.type),
+        column_type(reference.type, options),
         column_options(options),
         reference_expr(reference)
       ]
     end
 
     defp column_change({:add, name, type, options}) do
-      ["ADD COLUMN ", quote_name(name), " ", column_type(type), column_options(options)]
+      ["ADD COLUMN ", quote_name(name), " ", column_type(type, options), column_options(options)]
     end
 
     defp column_change({:modify, name, type, options}) do
@@ -598,7 +598,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
         "ALTER COLUMN ",
         quote_name(name),
         " TYPE ",
-        column_type(type),
+        column_type(type, options),
         column_options(options)
       ]
     end
@@ -686,7 +686,26 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
     defp reference_action(:update, :restrict), do: " ON UPDATE RESTRICT"
     defp reference_action(_kind, _action), do: []
 
-    defp column_type(type) do
+    defp column_type(:decimal, options) do
+      if Keyword.has_key?(options, :precision) or Keyword.has_key?(options, :scale) do
+        precision = Keyword.get(options, :precision)
+        scale = Keyword.get(options, :scale, 0)
+
+        if is_integer(precision) and precision in 1..38 and
+             is_integer(scale) and scale >= 0 and scale <= precision do
+          QuackDB.Type.to_sql({:decimal, precision, scale})
+        else
+          unsupported_iodata!(
+            :migration_type,
+            "DuckDB DECIMAL requires integer precision between 1 and 38 and scale between 0 and precision; :scale requires :precision"
+          )
+        end
+      else
+        QuackDB.Type.to_sql(:decimal)
+      end
+    end
+
+    defp column_type(type, _options) do
       type
       |> QuackDB.Ecto.Type.column_type!(:migration)
       |> QuackDB.Type.to_sql()

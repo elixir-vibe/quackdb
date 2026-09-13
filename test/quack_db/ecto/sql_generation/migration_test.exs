@@ -212,5 +212,52 @@ defmodule QuackDB.Ecto.SQLGeneration.MigrationTest do
     assert sql == ~s|CREATE UNIQUE INDEX "events_name_index" ON "events" ("name")|
   end
 
+  test "decimal precision and scale apply to create, add and modify" do
+    table = %Table{name: "amounts"}
+
+    for {options, expected} <- [
+          {[], "DECIMAL"},
+          {[precision: 12], "DECIMAL(12, 0)"},
+          {[precision: 12, scale: 6], "DECIMAL(12, 6)"},
+          {[precision: 38, scale: 38], "DECIMAL(38, 38)"}
+        ] do
+      assert single_sql(
+               Connection.execute_ddl({:create, table, [{:add, :amount, :decimal, options}]})
+             ) ==
+               ~s|CREATE TABLE "amounts" ("amount" #{expected})|
+
+      assert single_sql(
+               Connection.execute_ddl({:alter, table, [{:add, :amount, :decimal, options}]})
+             ) ==
+               ~s(ALTER TABLE "amounts" ADD COLUMN "amount" #{expected})
+
+      assert single_sql(
+               Connection.execute_ddl({:alter, table, [{:modify, :amount, :decimal, options}]})
+             ) ==
+               ~s(ALTER TABLE "amounts" ALTER COLUMN "amount" TYPE #{expected})
+    end
+  end
+
+  test "invalid decimal options fail before generating lossy DDL" do
+    for options <- [
+          [scale: 2],
+          [precision: 0],
+          [precision: 39],
+          [precision: "12"],
+          [precision: 12, scale: -1],
+          [precision: 12, scale: 13],
+          [precision: 12, scale: 1.5],
+          [precision: nil]
+        ] do
+      for {command, action} <- [{:create, :add}, {:alter, :add}, {:alter, :modify}] do
+        assert_raise QuackDB.Error, ~r/DuckDB DECIMAL requires/, fn ->
+          Connection.execute_ddl(
+            {command, %Table{name: "amounts"}, [{action, :amount, :decimal, options}]}
+          )
+        end
+      end
+    end
+  end
+
   defp single_sql([sql]), do: IO.iodata_to_binary(sql)
 end

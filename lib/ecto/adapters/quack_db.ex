@@ -116,6 +116,7 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     defp json_decode(value) when is_binary(value), do: JSON.decode(value)
     defp json_decode(value), do: {:ok, value}
 
+    defp json_dump(nil), do: {:ok, nil}
     defp json_dump(value), do: {:ok, {:json, value}}
     defp blob_dump(nil), do: {:ok, nil}
     defp blob_dump(value), do: {:ok, {:blob, value}}

@@ -9,6 +9,9 @@ if Code.ensure_loaded?(Ecto.Type) do
     def column_type!(:map, :append), do: :varchar
     def column_type!(:map, :schema), do: raise(ArgumentError, inspect(:map))
 
+    def column_type!({:array, type}, usage) when usage in [:migration, :append],
+      do: {:list, column_type!(type, usage)}
+
     def column_type!(type, usage) when usage in [:migration, :append, :schema],
       do: type |> normalize_type() |> base_type!()
 
@@ -35,7 +38,7 @@ if Code.ensure_loaded?(Ecto.Type) do
     defp base_type!(type) when type in [:naive_datetime, :naive_datetime_usec], do: :timestamp
     defp base_type!(type) when type in [:utc_datetime, :utc_datetime_usec], do: :timestamp_tz
     defp base_type!(:map), do: :json
-    defp base_type!({:array, type}), do: {:list, base_type!(type)}
+    defp base_type!({:array, type}), do: {:list, type |> normalize_type() |> base_type!()}
 
     defp base_type!(type) do
       raise ArgumentError, inspect(type)
