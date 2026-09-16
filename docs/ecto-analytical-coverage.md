@@ -43,7 +43,7 @@ The adapter does not cover all DuckDB features.
 | Native append | schema types, subset columns/defaults, `RETURNING` | Adapter option | yes | partial | covered |
 | Mutations | `update_all` / `delete_all` | Ecto-native | yes | yes | covered |
 | Schema lifecycle | `Repo.update/2` / `Repo.delete/2` | Ecto-native | yes | yes | covered |
-| Migrations | create/drop/alter table, rename table/column, indexes, references | Ecto migration DDL | yes | yes | covered |
+| Migrations | create/drop/alter table, rename table/column, indexes, references in `CREATE TABLE` | Ecto migration DDL | yes | yes | covered with DuckDB limits |
 | Explain | `Ecto.Adapters.SQL.explain/4` | Ecto SQL | yes | yes | covered |
 | Full-text search | BM25 ranking and stemming | Ecto helper fragments | yes | yes | covered |
 | Advanced joins | semi/anti via `exists`, ASOF-style lateral top-one, positional raw SQL | Ecto-native/raw | yes | yes | partial |
@@ -52,9 +52,13 @@ The adapter does not cover all DuckDB features.
 
 ## Migration boundaries
 
-Basic migration DDL is generated for table creation/drop, column add/drop/modify, table and column renames, references, primary keys, composite primary keys, and ordinary/unique indexes. DuckDB-incompatible index options such as concurrent indexes, covering indexes, raw index options, index comments, custom `USING`, and `nulls_distinct` raise explicit QuackDB errors instead of being ignored.
+Basic migration DDL is generated for table creation/drop, column add/drop/modify, table and column renames, references in `CREATE TABLE`, primary keys, composite primary keys, and ordinary/unique indexes. Inline CHECK constraints can be added to new tables with `QuackDB.DDL.check/1`. DuckDB rejects `ALTER TABLE ... ADD COLUMN` when the added column includes CHECK or REFERENCES constraints, and `ALTER TABLE ADD/DROP CONSTRAINT` is unsupported. QuackDB does not silently omit those constraints or rebuild tables automatically.
 
-Advanced constraints and comments should be added only where DuckDB can enforce the same semantics. Until then, prefer raw SQL for DuckDB-specific DDL.
+For `ADD COLUMN ... null: false`, QuackDB emits `ADD COLUMN` followed by `ALTER COLUMN ... SET NOT NULL`, because DuckDB does not accept the constraint in the add-column statement. DuckDB can reject the second statement when other tables depend on the altered table; a normal transactional Ecto migration rolls back the change. For new tables, declare constraints inline in the initial `CREATE TABLE` before creating dependent tables.
+
+DuckDB-incompatible index options such as concurrent indexes, covering indexes, raw index options, index comments, custom `USING`, and `nulls_distinct` raise explicit QuackDB errors instead of being ignored.
+
+Advanced constraints and comments should be added only where DuckDB can enforce the same semantics. Until then, prefer `QuackDB.DDL.check/1` for supported inline checks or an explicit migration that preserves data, indexes, and dependent objects.
 
 ## QUALIFY-style filters
 

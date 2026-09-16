@@ -265,6 +265,31 @@ alias QuackDB.Explorer, as: QuackExplorer
 {:ok, df} = QuackExplorer.from_result(result)
 ```
 
+## Session-scoped DuckDB objects
+
+Each DBConnection pool worker is a separate DuckDB session. Temporary tables are visible only to the session that created them. With a pool, do not create one in a standalone call and use it in another:
+
+```elixir
+alias QuackDB.DDL
+
+QuackDB.query!(conn, DDL.create_table("events", [id: :integer], temporary: true))
+QuackDB.query!(conn, "SELECT * FROM events") # may use another session
+```
+
+Keep the complete create/use/drop or create/index/query workflow in one transaction:
+
+```elixir
+DBConnection.transaction(conn, fn tx ->
+  QuackDB.query!(tx, DDL.create_table("events", [id: :integer], temporary: true))
+  QuackDB.query!(tx, "INSERT INTO events VALUES (1)")
+  result = QuackDB.query!(tx, "SELECT * FROM events")
+  QuackDB.query!(tx, "DROP TABLE events")
+  result
+end)
+```
+
+Use a persistent table when the workflow must span calls. Temporary secrets are different: they are shared within the DuckDB instance but are not persisted across restarts. `pool_size: 1` can hide session switching but is not a substitute for keeping a session-scoped workflow together. QuackDB's Ecto append path uses its temporary staging table inside one transaction for this reason. Committing a transaction does not drop temporary tables; drop them explicitly before releasing the connection when they are no longer needed.
+
 ## Work with command results
 
 DuckDB returns affected counts as a `Count` result column for DML statements. QuackDB normalizes those into `num_rows`:
@@ -272,8 +297,13 @@ DuckDB returns affected counts as a `Count` result column for DML statements. Qu
 ```elixir
 alias QuackDB.{DDL, DML}
 
-{:ok, _} = QuackDB.query(conn, DDL.create_table("events", [id: :integer], temporary: true))
-{:ok, result} = QuackDB.query(conn, DML.insert_into("events", [[id: 1], [id: 2]]))
+{:ok, result} =
+  DBConnection.transaction(conn, fn tx ->
+    QuackDB.query!(tx, DDL.create_table("events", [id: :integer], temporary: true))
+    result = QuackDB.query!(tx, DML.insert_into("events", [[id: 1], [id: 2]]))
+    QuackDB.query!(tx, "DROP TABLE events")
+    result
+  end)
 
 result.command
 #=> :insert
@@ -305,7 +335,7 @@ result.metadata[:duckdb_rows]
 ```elixir
 alias QuackDB.DDL
 
-QuackDB.query!(conn, DDL.create_table("events", [id: :integer, name: :varchar, active: :boolean], temporary: true))
+QuackDB.query!(conn, DDL.create_table("events", [id: :integer, name: :varchar, active: :boolean]))
 
 {:ok, result} =
   QuackDB.insert_rows(conn, "events", [
@@ -436,7 +466,7 @@ Generated DDL and setup-oriented DML can participate in Ecto transactions:
 {:ok, :committed} =
   MyApp.AnalyticsRepo.transaction(fn ->
     MyApp.AnalyticsRepo.query!(
-      QuackDB.DDL.create_table("events", [id: :integer], temporary: true)
+      QuackDB.DDL.create_table("events", [id: :integer])
     )
 
     MyApp.AnalyticsRepo.query!(QuackDB.DML.insert_into("events", [[id: 1], [id: 2]]))
@@ -707,7 +737,7 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-For schema-backed inserts, QuackDB derives append types from the Ecto schema. That means nullable columns can be all `nil` in a batch without passing manual `:columns`, and omitted schema fields can be filled by DuckDB defaults or generated values. `RETURNING` is supported through a temporary append table followed by `INSERT ... RETURNING`:
+For schema-backed inserts, QuackDB derives append types from the Ecto schema. That means nullable columns can be all `nil` in a batch without passing manual `:columns`, and omitted schema fields can be filled by DuckDB defaults or generated values. `RETURNING` is supported through a temporary append table followed by `INSERT ... RETURNING`; QuackDB keeps that create/append/insert sequence in one transaction so the temporary table remains visible:
 
 ```elixir
 MyApp.AnalyticsRepo.insert_all(
@@ -720,25 +750,28 @@ MyApp.AnalyticsRepo.insert_all(
 
 The append insert path does not support query inserts, placeholders, or upserts/conflict targets. For streaming rows outside Ecto, use `QuackDB.insert_stream!/4`; it can take either a QuackDB connection or a QuackDB-backed Ecto repo.
 
-For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` and `CREATE TABLE AS` statements. Use `or_replace: true` for DuckDB table rewrites, and pass an Ecto schema as the second argument when you want a temporary staging table with the same columns under a different name:
+For temporary analytical setup, `QuackDB.DDL.create_table/3` builds quoted DuckDB `CREATE TABLE` and `CREATE TABLE AS` statements. Temporary tables are session-scoped; if the table is used by later statements, keep the workflow in one `DBConnection.transaction/3` or `Repo.transaction/2`. Use `or_replace: true` for DuckDB table rewrites, and pass an Ecto schema as the second argument when you want a temporary staging table with the same columns under a different name:
 
 ```elixir
-MyApp.AnalyticsRepo.query!(
-  QuackDB.DDL.create_table("events",
-    [payload: :json, occurred_at: :timestamp],
-    temporary: true
+MyApp.AnalyticsRepo.transaction(fn ->
+  MyApp.AnalyticsRepo.query!(
+    QuackDB.DDL.create_table("events", [payload: :json, occurred_at: :timestamp], temporary: true)
   )
-)
 
-source = QuackDB.Source.parquet("s3://bucket/events/*.parquet")
+  source = QuackDB.Source.parquet("s3://bucket/events/*.parquet")
 
-query =
-  from event in source,
-    select: %{id: event.id, name: event.name}
+  query =
+    from event in source,
+      select: %{id: event.id, name: event.name}
 
-MyApp.AnalyticsRepo.query!(
-  QuackDB.DDL.create_table("events_from_parquet", as: query, temporary: true)
-)
+  MyApp.AnalyticsRepo.query!(
+    QuackDB.DDL.create_table("events_from_parquet", as: query, temporary: true)
+  )
+
+  # Run the analysis here, while both temporary tables are visible.
+  MyApp.AnalyticsRepo.query!("DROP TABLE events_from_parquet")
+  MyApp.AnalyticsRepo.query!("DROP TABLE events")
+end)
 
 MyApp.AnalyticsRepo.query!(
   QuackDB.DDL.create_table("sorted_fragment_terms",
@@ -747,14 +780,19 @@ MyApp.AnalyticsRepo.query!(
   )
 )
 
-MyApp.AnalyticsRepo.query!(
-  QuackDB.DDL.create_table("temp_fragments", MyApp.Fragment, temporary: true)
-)
+MyApp.AnalyticsRepo.transaction(fn ->
+  MyApp.AnalyticsRepo.query!(
+    QuackDB.DDL.create_table("temp_fragments", MyApp.Fragment, temporary: true)
+  )
+
+  # Populate and use the temporary table here, before the transaction ends.
+  MyApp.AnalyticsRepo.query!("DROP TABLE temp_fragments")
+end)
 ```
 
 `DDL.create_table/2` rejects parameterized Ecto queries in `:as` because DDL helpers return SQL iodata, not `{sql, params}` tuples.
 
-For staging-table dedupe, keep the materialization step in normal Ecto and pass the query to `insert_all/3`:
+For staging-table dedupe, keep the materialization step in normal Ecto and pass the query to `insert_all/3`. Run the following inside the same transaction that creates and populates `temp_fragments`:
 
 ```elixir
 staged_new_rows =
@@ -779,6 +817,45 @@ MyApp.AnalyticsRepo.insert_all("fragments", staged_new_rows,
 
 Ecto support covers analytical reads and common write/setup flows. `Repo.query/3`, schema-backed reads, combinations, inserts/upserts, insert-from-query with `returning`, schema update/delete callbacks, `update_all` / `delete_all` mutations, `EXPLAIN`, transactions, and basic migrator-backed DDL work; advanced migration features and DuckDB-specific SQL should still use `Repo.query/3`.
 
+### Runtime filters and exact decimal casts
+
+`dynamic/2` is Ecto's built-in expression composition API. Use it to build
+filters from runtime JSON field names and types. For exact decimal comparisons,
+`QuackDB.Ecto.Decimal` retains explicit precision and scale in SQL casts:
+
+```elixir
+use QuackDB.Ecto
+alias QuackDB.Ecto.Decimal, as: DuckDecimal
+
+decimal = Ecto.ParameterizedType.init(DuckDecimal, precision: 18, scale: 4)
+field = "estimate"
+minimum = Decimal.new("9.5")
+estimate = dynamic([t], type(t.fields[^field], ^decimal))
+predicate = dynamic([t], ^estimate > ^minimum)
+
+from t in "tasks", where: ^predicate
+```
+
+Bare `:decimal` casts use DuckDB's default `DECIMAL(18,3)`, which rounds
+`9.5001` to `9.500`. Choose precision/scale appropriate to your data; explicit
+casts still follow DuckDB rounding and overflow rules. Invalid stored values
+raise conversion errors; missing JSON fields and JSON nulls remain NULL. The
+parameterized type controls query casts, not migration column definitions;
+continue specifying migration `precision:` and `scale:` explicitly.
+
+For literal substring searches, keep the existing `contains` name:
+
+```elixir
+from t in "tasks",
+  where: contains(t.title, ^search, case_sensitive: false)
+```
+
+`contains/3` is text-only and accepts a literal `case_sensitive: true` or
+`false` option. The insensitive form compares DuckDB-lowercased strings, not
+full Unicode case-folded strings. `%`, `_`, and backslashes are literal;
+an empty search matches and NULL operands produce NULL. Existing `contains/2`
+text/spatial dispatch is unchanged.
+
 ### Basic Ecto migrations
 
 QuackDB implements the Ecto migration DDL callbacks needed for common analytical setup migrations:
@@ -799,7 +876,11 @@ defmodule MyApp.Repo.Migrations.CreateEvents do
 end
 ```
 
-Supported DDL includes create/drop/alter table, add/modify/drop columns, references, ordinary and unique indexes, primary keys, composite primary keys, and table/column renames. DuckDB-incompatible options such as concurrent indexes, covering indexes, exclude constraints, constraint comments, and `NOT VALID` constraints raise explicit QuackDB errors.
+Supported DDL includes create/drop/alter table, add/modify/drop columns, references in `CREATE TABLE`, ordinary and unique indexes, primary keys, composite primary keys, and table/column renames. Inline CHECK constraints belong in the initial `CREATE TABLE` and can be built safely with `QuackDB.DDL.check/1`.
+
+DuckDB-incompatible options such as concurrent indexes, covering indexes, exclude constraints, constraint comments, and `NOT VALID` constraints raise explicit QuackDB errors.
+
+DuckDB does not support adding a column with a CHECK or REFERENCES constraint. QuackDB therefore rejects or propagates the engine error rather than silently dropping the constraint. For Ecto `add(:column, ..., null: false)`, QuackDB emits `ADD COLUMN` and then `SET NOT NULL`; the second statement can fail if other tables depend on the altered table. A transactional migration rolls back both statements. Declare required constraints when creating the table, before creating dependent tables.
 
 DuckDB does not support `ALTER TABLE ADD CONSTRAINT` or `DROP CONSTRAINT`, so the Ecto `create constraint(...)` and `drop constraint(...)` forms raise explicit unsupported-feature errors. Use `QuackDB.DDL.check/1` with `create_table/3` inside a reversible migration:
 

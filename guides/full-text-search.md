@@ -42,7 +42,7 @@ DuckDB creates a schema for each index. For `main.documents`, the generated sche
 
 ## Index a materialized source
 
-DuckDB's FTS indexes are created over tables, so source files are usually materialized first. This keeps the source workflow explicit and works with local files visible to the DuckDB server, HTTP(S), object stores, and lakehouse table functions.
+DuckDB FTS indexes operate on tables, so source scans are often materialized first. This example uses a persistent table so subsequent pooled calls can query it. Temporary tables are session-local: their entire create/index/search/cleanup workflow must stay on one checked-out connection, for example inside a transaction.
 
 ```elixir
 use QuackDB.Ecto
@@ -55,8 +55,7 @@ query =
   from doc in source,
     select: %{id: doc.id, title: doc.title, body: doc.body}
 
-QuackDB.query!(conn, DDL.create_table("docs", as: query, temporary: true))
-
+QuackDB.query!(conn, DDL.create_table("docs", as: query))
 QuackDB.query!(conn, FTS.create_index("docs", :id, [:title, :body], overwrite: true))
 ```
 

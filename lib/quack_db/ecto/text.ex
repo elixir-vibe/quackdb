@@ -30,6 +30,27 @@ if Code.ensure_loaded?(Ecto.Query.API) do
       %{name: :string_split_regex, arities: [2, 3]}
     ]
 
+    @doc """
+    Literal text containment with an explicit case-sensitivity option.
+
+        contains(event.name, ^search, case_sensitive: false)
+
+    With `case_sensitive: false`, both operands are lowercased by DuckDB before
+    matching. This is not full Unicode case folding. Wildcards remain literal;
+    an empty search matches and NULL operands produce NULL. Options must be a
+    literal keyword list with a boolean `:case_sensitive` value.
+    """
+    defmacro contains(value, search, options) do
+      sql =
+        case options do
+          [case_sensitive: false] -> "contains(lower(?), lower(?))"
+          [case_sensitive: true] -> "contains(?, ?)"
+          _ -> raise ArgumentError, "contains/3 expects case_sensitive: true or false"
+        end
+
+      text_fragment(sql, [value, search])
+    end
+
     @doc false
     def __text_helpers__, do: @text_helpers
 

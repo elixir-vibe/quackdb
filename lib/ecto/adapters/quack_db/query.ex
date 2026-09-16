@@ -779,6 +779,15 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp expr({:^, _meta, [_index]}, _context), do: "?"
     defp expr({:^, _meta, [_index, _count]}, _context), do: "?"
 
+    defp expr(
+           %Ecto.Query.Tagged{
+             value: value,
+             tag: {:parameterized, {QuackDB.Ecto.Decimal, params}}
+           },
+           context
+         ),
+         do: typed_expr(value, {:decimal, params.precision, params.scale}, context)
+
     defp expr(%Ecto.Query.Tagged{value: value, type: type}, context),
       do: typed_expr(value, type, context)
 
@@ -904,8 +913,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp expr({:^, _meta, [_index]}), do: "?"
     defp expr({:^, _meta, [_index, _count]}), do: "?"
 
-    defp expr(%Ecto.Query.Tagged{value: value, type: type}),
-      do: typed_expr(value, type, root_context(%Ecto.Query{}))
+    defp expr(%Ecto.Query.Tagged{} = tagged),
+      do: expr(tagged, root_context(%Ecto.Query{}))
 
     defp expr(value) when is_binary(value), do: literal(value)
     defp expr(value) when is_integer(value) or is_float(value), do: to_string(value)
@@ -1046,6 +1055,10 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp ecto_cast_type!(:string), do: QuackDB.Type.to_sql(:varchar)
     defp ecto_cast_type!(:binary), do: QuackDB.Type.to_sql(:blob)
     defp ecto_cast_type!(:decimal), do: QuackDB.Type.to_sql(:decimal)
+
+    defp ecto_cast_type!({:decimal, precision, scale}),
+      do: QuackDB.Type.to_sql({:decimal, precision, scale})
+
     defp ecto_cast_type!(:date), do: QuackDB.Type.to_sql(:date)
     defp ecto_cast_type!(:time), do: QuackDB.Type.to_sql(:time)
     defp ecto_cast_type!(:time_usec), do: QuackDB.Type.to_sql(:time)

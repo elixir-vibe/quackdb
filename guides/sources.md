@@ -107,6 +107,8 @@ MyApp.AnalyticsRepo.all(
 
 ## Materialize sources for FTS or repeated queries
 
+Temporary tables belong to one DuckDB session. Keep their complete create/use/drop workflow inside one transaction, or use a persistent table for subsequent pooled calls, as below. Temporary secrets are different: they are shared within the DuckDB instance but are not persisted across restarts.
+
 DuckDB features such as FTS indexes operate on tables, so source scans are often materialized first:
 
 ```elixir
@@ -120,7 +122,7 @@ query =
   from doc in source,
     select: %{id: doc.id, title: doc.title, body: doc.body}
 
-QuackDB.query!(conn, DDL.create_table("docs", as: query, temporary: true))
+QuackDB.query!(conn, DDL.create_table("docs", as: query))
 QuackDB.query!(conn, FTS.create_index("docs", :id, [:title, :body], overwrite: true))
 ```
 

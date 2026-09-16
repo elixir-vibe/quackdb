@@ -118,6 +118,8 @@ children =
 
 Start the server first; consider `:rest_for_one` supervision so its clients restart with it. See the managed DuckDB guide for [startup diagnostics](guides/managed-duckdb.md#startup-diagnostics) and [shutdown/WAL safety](guides/managed-duckdb.md#concurrency-shutdown-and-copying-files). Separate commands can share one Quack server; separate read-only DuckDB processes cannot coexist with a writer on the same native database file.
 
+Each client-pool worker is a separate DuckDB session. DuckDB temporary tables belong to the session that created them, so a later standalone call through a pool may use another session and report that the object does not exist. Keep a multi-step temporary-object workflow inside one `DBConnection.transaction/3` or `Repo.transaction/2`; use a persistent table when the workflow must span calls. Temporary secrets, unlike temporary tables, are shared within the DuckDB instance and are not persisted across restarts. Setting `pool_size: 1` may hide the problem but is not the lifecycle contract.
+
 For rebuildable local artifacts, attach the persistent database with DuckDB's no-WAL recovery mode:
 
 ```elixir
@@ -262,7 +264,7 @@ query =
       body: doc.body
     }
 
-MyApp.AnalyticsRepo.query!(DDL.create_table("docs", as: query, temporary: true))
+MyApp.AnalyticsRepo.query!(DDL.create_table("docs", as: query))
 MyApp.AnalyticsRepo.query!(FTS.create_index("docs", :id, [:title, :body], overwrite: true))
 
 schema = FTS.schema_name("main.docs")
@@ -429,7 +431,7 @@ Any `Table.Reader`-compatible data can be appended through the same column appen
 QuackDB.insert_table!(conn, "events", %{id: [1, 2], name: ["duck", "goose"]})
 ```
 
-Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Ecto `insert_all(..., insert_method: :append)` can use schema types for nullable batches, omitted/defaulted columns, and `RETURNING` through a temporary append table; direct append inserts can choose `append_shape: :columns` or `:rows` when one shape is known to fit a workload better. Native append does not evaluate column defaults; use `QuackDB.Sequence.for_column/4` or `QuackDB.Ecto.column_sequence_name/2` with `QuackDB.Sequence.next_values/4` when you need to preallocate sequence-backed IDs before appending explicit primary keys. See the [type support guide](guides/type-support.md), [getting started guide](guides/getting-started.md), and the [Explorer guide](guides/explorer.md).
+Append supports explicit types, batching, scalar DuckDB values, and nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` values. Ecto `insert_all(..., insert_method: :append)` can use schema types for nullable batches, omitted/defaulted columns, and `RETURNING` through a temporary append table; that multi-statement staging workflow runs in one transaction so it retains one DuckDB session. Direct append inserts can choose `append_shape: :columns` or `:rows` when one shape is known to fit a workload better. Native append does not evaluate column defaults; use `QuackDB.Sequence.for_column/4` or `QuackDB.Ecto.column_sequence_name/2` with `QuackDB.Sequence.next_values/4` when you need to preallocate sequence-backed IDs before appending explicit primary keys. See the [type support guide](guides/type-support.md), [getting started guide](guides/getting-started.md), and the [Explorer guide](guides/explorer.md).
 
 Small DML builders can keep setup/cleanup SQL readable while preserving query parameters:
 
@@ -514,7 +516,7 @@ The adapter currently covers:
 - explicit native append fast path via `insert_method: :append`, including schema-backed subset columns/defaults and `RETURNING`;
 - `update_all`, `delete_all`, schema `update/delete`, and transaction usage;
 - `Ecto.Adapters.SQL.explain/4`;
-- basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames.
+- basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames. References and CHECK constraints are supported inline during `CREATE TABLE`; DuckDB rejects adding a column with those constraints.
 
 DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/3`. See the [Ecto coverage matrix](docs/ecto-analytical-coverage.md).
 
