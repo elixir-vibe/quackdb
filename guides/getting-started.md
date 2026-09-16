@@ -270,21 +270,23 @@ alias QuackDB.Explorer, as: QuackExplorer
 Each DBConnection pool worker is a separate DuckDB session. Temporary tables are visible only to the session that created them. With a pool, do not create one in a standalone call and use it in another:
 
 ```elixir
+use QuackDB.Ecto
+alias MyApp.AnalyticsRepo, as: Repo
 alias QuackDB.DDL
 
-QuackDB.query!(conn, DDL.create_table("events", [id: :integer], temporary: true))
-QuackDB.query!(conn, "SELECT * FROM events") # may use another session
+Repo.query!(DDL.create_table("events", [id: :integer], temporary: true))
+Repo.all(from event in "events", select: event.id) # may use another session
 ```
 
 Keep the complete create/use/drop or create/index/query workflow in one transaction:
 
 ```elixir
-DBConnection.transaction(conn, fn tx ->
-  QuackDB.query!(tx, DDL.create_table("events", [id: :integer], temporary: true))
-  QuackDB.query!(tx, "INSERT INTO events VALUES (1)")
-  result = QuackDB.query!(tx, "SELECT * FROM events")
-  QuackDB.query!(tx, "DROP TABLE events")
-  result
+Repo.transaction(fn ->
+  Repo.query!(DDL.create_table("events", [id: :integer], temporary: true))
+  Repo.insert_all("events", [%{id: 1}])
+  ids = Repo.all(from event in "events", select: event.id)
+  Repo.query!(DDL.drop_table("events"))
+  ids
 end)
 ```
 
@@ -301,7 +303,7 @@ alias QuackDB.{DDL, DML}
   DBConnection.transaction(conn, fn tx ->
     QuackDB.query!(tx, DDL.create_table("events", [id: :integer], temporary: true))
     result = QuackDB.query!(tx, DML.insert_into("events", [[id: 1], [id: 2]]))
-    QuackDB.query!(tx, "DROP TABLE events")
+    QuackDB.query!(tx, DDL.drop_table("events"))
     result
   end)
 
@@ -769,8 +771,8 @@ MyApp.AnalyticsRepo.transaction(fn ->
   )
 
   # Run the analysis here, while both temporary tables are visible.
-  MyApp.AnalyticsRepo.query!("DROP TABLE events_from_parquet")
-  MyApp.AnalyticsRepo.query!("DROP TABLE events")
+  MyApp.AnalyticsRepo.query!(QuackDB.DDL.drop_table("events_from_parquet"))
+  MyApp.AnalyticsRepo.query!(QuackDB.DDL.drop_table("events"))
 end)
 
 MyApp.AnalyticsRepo.query!(
@@ -786,7 +788,7 @@ MyApp.AnalyticsRepo.transaction(fn ->
   )
 
   # Populate and use the temporary table here, before the transaction ends.
-  MyApp.AnalyticsRepo.query!("DROP TABLE temp_fragments")
+  MyApp.AnalyticsRepo.query!(QuackDB.DDL.drop_table("temp_fragments"))
 end)
 ```
 
