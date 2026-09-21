@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Add `QuackDB.Ecto.Decimal` for exact decimal casts with explicit precision and scale, usable through Ecto's parameterized types and `type/2`.
+- Add `contains/3` for literal, case-insensitive text containment via `case_sensitive: false`; `contains/2` behavior is unchanged.
+
+### Fixed
+
+- Preserve explicit decimal precision and scale when rendering casts for tagged parameterized decimal expressions.
+
 ## 0.5.24 - 2026-09-13
 
 ### Added
