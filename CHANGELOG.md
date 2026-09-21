@@ -2,14 +2,12 @@
 
 ## Unreleased
 
+## 0.5.25 - 2026-09-21
+
 ### Added
 
-- Add `QuackDB.Ecto.Decimal` for exact decimal casts with explicit precision and scale, usable through Ecto's parameterized types and `type/2`.
-- Add `contains/3` for literal, case-insensitive text containment via `case_sensitive: false`; `contains/2` behavior is unchanged.
-
-### Fixed
-
-- Preserve explicit decimal precision and scale when rendering casts for tagged parameterized decimal expressions.
+- Add `QuackDB.Ecto.Decimal` for exact decimal comparisons with explicit precision and scale, usable through Ecto parameterized types and `type/2`. Bare `:decimal` casts use DuckDB's `DECIMAL(18,3)` default and silently round values such as `9.5001`.
+- Add `contains/3` for literal case-insensitive text containment with `case_sensitive: false`; matching lowercases both operands in DuckDB and treats `%`, `_`, and backslashes literally. `contains/2` behavior is unchanged.
 
 ## 0.5.24 - 2026-09-13
 
