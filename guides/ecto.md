@@ -153,7 +153,7 @@ DuckDB regexes use RE2, so `~r` literals are intended for the syntax subset shar
 
 ### Pivoting and grouping extensions
 
-DuckDB statement-level syntax such as `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` is best handled with small SQL builders rather than raw strings:
+DuckDB statement-level syntax such as `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` has builders in `QuackDB.SQL`:
 
 ```elixir
 MyApp.AnalyticsRepo.query!(QuackDB.SQL.pivot(:events,
@@ -247,7 +247,7 @@ The adapter covers:
 - `Ecto.Adapters.SQL.explain/4`;
 - basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames. References and CHECK constraints are supported inline during `CREATE TABLE`; DuckDB rejects adding a column with those constraints.
 
-DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/3`. See the [Ecto coverage matrix](ecto-analytical-coverage.md).
+Statements that Ecto does not model have Elixir builders: `QuackDB.SQL` for `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, `CUBE`, and `EXPLAIN`; `QuackDB.DDL` for tables, sequences, and `CREATE TABLE AS`; `QuackDB.DML` for inserts, deletes, and `MERGE INTO`; `QuackDB.Analytics` for `SUMMARIZE`. Their output goes to `Repo.query/2`. See the [Ecto coverage matrix](ecto-analytical-coverage.md).
 
 
 ## Migrations

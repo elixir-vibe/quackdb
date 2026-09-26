@@ -31,7 +31,7 @@ DuckDB is already excellent at analytical SQL. QuackDB does the Elixir side prop
 
 Values stay Elixir-native: `Duration` steps for series, `%Geo.*{}` structs for spatial, `Date.Range` for calendars, maps and lists for `STRUCT`, `MAP`, and `LIST`, Explorer dataframes in and out, and Explorer's `:nan`, `:infinity`, and `:neg_infinity` for the floats the BEAM cannot represent. Anything DuckDB can decode but QuackDB cannot represent raises an explicit error rather than a lossy value.
 
-Raw SQL stays a first-class surface. DuckDB-specific syntax that Ecto cannot model, such as `PIVOT`, `GROUPING SETS`, or `SUMMARIZE`, goes through small SQL builders or `Repo.query/2`, with the same pooled sessions and telemetry.
+You never have to write SQL. What Ecto queries do not model has an Elixir builder: `QuackDB.DDL` for tables, sequences, `CREATE TABLE AS`, and inline checks; `QuackDB.DML` for inserts, `INSERT ... SELECT`, deletes, and `MERGE INTO`; `QuackDB.SQL` for `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, `CUBE`, `EXPLAIN`, and settings; `QuackDB.Analytics` for `SUMMARIZE`; `QuackDB.FTS`, `Source`, `Secret`, and `Extension` for the extensions. Every builder returns iodata with parameters kept separate, so it runs through the same pooled sessions and telemetry as a query. A SQL string is accepted wherever a builder is, for the day you want one.
 
 | Elixir layer | What QuackDB adds |
 | --- | --- |
@@ -119,6 +119,21 @@ from day in series(Date.range(~D[2024-01-01], ~D[2024-01-31])),
 Sources are Ecto sources too: `Source.parquet/2`, `Source.csv/2`, `Source.json/2`, and lakehouse catalogs can be queried where the data already lives, and materialized with `QuackDB.DDL.create_table(as: query)` when you want an index on them.
 
 See the [Ecto guide](https://hexdocs.pm/quackdb/ecto.html), [Sources](https://hexdocs.pm/quackdb/sources.html), [Full-text search](https://hexdocs.pm/quackdb/full-text-search.html), and [Spatial](https://hexdocs.pm/quackdb/spatial.html).
+
+## Statements as Elixir
+
+DDL, DML, and DuckDB's statement-level extensions are Elixir data, not strings:
+
+```elixir
+alias QuackDB.{DDL, DML, FTS, SQL, Source}
+
+Repo.query!(DDL.create_table("docs", as: from(d in Source.parquet("s3://bucket/docs/*.parquet"), select: %{id: d.id, body: d.body})))
+Repo.query!(FTS.create_index("docs", :id, [:body], overwrite: true))
+Repo.query!(SQL.pivot(:events, on: :kind, using: [sum: :n]))
+
+{sql, params} = DML.delete_from(:events, where: [kind: "test", day: day])
+Repo.query!(sql, params)
+```
 
 ## Writes
 
