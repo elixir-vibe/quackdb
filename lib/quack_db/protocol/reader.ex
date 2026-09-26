@@ -84,13 +84,33 @@ defmodule QuackDB.Protocol.Reader do
   def read_uint64(<<value::little-unsigned-64, rest::binary>>), do: {:ok, value, rest}
   def read_uint64(_binary), do: error(:truncated_uint64, "expected a 64-bit unsigned integer")
 
-  @spec read_float32(binary()) :: read_result(float())
+  @typedoc "A float, or one of the three IEEE 754 non-finite values the BEAM cannot represent as a float."
+  @type float_value :: float() | :nan | :infinity | :neg_infinity
+
+  # The BEAM refuses to build an infinity or NaN from a float match, so the
+  # non-finite bit patterns (exponent all ones) are matched as integers first.
+
+  @spec read_float32(binary()) :: read_result(float_value())
   def read_float32(<<value::little-float-32, rest::binary>>), do: {:ok, value, rest}
+
+  def read_float32(<<bits::little-unsigned-32, rest::binary>>)
+      when (bits >>> 23 &&& 0xFF) == 0xFF,
+      do: {:ok, non_finite(bits &&& 0x7F_FFFF, bits >>> 31), rest}
+
   def read_float32(_binary), do: error(:truncated_float32, "expected a 32-bit float")
 
-  @spec read_float64(binary()) :: read_result(float())
+  @spec read_float64(binary()) :: read_result(float_value())
   def read_float64(<<value::little-float-64, rest::binary>>), do: {:ok, value, rest}
+
+  def read_float64(<<bits::little-unsigned-64, rest::binary>>)
+      when (bits >>> 52 &&& 0x7FF) == 0x7FF,
+      do: {:ok, non_finite(bits &&& 0xF_FFFF_FFFF_FFFF, bits >>> 63), rest}
+
   def read_float64(_binary), do: error(:truncated_float64, "expected a 64-bit float")
+
+  defp non_finite(0, 0), do: :infinity
+  defp non_finite(0, 1), do: :neg_infinity
+  defp non_finite(_mantissa, _sign), do: :nan
 
   @spec read_list(binary(), (binary() -> read_result(value))) :: read_result([value])
         when value: term()

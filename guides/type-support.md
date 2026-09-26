@@ -17,8 +17,8 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `UBIGINT` | `non_neg_integer()` | Supported | Unsigned 64-bit. |
 | `HUGEINT` | `integer()` | Supported | Signed 128-bit. |
 | `UHUGEINT` | `non_neg_integer()` | Supported | Unsigned 128-bit. |
-| `FLOAT` | `float()` | Supported | 32-bit floating point. |
-| `DOUBLE` | `float()` | Supported | 64-bit floating point. |
+| `FLOAT` | `float()`, `:nan`, `:infinity`, `:neg_infinity` | Supported | 32-bit floating point; see [Non-finite floats](#non-finite-floats). |
+| `DOUBLE` | `float()`, `:nan`, `:infinity`, `:neg_infinity` | Supported | 64-bit floating point; see [Non-finite floats](#non-finite-floats). |
 | `DECIMAL` | `Decimal.t()` | Supported | Widths backed by 16-, 32-, 64-, and 128-bit storage are covered. |
 | `VARCHAR` / `CHAR` | `String.t()` | Supported | Invalid UTF-8 raises a protocol error. |
 | `BLOB` | `binary()` | Supported | Returned as raw bytes. |
@@ -29,6 +29,46 @@ QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below 
 | `GEOMETRY` | `binary()` | Partial | Decoded as WKB-compatible bytes when DuckDB's spatial extension returns geometry values; semantic geometry structs are not implemented. |
 
 Ecto schemas can use `:binary_id` or `Ecto.UUID` for UUID fields, including nullable fields and arrays. Schema reads return canonical UUID strings; SQL inserts and native append inserts preserve UUID values. Direct SQL results also remain canonical strings rather than Ecto's dumped 16-byte representation.
+
+## Non-finite floats
+
+DuckDB `FLOAT` and `DOUBLE` columns can hold IEEE 754 infinities and NaN, and the BEAM has no float for them: `<<x::float>>` refuses to build one. QuackDB represents them with the same atoms Explorer uses, so a result column hands to a dataframe without translation:
+
+| DuckDB value | Elixir value |
+| --- | --- |
+| `'inf'` | `:infinity` |
+| `'-inf'` | `:neg_infinity` |
+| `'nan'` (any NaN payload, any sign) | `:nan` |
+
+The atoms work in every direction:
+
+```elixir
+QuackDB.query!(conn, "SELECT 1.0/0.0 AS x, 'nan'::DOUBLE AS y").rows
+#=> [[:infinity, :nan]]
+
+QuackDB.query!(conn, "SELECT isnan(?)", [:nan]).rows
+#=> [[true]]
+
+QuackDB.insert_rows!(conn, "measurements", [[id: 1, ratio: :neg_infinity]])
+```
+
+As SQL parameters they are formatted as `'inf'::DOUBLE`, `'-inf'::DOUBLE`, and `'nan'::DOUBLE`; in native appends they are written as the IEEE bit patterns, with NaN as a quiet NaN.
+
+Ecto's `:float` type accepts only numbers, so a schema field of type `:float` raises on load when the row holds one of these atoms, exactly as it does with Postgrex's `:NaN` and `:inf`. Direct SQL through the Repo returns the atoms unchanged. A schema that must carry non-finite values declares a custom type:
+
+```elixir
+defmodule MyApp.Measure do
+  use Ecto.Type
+
+  def type, do: :float
+
+  def cast(value) when is_float(value) or value in [:nan, :infinity, :neg_infinity], do: {:ok, value}
+  def cast(_), do: :error
+
+  def load(value), do: cast(value)
+  def dump(value), do: cast(value)
+end
+```
 
 ## Temporal types
 
@@ -93,7 +133,7 @@ Supported parameter values:
 - `nil`
 - booleans
 - integers
-- finite floats
+- floats, and the non-finite atoms `:nan`, `:infinity`, and `:neg_infinity`
 - `Decimal.t()`
 - strings
 - `{:blob, binary}`

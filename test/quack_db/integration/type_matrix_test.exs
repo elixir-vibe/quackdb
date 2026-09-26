@@ -81,6 +81,52 @@ defmodule QuackDB.Integration.TypeMatrixTest do
            ]
   end
 
+  test "non-finite floats round trip as :infinity, :neg_infinity, and :nan" do
+    assert [[:infinity, :neg_infinity, :nan, :infinity, :nan, 1.5]] =
+             query_rows!("""
+             SELECT
+               1.0/0.0 AS pos_inf,
+               -1.0/0.0 AS neg_inf,
+               'nan'::DOUBLE AS not_a_number,
+               'inf'::FLOAT AS f32_inf,
+               'nan'::FLOAT AS f32_nan,
+               1.5::DOUBLE AS finite
+             """)
+
+    connection = start_connection!()
+
+    # As parameters, the atoms become DuckDB's own spellings and come back as themselves.
+    assert %{rows: [[:infinity, :neg_infinity, :nan, true]]} =
+             QuackDB.query!(connection, "SELECT ?, ?, ?, isnan(?)", [
+               :infinity,
+               :neg_infinity,
+               :nan,
+               :nan
+             ])
+
+    # Through the native append path.
+    name = QuackDB.TestHelper.unique_table("non_finite")
+
+    QuackDB.TestHelper.create_table!(connection, name, [
+      {:id, :integer},
+      {:amount, :double},
+      {:ratio, :float}
+    ])
+
+    # Native append writes the IEEE bit patterns; a SQL INSERT writes the literals.
+    QuackDB.insert_rows!(
+      connection,
+      name,
+      [[id: 1, amount: :infinity, ratio: :nan], [id: 2, amount: :neg_infinity, ratio: :infinity]],
+      columns: [id: :integer, amount: :double, ratio: :float]
+    )
+
+    QuackDB.TestHelper.insert_rows!(connection, name, [[3, 2.5, :neg_infinity]])
+
+    assert %{rows: [[1, :infinity, :nan], [2, :neg_infinity, :infinity], [3, 2.5, :neg_infinity]]} =
+             QuackDB.query!(connection, "SELECT id, amount, ratio FROM #{name} ORDER BY id")
+  end
+
   test "decodes nullable floating point vectors with non-decodable null payloads" do
     rows =
       query_rows!("""

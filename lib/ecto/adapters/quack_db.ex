@@ -13,6 +13,15 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
           uri: "http://[::1]:9494",
           token: "super_secret"
 
+    ## Non-finite floats
+
+    `FLOAT` and `DOUBLE` values that are infinite or NaN decode to `:infinity`,
+    `:neg_infinity`, and `:nan`, as Explorer spells them. Ecto's `:float` type
+    rejects atoms, so a schema field holding one raises on load, the same
+    contract Postgrex has with `:inf` and `:NaN`; `Repo.query/2` returns the
+    atoms as they are. See the "Non-finite floats" section of the type support
+    guide for a custom type that carries them through a schema.
+
     ## Migrations
 
     DuckDB adds a `null: false` column in two statements, and the second

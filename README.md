@@ -38,7 +38,7 @@ DuckDB is already excellent at analytical SQL. QuackDB focuses on the Elixir sid
 - run DuckDB as a supervised process during development, tests, notebooks, examples, or local apps;
 - use DBConnection semantics for pooled sessions, transactions, streams, and query lifecycle;
 - compose DuckDB analytical queries with Ecto instead of assembling SQL strings;
-- use Elixir-native values such as `Duration`, `%Geo.*{}`, `Date.Range`, maps, lists, structs, and Explorer dataframes where possible;
+- use Elixir-native values such as `Duration`, `%Geo.*{}`, `Date.Range`, maps, lists, structs, and Explorer dataframes where possible, and Explorer's `:nan`, `:infinity`, and `:neg_infinity` for the floats the BEAM cannot represent;
 - append rows, columns, and Explorer dataframes through DuckDB's native append path;
 - expose results to Livebook and dataframe tooling through `Table.Reader`;
 - keep raw SQL available when DuckDB-specific syntax is clearer or not represented by Ecto.

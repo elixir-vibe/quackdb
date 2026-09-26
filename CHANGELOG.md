@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Decode infinite and NaN `FLOAT` and `DOUBLE` values as `:infinity`, `:neg_infinity`, and `:nan`, the atoms Explorer uses, instead of failing the whole result with `:truncated_float64`; the BEAM cannot build such floats from a binary match. The atoms are accepted back as SQL parameters (`'inf'::DOUBLE` and friends) and in native appends. Ecto `:float` schema fields still reject them, as Postgrex's do; the type support guide shows a custom type.
 - Dump `:binary_id`, `Ecto.UUID`, and custom `:uuid` types as tagged UUID parameters. A dumped UUID whose 16 bytes happened to be valid UTF-8 was formatted as a text literal and DuckDB rejected it with "Could not convert string to INT128"; `insert_all`, pins, and `update_all` now always send `UUID '...'` literals.
 - Refuse to add a `null: false` column in an `alter table` inside the DDL transaction with an explicit `:ecto_feature_not_supported` error naming the fix, instead of letting DuckDB fail the second statement with "Cannot create index with outstanding updates". Migrations that add NOT NULL columns set `@disable_ddl_transaction true`.
 

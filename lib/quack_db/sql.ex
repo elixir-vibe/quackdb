@@ -18,6 +18,9 @@ defmodule QuackDB.SQL do
           | boolean()
           | integer()
           | float()
+          | :nan
+          | :infinity
+          | :neg_infinity
           | String.t()
           | Decimal.t()
           | Date.t()
@@ -217,6 +220,12 @@ defmodule QuackDB.SQL do
   def literal(true), do: {:ok, "TRUE"}
   def literal(false), do: {:ok, "FALSE"}
   def literal(value) when is_integer(value), do: {:ok, Integer.to_string(value)}
+
+  # DuckDB spells the non-finite doubles 'inf', '-inf', and 'nan'; the cast
+  # keeps them out of VARCHAR context.
+  def literal(:infinity), do: {:ok, "'inf'::DOUBLE"}
+  def literal(:neg_infinity), do: {:ok, "'-inf'::DOUBLE"}
+  def literal(:nan), do: {:ok, "'nan'::DOUBLE"}
 
   def literal(value) when is_float(value) do
     if finite_float?(value) do

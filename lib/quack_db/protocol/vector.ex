@@ -406,7 +406,18 @@ defmodule QuackDB.Protocol.Vector do
 
   defp encode_fixed_value(_type, :int64, value), do: <<value::little-signed-64>>
   defp encode_fixed_value(_type, :uint64, value), do: <<value::little-unsigned-64>>
+  defp encode_fixed_value(_type, :float, :infinity), do: <<0x7F80_0000::little-unsigned-32>>
+  defp encode_fixed_value(_type, :float, :neg_infinity), do: <<0xFF80_0000::little-unsigned-32>>
+  defp encode_fixed_value(_type, :float, :nan), do: <<0x7FC0_0000::little-unsigned-32>>
   defp encode_fixed_value(_type, :float, value), do: <<value::little-float-32>>
+
+  defp encode_fixed_value(_type, :double, :infinity),
+    do: <<0x7FF0_0000_0000_0000::little-unsigned-64>>
+
+  defp encode_fixed_value(_type, :double, :neg_infinity),
+    do: <<0xFFF0_0000_0000_0000::little-unsigned-64>>
+
+  defp encode_fixed_value(_type, :double, :nan), do: <<0x7FF8_0000_0000_0000::little-unsigned-64>>
   defp encode_fixed_value(_type, :double, value), do: <<value::little-float-64>>
 
   defp encode_fixed_value(%LogicalType{name: :decimal} = type, :int128, value),
