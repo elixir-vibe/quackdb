@@ -1,11 +1,11 @@
 # Getting started
 
-QuackDB connects Elixir applications to a remote DuckDB process through DuckDB's experimental Quack protocol. The client talks to the Quack HTTP endpoint, decodes DuckDB result chunks, and exposes the connection through `DBConnection`.
+QuackDB connects Elixir applications to a DuckDB process through DuckDB's Quack protocol. The client talks to the Quack HTTP endpoint, decodes DuckDB result chunks, and exposes the connection through `DBConnection`.
 
 ## Requirements
 
 - Elixir 1.19 or newer
-- DuckDB 1.5.5 or newer for the current Quack extension behavior
+- DuckDB 1.5.5 or newer with the `quack` extension
 - A running Quack server
 
 ## Install
@@ -935,7 +935,7 @@ On DuckDB 1.5.5, catalog lookup does not solve this reliably: supplied CHECK nam
 - Server-side bind parameters are not exposed by this Quack client path yet. QuackDB formats supported parameter values as DuckDB SQL literals client-side.
 - Native appends support row and column batches but not Arrow IPC or automatic local-file/data staging yet.
 - Ecto coverage focuses on analytical reads and common write/setup workflows, not every relational adapter feature.
-- Quack is experimental and may change with DuckDB releases.
+- The Quack protocol is versioned with DuckDB releases; QuackDB pins the DuckDB version its managed binary downloads.
 
 ## Supervision and connection options
 

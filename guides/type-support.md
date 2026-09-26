@@ -1,6 +1,6 @@
 # Type support
 
-QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below reflects the current package behavior and is intentionally conservative while both QuackDB and DuckDB's Quack protocol are experimental.
+QuackDB decodes DuckDB Quack result vectors into Elixir values. The table below reflects the package's behavior; anything not listed as supported raises an explicit error rather than decoding to a lossy value.
 
 ## Scalar types
 

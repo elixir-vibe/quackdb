@@ -1,9 +1,10 @@
 defmodule QuackDB do
   @moduledoc """
-  Remote DuckDB Quack protocol client.
+  DuckDB for Elixir applications: the DBConnection client.
 
-  The public API is backed by `DBConnection` so it can grow into an Ecto adapter
-  without changing the lower-level protocol codec.
+  Queries, streams, transactions, and native appends over DuckDB's Quack
+  protocol. `QuackDB.Server` supervises a local DuckDB process, and
+  `Ecto.Adapters.QuackDB` puts Ecto on top of this client.
   """
 
   alias QuackDB.Query

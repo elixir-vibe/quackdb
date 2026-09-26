@@ -11,7 +11,7 @@ defmodule QuackDB.MixProject do
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
       package: package(),
-      description: "Remote DuckDB Quack protocol client for Elixir",
+      description: "DuckDB for Elixir: supervised server, DBConnection client, and Ecto adapter",
       source_url: "https://github.com/elixir-vibe/quackdb",
       homepage_url: "https://github.com/elixir-vibe/quackdb",
       docs: docs(),
@@ -78,7 +78,7 @@ defmodule QuackDB.MixProject do
   defp package do
     [
       files:
-        ~w(.dialyzer_ignore.exs .formatter.exs CHANGELOG.md CONTRIBUTING.md README.md docs/ecto-analytical-coverage.md docs/protocol guides lib mix.exs),
+        ~w(.dialyzer_ignore.exs .formatter.exs CHANGELOG.md CONTRIBUTING.md LICENSE README.md docs/ecto-analytical-coverage.md docs/protocol guides lib mix.exs),
       licenses: ["MIT"],
       links: %{
         "GitHub" => "https://github.com/elixir-vibe/quackdb",
@@ -94,6 +94,9 @@ defmodule QuackDB.MixProject do
         "README.md",
         "CONTRIBUTING.md",
         "guides/getting-started.md",
+        "guides/ecto.md",
+        "guides/writes.md",
+        "guides/observability.md",
         "guides/type-support.md",
         "guides/examples.md",
         "guides/managed-duckdb.md",

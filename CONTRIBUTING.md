@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve QuackDB. QuackDB is an experimental remote DuckDB Quack protocol client, so protocol correctness and clear unsupported-feature errors matter more than broad but lossy behavior.
+Thanks for helping improve QuackDB. Protocol correctness and clear unsupported-feature errors matter more than broad but lossy behavior.
 
 ## Local checks
 

@@ -1,0 +1,275 @@
+# Ecto
+
+The optional Ecto SQL adapter gives applications Ecto query composition, schema reads and writes, migrations, and raw SQL through `Repo.query/3`, all over QuackDB's pooled DBConnection sessions.
+
+## Repo
+
+```elixir
+defmodule MyApp.AnalyticsRepo do
+  use Ecto.Repo, otp_app: :my_app, adapter: Ecto.Adapters.QuackDB
+end
+```
+
+Pair the Repo with a supervised server through `QuackDB.Server.child_specs/1` (see [Managed DuckDB](managed-duckdb.md)), or configure `uri:` and `token:` for a server that runs elsewhere:
+
+```elixir
+config :my_app, MyApp.AnalyticsRepo,
+  adapter: Ecto.Adapters.QuackDB,
+  uri: "http://[::1]:9494",
+  token: "super_secret"
+```
+
+## DuckDB workflows as Ecto queries
+
+`use QuackDB.Ecto` imports DuckDB's analytical helpers as macros that compose with normal queries.
+
+### Analytical aggregates
+
+```elixir
+defmodule MyApp.Analytics do
+  use QuackDB.Ecto
+
+  def category_scores do
+    from event in "events",
+      group_by: event.category,
+      select: %{
+        category: event.category,
+        p95: quantile_cont(event.duration_ms, 0.95),
+        median: median(event.duration_ms),
+        precise_sum: fsum(event.duration_ms),
+        mode: mode(event.duration_ms),
+        weighted_average: weighted_avg(event.duration_ms, event.weight),
+        values: list(event.duration_ms, order_by: [desc_nulls_last: event.duration_ms]),
+        slow_events: filter(count(event.id), event.duration_ms > 1_000),
+        distinct_users: count(event.user_id, :distinct),
+        average_duration: coalesce(avg(event.duration_ms), 0),
+        events: count()
+      }
+  end
+end
+```
+
+### Date and timestamp series
+
+```elixir
+use QuackDB.Ecto
+
+from day in series(Date.range(~D[2024-01-01], ~D[2024-01-31])),
+  left_join: event in "events",
+  on: event.occurred_on == day.value,
+  group_by: day.value,
+  order_by: day.value,
+  select: %{
+    day: day.value,
+    events: count(event.id)
+  }
+```
+
+Timestamp series use `Duration` steps:
+
+```elixir
+from bucket in series(
+       ~N[2024-01-01 00:00:00],
+       ~N[2024-01-02 00:00:00],
+       step: Duration.new!(hour: 1)
+     ),
+  select: bucket.value
+```
+
+### Source scans
+
+DuckDB can query data where it already lives. QuackDB source helpers can be used directly as Ecto sources.
+
+```elixir
+use QuackDB.Ecto
+
+alias QuackDB.Source
+
+source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
+
+from event in source,
+  group_by: event.category,
+  select: %{
+    category: event.category,
+    events: count(),
+    avg_score: avg(event.score)
+  }
+```
+
+QuackDB does not upload local files for you. The DuckDB server must be able to see the path, URL, object store, or lakehouse catalog. See the [sources guide](sources.md).
+
+### CTAS and full-text search
+
+External data can be materialized with `CREATE TABLE AS`, indexed with DuckDB FTS, and queried with BM25 from Ecto.
+
+```elixir
+use QuackDB.Ecto
+
+alias QuackDB.{DDL, FTS, Source}
+
+query =
+  from doc in Source.parquet("s3://bucket/docs/*.parquet"),
+    select: %{
+      id: doc.id,
+      title: doc.title,
+      body: doc.body
+    }
+
+MyApp.AnalyticsRepo.query!(DDL.create_table("docs", as: query))
+MyApp.AnalyticsRepo.query!(FTS.create_index("docs", :id, [:title, :body], overwrite: true))
+
+schema = FTS.schema_name("main.docs")
+search = "duckdb analytics"
+
+from doc in "docs",
+  where: bm25(^schema, doc.id, ^search) > 0,
+  order_by: [desc: bm25(^schema, doc.id, ^search)],
+  limit: 10,
+  select: %{
+    id: doc.id,
+    title: doc.title,
+    score: bm25(^schema, doc.id, ^search)
+  }
+```
+
+See the [full-text search guide](full-text-search.md).
+
+### Text and regex predicates
+
+DuckDB text and RE2 regular-expression helpers compose with Ecto filters and aggregate `FILTER` clauses. Shared `contains/2` dispatches obvious string calls to DuckDB `contains` and spatial helper expressions to `ST_Contains`; ambiguous calls raise so `contains_text/2` and `st_contains/2` are available when you want to be explicit.
+
+```elixir
+use QuackDB.Ecto
+
+from event in "events",
+  where: contains(event.name, "duck") and regexp_matches(event.name, ~r/^duck/i),
+  select: %{
+    slug: regexp_replace(event.name, ~r/\s+/, "-", "g"),
+    parts: string_split(event.tags, ",")
+  }
+```
+
+DuckDB regexes use RE2, so `~r` literals are intended for the syntax subset shared with Elixir regexes.
+
+### Pivoting and grouping extensions
+
+DuckDB statement-level syntax such as `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` is best handled with small SQL builders rather than raw strings:
+
+```elixir
+MyApp.AnalyticsRepo.query!(QuackDB.SQL.pivot(:events,
+  on: :kind,
+  using: [sum: :n]
+))
+
+QuackDB.SQL.grouping_sets([[:category, :kind], [:category], []])
+QuackDB.SQL.rollup([:category, :kind])
+QuackDB.SQL.cube([:category, :kind])
+```
+
+### List predicates
+
+DuckDB LIST/ARRAY helpers map directly to common list functions such as `list_contains`, `list_has_any`, `list_has_all`, `len`, `list_extract`, `list_sort`, `list_intersect`, `list_filter`, `list_transform`, `list_reduce`, and `unnest`. `use QuackDB.Ecto` imports non-conflicting list helpers by default; use `contains_list/2` and `intersect_list/2` to avoid ambiguity with text/spatial `contains/2` and Ecto set-operation `intersect/2`.
+
+```elixir
+use QuackDB.Ecto
+
+from fragment in "fragments",
+  where: contains_list(fragment.terms, ^term_id) and has_any(fragment.terms, ^optional_term_ids),
+  select: %{
+    id: fragment.id,
+    term_count: list_length(fragment.terms),
+    first_term: extract(fragment.terms, 1),
+    matching_terms: intersect_list(fragment.terms, ^optional_term_ids),
+    large_terms: list_filter(fragment.terms, fn term -> term > ^min_term_id end),
+    doubled_terms: list_transform(fragment.terms, fn term -> term * 2 end),
+    term_labels:
+      list_transform(fragment.terms, fn term ->
+        case_when do
+          term >= 100 -> "large"
+          true -> "small"
+        end
+      end),
+    term_total: list_reduce(fragment.terms, fn total, term -> total + term end, 0),
+    term: unnest(fragment.terms)
+  }
+```
+
+MAP and STRUCT helpers follow the same pattern: natural names are available from focused imports, while `use QuackDB.Ecto` exposes explicit aliases for ambiguous helpers.
+
+```elixir
+use QuackDB.Ecto
+
+from event in "events",
+  where: contains_map(event.labels, ^"env") and contains_struct(event.metadata_tuple, ^"duck"),
+  select: %{
+    label_keys: map_keys(event.labels),
+    env: map_extract_value(event.labels, ^"env"),
+    name: struct_extract(event.metadata, ^"name")
+  }
+```
+
+### Spatial queries
+
+DuckDB Spatial works with Ecto queries and `%Geo.*{}` structs when the optional `:geo` package is installed.
+
+```elixir
+use QuackDB.Ecto
+
+import QuackDB.Ecto.Spatial
+
+alias QuackDB.Spatial
+
+MyApp.AnalyticsRepo.query!(Spatial.load())
+
+point = %Geo.Point{coordinates: {13.405, 52.52}, srid: nil}
+
+from place in "places",
+  where: intersects(place.geom, ^point) and distance(place.geom, ^point) < 1_000,
+  select: %{
+    id: place.id,
+    name: place.name,
+    wkt: as_text(place.geom)
+  }
+```
+
+`GEOMETRY` values decode as WKB-compatible bytes for tested DuckDB Spatial values. `QuackDB.Geometry` can convert to/from `%Geo.*{}` structs when the optional `:geo` package is installed. See the [spatial guide](spatial.md) and the [Spatial WMS example](https://github.com/elixir-vibe/quackdb/tree/master/examples/spatial_wms).
+
+## Coverage
+
+The adapter covers:
+
+- raw SQL via `Repo.query/3`;
+- schema-backed full selects and `Repo.get!/2`;
+- analytical reads with joins, filters, grouping, windows, CTEs, combinations, locks, fragments, and QuackDB helper macros;
+- `Repo.insert/2`, `Repo.insert_all/3`, `RETURNING`, `ON CONFLICT DO NOTHING`, and common `DO UPDATE` upserts;
+- explicit native append fast path via `insert_method: :append`, including schema-backed subset columns/defaults and `RETURNING`;
+- `update_all`, `delete_all`, schema `update/delete`, and transaction usage;
+- `Ecto.Adapters.SQL.explain/4`;
+- basic migration DDL through Ecto migrator: create/drop/alter tables, columns, references, indexes, primary keys, check constraints, and renames. References and CHECK constraints are supported inline during `CREATE TABLE`; DuckDB rejects adding a column with those constraints.
+
+DuckDB-specific SQL that Ecto cannot model cleanly should still use `Repo.query/3`. See the [Ecto coverage matrix](ecto-analytical-coverage.md).
+
+
+## Migrations
+
+Ecto migrations run through the adapter: create, alter, and drop tables, columns, references, indexes, primary keys, check constraints, and renames. References and CHECK constraints go inline in `create table`; DuckDB does not add them to an existing column.
+
+DuckDB adds a `null: false` column in two statements, and the second cannot run in the transaction that ran the first. A migration that adds a NOT NULL column sets `@disable_ddl_transaction true`; inside the DDL transaction the adapter refuses it with an `:ecto_feature_not_supported` error that says so.
+
+```elixir
+defmodule MyApp.Repo.Migrations.AddArchived do
+  use Ecto.Migration
+
+  @disable_ddl_transaction true
+
+  def change do
+    alter table(:events) do
+      add :archived, :boolean, default: false, null: false
+    end
+  end
+end
+```
+
+## Types
+
+UUIDs, binaries, JSON maps, decimals with explicit precision, and the non-finite floats all have documented representations; see [Type support](type-support.md).

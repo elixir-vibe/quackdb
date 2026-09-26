@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- The README is a short overview in the style of the other Elixir Vibe packages; the Ecto query DSL, writes, and observability material moved into their own guides. QuackDB no longer describes itself as experimental: the protocol, adapter, and result shapes have been stable for many releases and are validated against real DuckDB in CI.
+- Add the MIT `LICENSE` file to the package.
+
 ### Fixed
 
 - Decode infinite and NaN `FLOAT` and `DOUBLE` values as `:infinity`, `:neg_infinity`, and `:nan`, the atoms Explorer uses, instead of failing the whole result with `:truncated_float64`; the BEAM cannot build such floats from a binary match. The atoms are accepted back as SQL parameters (`'inf'::DOUBLE` and friends) and in native appends. Ecto `:float` schema fields still reject them, as Postgrex's do; the type support guide shows a custom type.
