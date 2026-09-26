@@ -106,6 +106,7 @@ Expected package contents are intentionally limited to the public package surfac
 - `README.md`
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
+- `LICENSE`
 - `.dialyzer_ignore.exs`
 - `.formatter.exs`
 - `mix.exs`

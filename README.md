@@ -70,7 +70,7 @@ You never have to write SQL. What Ecto queries do not model has an Elixir builde
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.25"}
+    {:quackdb, "~> 0.5.26"}
   ]
 end
 ```
