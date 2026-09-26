@@ -44,7 +44,7 @@ MyApp.Analytics.daily_latency(Date.range(~D[2024-01-01], ~D[2024-01-31]))
 #   >
 ```
 
-A `Date.Range` is a calendar source, a Parquet glob on S3 is a table, the regex is an Elixir sigil that runs as RE2, `filter` and `arg_max` are the aggregates plain Ecto lacks, and the result is a dataframe. None of it is a string, and this exact query runs in the test suite against a real DuckDB.
+A `Date.Range` is a calendar source, a Parquet glob on S3 is a table, the regex is an Elixir sigil that runs as RE2, `filter` and `arg_max` are the aggregates plain Ecto lacks, and the result is a dataframe.
 
 ## Why QuackDB
 
