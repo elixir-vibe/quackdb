@@ -131,7 +131,7 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
     def dataframe(connection, query, options, [])
         when is_map(query) and :erlang.is_map_key(:__struct__, query) and
                :erlang.map_get(:__struct__, query) == Ecto.Query and is_list(options) do
-      {statement, params} = ecto_statement_and_params(query)
+      {statement, params} = ecto_statement_and_params(connection, query)
       dataframe(connection, statement, params, options)
     end
 
@@ -157,7 +157,18 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
       end
     end
 
-    defp ecto_statement_and_params(query) do
+    # A Repo plans the query with Ecto itself, which is the only complete
+    # source of its parameters; a bare connection gets the best-effort walk.
+    defp ecto_statement_and_params(repo, query)
+         when is_atom(repo) and repo != nil do
+      if function_exported?(repo, :__adapter__, 0) and Code.ensure_loaded?(Ecto.Adapters.SQL) do
+        Ecto.Adapters.SQL.to_sql(:all, repo, query)
+      else
+        ecto_statement_and_params(nil, query)
+      end
+    end
+
+    defp ecto_statement_and_params(_connection, query) do
       statement =
         Ecto.Adapters.QuackDB.Connection
         |> apply(:all, [query])

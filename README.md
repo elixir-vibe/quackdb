@@ -10,20 +10,41 @@ defmodule MyApp.Analytics do
 
   alias QuackDB.Source
 
-  def category_latency do
-    source = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
+  # Daily API latency for a month, read straight from the lakehouse,
+  # with every day present even when nothing happened.
+  def daily_latency(month) do
+    events = Source.parquet("s3://bucket/events/*.parquet", hive_partitioning: true)
 
-    from event in source,
-      group_by: event.category,
-      select: %{
-        category: event.category,
-        p95: quantile_cont(event.duration_ms, 0.95),
-        median: median(event.duration_ms),
-        events: count()
-      }
+    query =
+      from day in series(month),
+        left_join: event in ^events,
+        on: event.occurred_on == day.value and regexp_matches(event.path, ~r"^/api/"),
+        group_by: day.value,
+        order_by: day.value,
+        select: %{
+          day: day.value,
+          requests: count(event.id),
+          errors: filter(count(event.id), event.status >= 500),
+          p95_ms: quantile_cont(event.duration_ms, 0.95),
+          slowest: arg_max(event.path, event.duration_ms)
+        }
+
+    QuackDB.Explorer.dataframe!(MyApp.AnalyticsRepo, query)
   end
 end
+
+MyApp.Analytics.daily_latency(Date.range(~D[2024-01-01], ~D[2024-01-31]))
+#=> #Explorer.DataFrame<
+#     Polars[31 x 5]
+#     day date [2024-01-01, 2024-01-02, 2024-01-03, ...]
+#     errors s64 [1, 0, 0, ...]
+#     p95_ms f64 [861.0, nil, 300.0, ...]
+#     requests s64 [2, 0, 1, ...]
+#     slowest string ["/api/users", nil, "/api/orders", ...]
+#   >
 ```
+
+A `Date.Range` is a calendar source, a Parquet glob on S3 is a table, the regex is an Elixir sigil that runs as RE2, `filter` and `arg_max` are the aggregates plain Ecto lacks, and the result is a dataframe. None of it is a string, and this exact query runs in the test suite against a real DuckDB.
 
 ## Why QuackDB
 
