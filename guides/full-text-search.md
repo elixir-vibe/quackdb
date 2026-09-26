@@ -38,7 +38,7 @@ Drop the generated index schema with:
 QuackDB.query!(conn, FTS.drop_index("documents"))
 ```
 
-DuckDB creates a schema for each index. For `main.documents`, the generated schema is `fts_main_documents`. Use `FTS.schema_name/1` when building raw SQL fragments.
+DuckDB creates a schema for each index. For `main.documents`, the generated schema is `fts_main_documents`; an unqualified `documents` lives in `main` and gets the same schema. Use `FTS.schema_name/1` when building raw SQL fragments.
 
 ## Index a materialized source
 

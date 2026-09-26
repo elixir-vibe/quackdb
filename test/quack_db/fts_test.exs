@@ -23,6 +23,8 @@ defmodule QuackDB.FTSTest do
 
   test "builds match and stem expressions" do
     assert FTS.schema_name("main.documents") == "fts_main_documents"
+    assert FTS.schema_name("documents") == "fts_main_documents"
+    assert FTS.schema_name(:documents) == "fts_main_documents"
 
     assert FTS.match_bm25(~s|"id"|, "duck search",
              fields: [:title, :body],

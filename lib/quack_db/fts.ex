@@ -65,11 +65,19 @@ defmodule QuackDB.FTS do
     ["PRAGMA drop_fts_index(", literal!(qualified_name(table)), ");"]
   end
 
-  @doc "Returns DuckDB's generated FTS schema name for a table."
+  @doc """
+  Returns DuckDB's generated FTS schema name for a table.
+
+  DuckDB names the schema after the fully qualified table, so an unqualified
+  table resolves to `main` the same way `create_index/4` does:
+  `"documents"` and `"main.documents"` both give `"fts_main_documents"`.
+  """
   @spec schema_name(atom() | String.t()) :: String.t()
   def schema_name(table) do
-    table
-    |> qualified_name()
+    name = qualified_name(table)
+    name = if String.contains?(name, "."), do: name, else: "main." <> name
+
+    name
     |> String.replace(~r/[^A-Za-z0-9_]/, "_")
     |> then(&"fts_#{&1}")
   end

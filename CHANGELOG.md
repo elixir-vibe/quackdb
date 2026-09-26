@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `QuackDB.FTS.schema_name/1` given an unqualified table name now returns the schema DuckDB actually creates (`fts_main_documents` for `documents`); it used to drop the `main` segment, so a search built from it failed with "Scalar Function with name match_bm25 does not exist".
+
 ## 0.5.26 - 2026-09-27
 
 ### Changed
