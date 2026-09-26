@@ -38,6 +38,14 @@ Drop the generated index schema with:
 QuackDB.query!(conn, FTS.drop_index("documents"))
 ```
 
+The index is a snapshot of the table when it was created; rows added later are not searchable until the index is recreated with `overwrite: true`. Checkpoint after recreating or dropping an index on a persistent database:
+
+```elixir
+QuackDB.query!(conn, "CHECKPOINT")
+```
+
+DuckDB 1.5.5 writes the `DROP SCHEMA ... CASCADE` behind those pragmas to the write-ahead log in an order it cannot replay, so a database closed without a checkpoint afterwards fails to open with `Cannot drop entry "fts_main_documents" because there are entries that depend on it`. Checkpointing flushes the log, and nothing is replayed.
+
 DuckDB creates a schema for each index. For `main.documents`, the generated schema is `fts_main_documents`; an unqualified `documents` lives in `main` and gets the same schema. Use `FTS.schema_name/1` when building raw SQL fragments.
 
 ## Index a materialized source
