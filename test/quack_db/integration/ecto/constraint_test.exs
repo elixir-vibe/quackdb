@@ -131,7 +131,7 @@ defmodule QuackDB.Integration.Ecto.ConstraintTest do
     end
   end
 
-  test "a referenced-table NOT NULL failure rolls back the whole Ecto migration" do
+  test "a NOT NULL add inside the DDL transaction is refused and the migration rolls back whole" do
     start_repo!()
     Repo.query!("CREATE TABLE referenced_projects (id INTEGER PRIMARY KEY)")
 
@@ -143,15 +143,16 @@ defmodule QuackDB.Integration.Ecto.ConstraintTest do
     Repo.insert_all("project_references", [%{project_id: 1}])
     version = 20_260_913_000_002
 
+    # Inside the DDL transaction the adapter refuses before DuckDB sees the
+    # statements, and the migration rolls back whole.
     error =
       assert_raise QuackDB.Error, fn ->
         Ecto.Migrator.up(Repo, version, AddReferencedRevision, log: false)
       end
 
-    assert error.code == :server_error
-    assert error.source == :server
-    assert error.message =~ "Cannot alter entry"
-    assert error.message =~ "entries that depend on it"
+    assert error.code == :ecto_feature_not_supported
+    assert error.source == :client
+    assert error.message =~ "@disable_ddl_transaction true"
 
     assert %{rows: []} =
              Repo.query!("""

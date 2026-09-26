@@ -33,6 +33,44 @@ defmodule QuackDB.Integration.Ecto.MigratorTest do
     end
   end
 
+  defmodule AddMigratorEventArchivedInTransaction do
+    use Ecto.Migration
+
+    def change do
+      alter table(:quackdb_migrator_events) do
+        add(:archived, :boolean, default: false, null: false)
+      end
+    end
+  end
+
+  @tag :integration
+  test "adding a NOT NULL column inside the DDL transaction is refused with guidance" do
+    start_repo!()
+
+    QuackDB.IntegrationRepo.query!(
+      QuackDB.DDL.drop_table("quackdb_migrator_events", if_exists: true)
+    )
+
+    QuackDB.IntegrationRepo.query!(QuackDB.DDL.drop_table("schema_migrations", if_exists: true))
+
+    assert :ok =
+             Ecto.Migrator.up(QuackDB.IntegrationRepo, 20_260_526_000_001, CreateMigratorEvents)
+
+    error =
+      assert_raise QuackDB.Error, ~r/@disable_ddl_transaction true/, fn ->
+        Ecto.Migrator.up(
+          QuackDB.IntegrationRepo,
+          20_260_526_000_003,
+          AddMigratorEventArchivedInTransaction
+        )
+      end
+
+    assert error.metadata.feature == :migration_not_null_add_in_transaction
+
+    assert [20_260_526_000_001] =
+             QuackDB.IntegrationRepo.all(from(m in "schema_migrations", select: m.version))
+  end
+
   @tag :integration
   test "Ecto.Migrator runs migrations through the adapter" do
     start_repo!()

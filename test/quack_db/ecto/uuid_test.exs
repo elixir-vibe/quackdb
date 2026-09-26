@@ -15,6 +15,26 @@ defmodule QuackDB.Ecto.UUIDTest do
     end
   end
 
+  test "dumps UUIDs tagged, so bytes that happen to be valid UTF-8 are never sent as text" do
+    ascii = "41414141-4141-4141-4141-414141414141"
+
+    # Dumps take canonical strings, as Ecto.UUID.dump/1 does; loads accept bytes too.
+    for type <- [:binary_id, Ecto.UUID, UUID] do
+      assert {:ok, {:uuid, ^ascii}} = Ecto.Type.adapter_dump(Adapter, type, ascii)
+
+      assert {:ok, [{:uuid, ^ascii}, nil]} =
+               Ecto.Type.adapter_dump(Adapter, {:array, type}, [ascii, nil])
+
+      assert {:ok, nil} = Ecto.Type.adapter_dump(Adapter, type, nil)
+    end
+
+    assert {:ok, {:uuid, uuid}} =
+             Ecto.Type.adapter_dump(Adapter, Version7, {:uuid_v7, UUID.autogenerate()})
+
+    assert uuid == UUID.autogenerate()
+    assert :error = Ecto.Type.adapter_dump(Adapter, :binary_id, "not a UUID")
+  end
+
   test "maps UUID schema and array types for DDL and native appends" do
     for usage <- [:migration, :append, :schema], type <- [:binary_id, Ecto.UUID] do
       assert QuackDB.Ecto.Type.column_type!(type, usage) == :uuid

@@ -54,6 +54,35 @@ defmodule QuackDB.Integration.UUIDTest do
              ])
   end
 
+  test "insert_all and pins send UUIDs as UUID literals even when their bytes are valid UTF-8" do
+    start_repo!()
+    name = unique_table("uuid_record")
+    create_uuid_table!(name)
+    ascii = "41414141-4141-4141-4141-414141414141"
+
+    assert {1, nil} =
+             Repo.insert_all({name, UUIDRecord}, [
+               %{
+                 id: ascii,
+                 external_id: ascii,
+                 parent_id: nil,
+                 related_ids: [ascii],
+                 external_ids: []
+               }
+             ])
+
+    query = from(record in {name, UUIDRecord})
+    assert %UUIDRecord{id: ^ascii, external_id: ^ascii, related_ids: [^ascii]} = Repo.one!(query)
+    assert %UUIDRecord{id: ^ascii} = Repo.one!(from(record in query, where: record.id == ^ascii))
+
+    assert {1, nil} =
+             Repo.update_all(from(record in query, where: record.id in ^[ascii]),
+               set: [parent_id: ascii]
+             )
+
+    assert %UUIDRecord{parent_id: ^ascii} = Repo.one!(query)
+  end
+
   test "custom UUID types round trip through schema reads, pins and returning" do
     start_repo!()
     name = unique_table("custom_uuid_record")

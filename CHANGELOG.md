@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed
+
+- Dump `:binary_id`, `Ecto.UUID`, and custom `:uuid` types as tagged UUID parameters. A dumped UUID whose 16 bytes happened to be valid UTF-8 was formatted as a text literal and DuckDB rejected it with "Could not convert string to INT128"; `insert_all`, pins, and `update_all` now always send `UUID '...'` literals.
+- Refuse to add a `null: false` column in an `alter table` inside the DDL transaction with an explicit `:ecto_feature_not_supported` error naming the fix, instead of letting DuckDB fail the second statement with "Cannot create index with outstanding updates". Migrations that add NOT NULL columns set `@disable_ddl_transaction true`.
+
 ## 0.5.25 - 2026-09-21
 
 ### Added

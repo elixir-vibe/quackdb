@@ -13,6 +13,14 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
           uri: "http://[::1]:9494",
           token: "super_secret"
 
+    ## Migrations
+
+    DuckDB adds a `null: false` column in two statements, and the second
+    cannot run in the transaction that ran the first. A migration that adds a
+    NOT NULL column sets `@disable_ddl_transaction true`; inside the DDL
+    transaction the adapter refuses it with an `:ecto_feature_not_supported`
+    error instead of letting DuckDB fail.
+
     """
 
     use Ecto.Adapters.SQL,
@@ -20,6 +28,33 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
 
     @impl Ecto.Adapter.Migration
     def supports_ddl_transaction?, do: true
+
+    # DuckDB adds a NOT NULL column in two statements (ADD COLUMN, then SET NOT
+    # NULL), and the second fails inside the transaction that ran the first.
+    # A migration that does this must opt out of the DDL transaction.
+    @impl Ecto.Adapter.Migration
+    def execute_ddl(meta, {:alter, table, changes} = definition, opts) do
+      not_null_adds =
+        for {:add, name, _type, options} <- changes,
+            Keyword.get(options, :null) == false,
+            do: name
+
+      if not_null_adds != [] and Ecto.Adapters.SQL.in_transaction?(meta) do
+        unsupported!(
+          :migration_not_null_add_in_transaction,
+          "DuckDB cannot add NOT NULL column(s) #{inspect(not_null_adds)} to #{inspect(table.name)} " <>
+            "inside a transaction: the SET NOT NULL step fails with outstanding updates. " <>
+            "Set `@disable_ddl_transaction true` on the migration, or add the column " <>
+            "without `null: false` and constrain it in a later migration."
+        )
+      else
+        Ecto.Adapters.SQL.execute_ddl(meta, Ecto.Adapters.QuackDB.Connection, definition, opts)
+      end
+    end
+
+    def execute_ddl(meta, definition, opts) do
+      Ecto.Adapters.SQL.execute_ddl(meta, Ecto.Adapters.QuackDB.Connection, definition, opts)
+    end
 
     @impl Ecto.Adapter.Migration
     def lock_for_migrations(_meta, _options, fun), do: fun.()
@@ -39,7 +74,8 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       do: [&Ecto.Type.embedded_dump(type, &1, :json), &json_dump/1]
 
     def dumpers(:map, type), do: [type, &json_dump/1]
-    def dumpers(:binary_id, type), do: [type, Ecto.UUID]
+    def dumpers(:binary_id, type), do: [type, Ecto.UUID, &uuid_dump/1]
+    def dumpers(:uuid, type), do: [type, &uuid_dump/1]
     def dumpers(:binary, type), do: [type, &blob_dump/1]
     def dumpers(_, type), do: [type]
 
@@ -124,6 +160,27 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     defp json_dump(value), do: {:ok, {:json, value}}
     defp blob_dump(nil), do: {:ok, nil}
     defp blob_dump(value), do: {:ok, {:blob, value}}
+
+    # A dumped UUID is 16 bytes that may happen to be valid UTF-8; tagging it
+    # keeps it from being formatted as text.
+    defp uuid_dump(nil), do: {:ok, nil}
+    defp uuid_dump({:uuid, _} = tagged), do: {:ok, tagged}
+
+    defp uuid_dump(<<_::128>> = value) do
+      case Ecto.UUID.load(value) do
+        {:ok, uuid} -> {:ok, {:uuid, uuid}}
+        :error -> :error
+      end
+    end
+
+    defp uuid_dump(value) when is_binary(value) do
+      case Ecto.UUID.cast(value) do
+        {:ok, uuid} -> {:ok, {:uuid, uuid}}
+        :error -> :error
+      end
+    end
+
+    defp uuid_dump(_value), do: :error
 
     defp unsupported!(feature, message) do
       raise QuackDB.Error.new(:ecto_feature_not_supported, message,
