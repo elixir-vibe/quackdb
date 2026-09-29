@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.27 - 2026-09-30
+
+### Changed
+
+- The managed DuckDB binary is 1.5.6, with checksums for all four targets. 1.5.5 stays a known version for `mix quackdb.install --version 1.5.5`.
 
 ### Fixed
 

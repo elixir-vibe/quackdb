@@ -70,7 +70,7 @@ You never have to write SQL. What Ecto queries do not model has an Elixir builde
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.26"}
+    {:quackdb, "~> 0.5.27"}
   ]
 end
 ```
@@ -83,7 +83,7 @@ Optional integrations light up when their packages are present:
 {:geo, "~> 4.1"}          # %Geo.*{} spatial values
 ```
 
-QuackDB needs DuckDB 1.5.5 or newer with the `quack` extension. With `duckdb: :managed` it downloads and verifies DuckDB's official CLI binary on first start, so nothing else has to be installed.
+QuackDB needs DuckDB 1.5.6 or newer with the `quack` extension. With `duckdb: :managed` it downloads and verifies DuckDB's official CLI binary on first start, so nothing else has to be installed.
 
 ## Quick start
 

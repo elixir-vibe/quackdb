@@ -13,10 +13,16 @@ defmodule QuackDB.Binary do
 
   alias QuackDB.Error
 
-  @default_version "1.5.5"
+  @default_version "1.5.6"
   @default_base_url "https://install.duckdb.org"
   @probe_sql "SELECT 2*3*7"
   @checksums %{
+    {"1.5.6", "linux-amd64"} =>
+      "cce2687a38681db644c248198b99ecd86170ff47e324c5f33e50c0042f142839",
+    {"1.5.6", "linux-arm64"} =>
+      "1af0541e649a3ae34eb20eec2ca564308bf0e8993e5d6dba6be77bfb289a2718",
+    {"1.5.6", "osx-amd64"} => "388ce7e8a96307d040a27709a4c193f455ad1d3bbcd576c118bf1ae8158973e7",
+    {"1.5.6", "osx-arm64"} => "7f19ac71f0a4bde308a247ac556d93ee95c03adc327ec85eeab9113294f11dd5",
     {"1.5.5", "linux-amd64"} =>
       "c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885",
     {"1.5.5", "linux-arm64"} =>

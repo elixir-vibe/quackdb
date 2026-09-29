@@ -2,12 +2,16 @@ defmodule QuackDB.BinaryTest do
   use ExUnit.Case, async: false
 
   test "exposes pinned version and known checksum targets" do
-    assert QuackDB.Binary.default_version() == "1.5.5"
+    assert QuackDB.Binary.default_version() == "1.5.6"
 
     assert {"1.5.5", "linux-amd64"} in QuackDB.Binary.known_targets()
     assert {"1.5.5", "linux-arm64"} in QuackDB.Binary.known_targets()
     assert {"1.5.5", "osx-amd64"} in QuackDB.Binary.known_targets()
     assert {"1.5.5", "osx-arm64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.6", "linux-amd64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.6", "linux-arm64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.6", "osx-amd64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.6", "osx-arm64"} in QuackDB.Binary.known_targets()
   end
 
   test "detects Nix-style macOS architecture triples" do

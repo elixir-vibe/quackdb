@@ -5,7 +5,7 @@ QuackDB connects Elixir applications to a DuckDB process through DuckDB's Quack 
 ## Requirements
 
 - Elixir 1.19 or newer
-- DuckDB 1.5.5 or newer with the `quack` extension
+- DuckDB 1.5.6 or newer with the `quack` extension
 - A running Quack server
 
 ## Install
@@ -15,7 +15,7 @@ Add `:quackdb` to your dependencies:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.26"}
+    {:quackdb, "~> 0.5.27"}
   ]
 end
 ```
@@ -25,7 +25,7 @@ Optional integrations are compiled only when their packages are available. Add E
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.26"},
+    {:quackdb, "~> 0.5.27"},
     {:explorer, "~> 0.11"}
   ]
 end
@@ -438,7 +438,7 @@ QuackDB includes an initial Ecto SQL adapter for raw SQL queries. The Ecto adapt
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.26"},
+    {:quackdb, "~> 0.5.27"},
     {:ecto_sql, "~> 3.13"}
   ]
 end
