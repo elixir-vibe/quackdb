@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Requires json_codec 0.3, so QuackDB installs alongside packages that need it, such as `iconify`. The decoded profile and server error structs are unchanged.
+
 ## 0.5.27 - 2026-09-30
 
 ### Changed
