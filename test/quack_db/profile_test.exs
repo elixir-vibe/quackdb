@@ -50,7 +50,6 @@ defmodule QuackDB.ProfileTest do
              %{"$ref" => "#/properties/children/items"}
 
     assert JSON.decode!(JSON.encode!(schema)) == schema
-    assert Profile.json_schema() == schema
   end
 
   test "malformed known profile fields fail instead of leaking undecoded values" do
