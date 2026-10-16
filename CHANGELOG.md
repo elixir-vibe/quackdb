@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Select DuckDB's official musl CLI on Alpine Linux from Erlang's system architecture. Managed downloads and `mix quackdb.install --target` now support `linux-amd64-musl` and `linux-arm64-musl`, with checksums for DuckDB 1.5.6 and 1.5.5.
+- Managed DuckDB downloads now detect musl on Alpine Linux. Downloads and `mix quackdb.install --target` support `linux-amd64-musl` and `linux-arm64-musl`.
 
 ## 0.5.28 - 2026-10-04
 
