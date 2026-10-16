@@ -5,9 +5,15 @@ defmodule Mix.Tasks.Quackdb.Install do
       mix quackdb.install
       mix quackdb.install --version 1.5.5 --force
       mix quackdb.install --target linux-amd64 --print-path
+      mix quackdb.install --target linux-arm64-musl --print-path
 
   The binary is cached under the user's cache directory by default. Set
   `QUACKDB_BINARY_CACHE_DIR` or pass `--cache-dir` to choose another location.
+
+  Linux targets support glibc and musl. Musl is detected from Erlang's system
+  architecture; use `--target linux-amd64-musl` or `--target linux-arm64-musl`
+  to prefetch explicitly. Alpine Linux requires `apk add libstdc++` to run
+  the musl binary.
   """
 
   use Mix.Task
