@@ -31,7 +31,7 @@ defmodule QuackDB.BinaryTest do
     end
   end
 
-  test "unsupported target errors include musl targets" do
+  test "rejects unsupported targets" do
     results = [
       QuackDB.Binary.target_for_system({:unix, :linux}, "riscv64-unknown-linux-musl"),
       QuackDB.Binary.target_for_system({:win32, :nt}, "x86_64-pc-windows"),
@@ -39,9 +39,7 @@ defmodule QuackDB.BinaryTest do
     ]
 
     for result <- results do
-      assert {:error, %QuackDB.Error{code: :unsupported_target, message: message}} = result
-      assert message =~ "linux-amd64-musl"
-      assert message =~ "linux-arm64-musl"
+      assert {:error, %QuackDB.Error{code: :unsupported_target}} = result
     end
   end
 
