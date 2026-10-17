@@ -5,13 +5,42 @@ defmodule QuackDB.BinaryTest do
     assert QuackDB.Binary.default_version() == "1.5.6"
 
     assert {"1.5.5", "linux-amd64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.5", "linux-amd64-musl"} in QuackDB.Binary.known_targets()
     assert {"1.5.5", "linux-arm64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.5", "linux-arm64-musl"} in QuackDB.Binary.known_targets()
     assert {"1.5.5", "osx-amd64"} in QuackDB.Binary.known_targets()
     assert {"1.5.5", "osx-arm64"} in QuackDB.Binary.known_targets()
     assert {"1.5.6", "linux-amd64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.6", "linux-amd64-musl"} in QuackDB.Binary.known_targets()
     assert {"1.5.6", "linux-arm64"} in QuackDB.Binary.known_targets()
+    assert {"1.5.6", "linux-arm64-musl"} in QuackDB.Binary.known_targets()
     assert {"1.5.6", "osx-amd64"} in QuackDB.Binary.known_targets()
     assert {"1.5.6", "osx-arm64"} in QuackDB.Binary.known_targets()
+  end
+
+  test "distinguishes musl and glibc Linux architecture triples" do
+    for {arch, target} <- [{"x86_64", "linux-amd64"}, {"aarch64", "linux-arm64"}] do
+      for triple <- ["#{arch}-alpine-linux-musl", "#{arch}-unknown-linux-musl"] do
+        assert QuackDB.Binary.target_for_system({:unix, :linux}, triple) ==
+                 {:ok, target <> "-musl"}
+      end
+
+      for triple <- ["#{arch}-pc-linux-gnu", "#{arch}-unknown-linux-gnu"] do
+        assert QuackDB.Binary.target_for_system({:unix, :linux}, triple) == {:ok, target}
+      end
+    end
+  end
+
+  test "rejects unsupported targets" do
+    results = [
+      QuackDB.Binary.target_for_system({:unix, :linux}, "riscv64-unknown-linux-musl"),
+      QuackDB.Binary.target_for_system({:win32, :nt}, "x86_64-pc-windows"),
+      QuackDB.Binary.install(target: "linux-riscv64-musl")
+    ]
+
+    for result <- results do
+      assert {:error, %QuackDB.Error{code: :unsupported_target}} = result
+    end
   end
 
   test "detects Nix-style macOS architecture triples" do

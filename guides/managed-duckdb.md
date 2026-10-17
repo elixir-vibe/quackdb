@@ -114,13 +114,21 @@ The install task can prefetch a supported target without validating that binary 
 mix quackdb.install --target linux-amd64 --cache-dir priv/quackdb-binaries
 ```
 
-This is useful for CI cache priming or container image build steps. Runtime `duckdb: :managed` still chooses the current OS/architecture automatically.
+This is useful for CI cache priming or container image build steps. Runtime `duckdb: :managed` still chooses the current OS, architecture, and libc automatically.
 
 Supported managed-download targets for the pinned version are:
 
 - `linux-amd64`
 - `linux-arm64`
+- `linux-amd64-musl`
+- `linux-arm64-musl`
 - `osx-amd64`
 - `osx-arm64`
 
 Windows managed downloads are not supported yet. Use `QUACKDB_BINARY_PATH` or pass `duckdb: "C:/path/to/duckdb.exe"` on Windows until zip extraction and checksum coverage are added.
+
+The musl builds require `libstdc++`. On Alpine Linux, install it in the runtime image:
+
+```sh
+apk add --no-cache libstdc++
+```

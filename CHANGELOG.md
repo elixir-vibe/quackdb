@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Managed DuckDB downloads now detect musl on Alpine Linux. Downloads and `mix quackdb.install --target` support `linux-amd64-musl` and `linux-arm64-musl`.
+
 ## 0.5.28 - 2026-10-04
 
 ### Changed

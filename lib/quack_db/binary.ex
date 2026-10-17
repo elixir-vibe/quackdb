@@ -19,17 +19,29 @@ defmodule QuackDB.Binary do
   @checksums %{
     {"1.5.6", "linux-amd64"} =>
       "cce2687a38681db644c248198b99ecd86170ff47e324c5f33e50c0042f142839",
+    {"1.5.6", "linux-amd64-musl"} =>
+      "b146bc46094e67f713e0a83a0309910dfbc6696a557e651f484f2d2f80e54f6b",
     {"1.5.6", "linux-arm64"} =>
       "1af0541e649a3ae34eb20eec2ca564308bf0e8993e5d6dba6be77bfb289a2718",
+    {"1.5.6", "linux-arm64-musl"} =>
+      "693c977b4a6b97cb5dbb445fb68750bb1e931e4a2b5887d75c2147265e8ce063",
     {"1.5.6", "osx-amd64"} => "388ce7e8a96307d040a27709a4c193f455ad1d3bbcd576c118bf1ae8158973e7",
     {"1.5.6", "osx-arm64"} => "7f19ac71f0a4bde308a247ac556d93ee95c03adc327ec85eeab9113294f11dd5",
     {"1.5.5", "linux-amd64"} =>
       "c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885",
+    {"1.5.5", "linux-amd64-musl"} =>
+      "59bc84a96f58777bb21b67129222628d0ac196bbf722d3107ceb94a8602429d2",
     {"1.5.5", "linux-arm64"} =>
       "50c719e603a4e599d435e5321542458edc1cfc5f7eed65979fe9bc5ae4e3ba23",
+    {"1.5.5", "linux-arm64-musl"} =>
+      "b4967d323429af32f4374f92fa67b265f2b680d9b23086244327e158584df764",
     {"1.5.5", "osx-amd64"} => "52ba07e03926b19454a627365761041faa2615eaed44afb42ce757d62f625f3d",
     {"1.5.5", "osx-arm64"} => "37144723eb43639a96b47207b44036e6dedc084f81afbf0c18625e7f3deac810"
   }
+  @targets @checksums
+           |> Enum.map(fn {{_version, target}, _checksum} -> target end)
+           |> Enum.uniq()
+           |> Enum.sort()
 
   @type option ::
           {:path, Path.t()}
@@ -238,6 +250,8 @@ defmodule QuackDB.Binary do
 
   @doc false
   def target_for_system(os, arch) do
+    linux_suffix = if String.ends_with?(arch, "-musl"), do: "-musl", else: ""
+
     cond do
       os == {:unix, :darwin} and String.starts_with?(arch, "aarch64-apple-darwin") ->
         {:ok, "osx-arm64"}
@@ -249,28 +263,28 @@ defmodule QuackDB.Binary do
         {:ok, "osx-amd64"}
 
       match?({:unix, _}, os) and String.starts_with?(arch, "x86_64") ->
-        {:ok, "linux-amd64"}
+        {:ok, "linux-amd64" <> linux_suffix}
 
       match?({:unix, _}, os) and String.starts_with?(arch, "aarch64") ->
-        {:ok, "linux-arm64"}
+        {:ok, "linux-arm64" <> linux_suffix}
 
       true ->
         error(
           :unsupported_target,
-          "unsupported DuckDB binary target for #{inspect(os)} #{arch}; supported targets are linux-amd64, linux-arm64, osx-amd64, and osx-arm64",
+          "unsupported DuckDB binary target for #{inspect(os)} #{arch}; supported targets are #{Enum.join(@targets, ", ")}",
           %{os: os, arch: arch}
         )
     end
   end
 
   defp validate_target(target) do
-    targets =
-      @checksums |> Enum.map(fn {{_version, target}, _checksum} -> target end) |> Enum.uniq()
-
-    if target in targets do
+    if target in @targets do
       {:ok, target}
     else
-      error(:unsupported_target, "unsupported DuckDB binary target #{inspect(target)}")
+      error(
+        :unsupported_target,
+        "unsupported DuckDB binary target #{inspect(target)}; supported targets are #{Enum.join(@targets, ", ")}"
+      )
     end
   end
 
