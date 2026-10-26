@@ -1,38 +1,117 @@
 defmodule QuackDB.Profile.Operator do
-  @moduledoc "A DuckDB profiling operator node."
+  @moduledoc """
+  A DuckDB plan or profiling operator node.
+
+  Plans from `QuackDB.Profile.explain/4` carry `name` and `extra_info`.
+  Profiles from `QuackDB.Profile.analyze/4` also carry the operator `type`,
+  its `timing` in seconds, and row counts.
+  """
 
   use JSONCodec
 
   defstruct [
-    :cpu_time,
-    :cumulative_cardinality,
-    :cumulative_rows_scanned,
-    :extra_info,
-    :operator_cardinality,
-    :operator_name,
-    :operator_rows_scanned,
-    :operator_timing,
-    :operator_type,
-    :result_set_size,
-    :system_peak_buffer_memory,
-    :system_peak_temp_dir_size,
+    :name,
+    :type,
+    :timing,
+    :intermediate_rows,
+    :intermediate_size_bytes,
+    :rows_scanned,
+    :row_groups_scanned,
+    :total_row_groups_to_scan,
+    extra_info: %{},
     children: []
   ]
 
   @type t :: %__MODULE__{
-          operator_name: String.t() | nil,
-          operator_type: String.t() | nil,
-          operator_timing: number() | nil,
-          cpu_time: number() | nil,
-          operator_cardinality: non_neg_integer() | nil,
-          operator_rows_scanned: non_neg_integer() | nil,
-          cumulative_cardinality: non_neg_integer() | nil,
-          cumulative_rows_scanned: non_neg_integer() | nil,
-          result_set_size: non_neg_integer() | nil,
-          system_peak_buffer_memory: non_neg_integer() | nil,
-          system_peak_temp_dir_size: non_neg_integer() | nil,
-          extra_info: %{String.t() => term()} | nil,
+          name: String.t() | nil,
+          type: String.t() | nil,
+          timing: number() | nil,
+          intermediate_rows: non_neg_integer() | nil,
+          intermediate_size_bytes: non_neg_integer() | nil,
+          rows_scanned: non_neg_integer() | nil,
+          row_groups_scanned: non_neg_integer() | nil,
+          total_row_groups_to_scan: non_neg_integer() | nil,
+          extra_info: %{String.t() => term()},
           children: [__MODULE__.t()]
+        }
+end
+
+defmodule QuackDB.Profile.Query do
+  @moduledoc "Query-level metrics of a DuckDB profile. Times are in seconds."
+
+  use JSONCodec
+
+  defstruct [
+    :sql,
+    :total_time,
+    :cpu_time,
+    :total_intermediate_rows,
+    :total_intermediate_size_bytes,
+    :total_rows_scanned,
+    :total_row_groups_scanned,
+    :total_row_groups_to_scan
+  ]
+
+  @type t :: %__MODULE__{
+          sql: String.t() | nil,
+          total_time: number() | nil,
+          cpu_time: number() | nil,
+          total_intermediate_rows: non_neg_integer() | nil,
+          total_intermediate_size_bytes: non_neg_integer() | nil,
+          total_rows_scanned: non_neg_integer() | nil,
+          total_row_groups_scanned: non_neg_integer() | nil,
+          total_row_groups_to_scan: non_neg_integer() | nil
+        }
+end
+
+defmodule QuackDB.Profile.Planner do
+  @moduledoc "Planner timings of a DuckDB profile, in seconds."
+
+  use JSONCodec
+
+  defstruct [:total_time, :binding_time, :column_binding, :create_plan, :resolve_types]
+
+  @type t :: %__MODULE__{
+          total_time: number() | nil,
+          binding_time: number() | nil,
+          column_binding: number() | nil,
+          create_plan: number() | nil,
+          resolve_types: number() | nil
+        }
+end
+
+defmodule QuackDB.Profile.IO do
+  @moduledoc "I/O metrics of a DuckDB profile."
+
+  use JSONCodec
+
+  defstruct [:total_bytes_read, :total_bytes_written]
+
+  @type t :: %__MODULE__{
+          total_bytes_read: non_neg_integer() | nil,
+          total_bytes_written: non_neg_integer() | nil
+        }
+end
+
+defmodule QuackDB.Profile.System do
+  @moduledoc "Memory and scheduling metrics of a DuckDB profile."
+
+  use JSONCodec
+
+  defstruct [
+    :blocked_thread_time,
+    :peak_buffer_memory,
+    :peak_streaming_buffer_size,
+    :peak_temp_dir_size,
+    :total_memory_allocated
+  ]
+
+  @type t :: %__MODULE__{
+          blocked_thread_time: number() | nil,
+          peak_buffer_memory: non_neg_integer() | nil,
+          peak_streaming_buffer_size: non_neg_integer() | nil,
+          peak_temp_dir_size: non_neg_integer() | nil,
+          total_memory_allocated: non_neg_integer() | nil
         }
 end
 
@@ -41,8 +120,11 @@ defmodule QuackDB.Profile do
   DuckDB query profiling helpers.
 
   `analyze/4` runs `EXPLAIN (ANALYZE, FORMAT json)` and decodes DuckDB's
-  profile into typed structs using JSONCodec. DuckDB's open-ended `extra_info`
-  maps and optimizer metric names retain string keys.
+  profile into typed structs using JSONCodec, grouped the way DuckDB 2.0
+  reports them: `query`, `parser`, `planner`, `physical_planner`, `optimizer`,
+  `io`, `system`, and the `operators` tree. `explain/4` returns the plan tree
+  only. DuckDB's open-ended `extra_info` maps and optimizer metric names
+  retain string keys.
 
   Use `flatten/1`, `slowest/2`, and `report/2` when you want a profiler-style
   operator view.
@@ -52,72 +134,31 @@ defmodule QuackDB.Profile do
 
   alias QuackDB.Profile.Operator
 
+  alias QuackDB.Profile.Planner
+  alias QuackDB.Profile.Query
+
   defstruct [
-    :all_optimizers,
-    :attach_load_storage_latency,
-    :attach_replay_wal_latency,
-    :blocked_thread_time,
-    :checkpoint_latency,
-    :commit_local_storage_latency,
-    :cpu_time,
-    :cumulative_cardinality,
-    :cumulative_optimizer_timing,
-    :cumulative_rows_scanned,
-    :extra_info,
-    :latency,
-    :physical_planner,
-    :physical_planner_column_binding,
-    :physical_planner_create_plan,
-    :physical_planner_resolve_types,
+    :query,
+    :parser,
     :planner,
-    :planner_binding,
-    :query_name,
-    :result_set_size,
-    :rows_returned,
-    :system_peak_buffer_memory,
-    :system_peak_temp_dir_size,
-    :total_bytes_read,
-    :total_bytes_written,
-    :total_memory_allocated,
-    :waiting_to_attach_latency,
-    :wal_replay_entry_count,
-    :write_to_wal_latency,
-    children: [],
-    optimizers: %{}
+    :physical_planner,
+    :io,
+    :system,
+    optimizer: %{},
+    operators: []
   ]
 
+  codec(:operators, as: "operator")
+
   @type t :: %__MODULE__{
-          query_name: String.t() | nil,
-          latency: number() | nil,
-          cpu_time: number() | nil,
-          rows_returned: non_neg_integer() | nil,
-          result_set_size: non_neg_integer() | nil,
-          cumulative_cardinality: non_neg_integer() | nil,
-          cumulative_rows_scanned: non_neg_integer() | nil,
-          all_optimizers: number() | nil,
-          attach_load_storage_latency: number() | nil,
-          attach_replay_wal_latency: number() | nil,
-          blocked_thread_time: number() | nil,
-          checkpoint_latency: number() | nil,
-          commit_local_storage_latency: number() | nil,
-          cumulative_optimizer_timing: number() | nil,
-          extra_info: %{String.t() => term()} | nil,
-          physical_planner: number() | nil,
-          physical_planner_column_binding: number() | nil,
-          physical_planner_create_plan: number() | nil,
-          physical_planner_resolve_types: number() | nil,
-          planner: number() | nil,
-          planner_binding: number() | nil,
-          system_peak_buffer_memory: non_neg_integer() | nil,
-          system_peak_temp_dir_size: non_neg_integer() | nil,
-          total_bytes_read: non_neg_integer() | nil,
-          total_bytes_written: non_neg_integer() | nil,
-          total_memory_allocated: non_neg_integer() | nil,
-          waiting_to_attach_latency: number() | nil,
-          wal_replay_entry_count: non_neg_integer() | nil,
-          write_to_wal_latency: number() | nil,
-          children: [Operator.t()],
-          optimizers: %{String.t() => number()}
+          query: Query.t() | nil,
+          parser: Planner.t() | nil,
+          planner: Planner.t() | nil,
+          physical_planner: Planner.t() | nil,
+          io: QuackDB.Profile.IO.t() | nil,
+          system: QuackDB.Profile.System.t() | nil,
+          optimizer: %{String.t() => number()},
+          operators: [Operator.t()]
         }
 
   @typedoc "A flattened DuckDB operator row with its tree path and timing share."
@@ -127,12 +168,9 @@ defmodule QuackDB.Profile do
           type: String.t() | nil,
           timing: number() | nil,
           timing_percent: float() | nil,
-          cpu_time: number() | nil,
           cardinality: non_neg_integer() | nil,
           rows_scanned: non_neg_integer() | nil,
-          cumulative_cardinality: non_neg_integer() | nil,
-          cumulative_rows_scanned: non_neg_integer() | nil,
-          result_set_size: non_neg_integer() | nil,
+          size_bytes: non_neg_integer() | nil,
           extra_info: map()
         }
 
@@ -185,12 +223,12 @@ defmodule QuackDB.Profile do
   def flatten(%__MODULE__{} = profile) do
     total = timing_total(profile)
 
-    profile.children
+    profile.operators
     |> Enum.with_index()
     |> Enum.flat_map(fn {operator, index} -> flatten_operator(operator, [index], total) end)
   end
 
-  @doc "Returns the slowest operators by `operator_timing`."
+  @doc "Returns the slowest operators by `timing`."
   @spec slowest(t(), pos_integer()) :: [operator_row()]
   def slowest(%__MODULE__{} = profile, limit \\ 10) when is_integer(limit) and limit > 0 do
     profile
@@ -207,11 +245,10 @@ defmodule QuackDB.Profile do
 
     [
       "DuckDB query profile\n\n",
-      metric_line("Latency", seconds(profile.latency)),
-      metric_line("CPU time", seconds(profile.cpu_time)),
-      metric_line("Rows scanned", integer(profile.cumulative_rows_scanned)),
-      metric_line("Rows returned", integer(profile.rows_returned)),
-      metric_line("Peak memory", bytes(profile.system_peak_buffer_memory)),
+      metric_line("Total time", seconds(query_metric(profile, :total_time))),
+      metric_line("CPU time", seconds(query_metric(profile, :cpu_time))),
+      metric_line("Rows scanned", integer(query_metric(profile, :total_rows_scanned))),
+      metric_line("Peak memory", bytes(profile.system && profile.system.peak_buffer_memory)),
       "\n",
       "% time   time      rows      scanned   operator\n",
       Enum.map(rows, &operator_line/1)
@@ -219,8 +256,8 @@ defmodule QuackDB.Profile do
     |> IO.iodata_to_binary()
   end
 
-  defp build_profile(%{} = decoded) do
-    case from_map(Map.put(decoded, "optimizers", optimizer_metrics(decoded))) do
+  defp build_profile(decoded) do
+    case from_map(profile_map(decoded)) do
       {:ok, profile} ->
         {:ok, profile}
 
@@ -296,10 +333,7 @@ defmodule QuackDB.Profile do
 
   defp decode_json(json) do
     case JSON.decode(json) do
-      {:ok, [profile]} when is_map(profile) ->
-        {:ok, profile}
-
-      {:ok, profile} when is_map(profile) ->
+      {:ok, profile} when is_map(profile) or is_list(profile) ->
         {:ok, profile}
 
       {:ok, other} ->
@@ -312,39 +346,33 @@ defmodule QuackDB.Profile do
     end
   end
 
-  defp optimizer_metrics(decoded) do
-    decoded
-    |> Enum.filter(fn {key, value} ->
-      is_binary(key) and String.starts_with?(key, "optimizer_") and is_number(value)
-    end)
-    |> Map.new(fn {key, value} -> {String.replace_prefix(key, "optimizer_", ""), value} end)
-  end
+  # Plain EXPLAIN returns the bare plan nodes; ANALYZE returns the grouped profile.
+  defp profile_map(plan) when is_list(plan), do: %{"operator" => plan}
+  defp profile_map(profile), do: profile
 
-  defp timing_total(%__MODULE__{cpu_time: value}) when is_number(value) and value > 0, do: value
+  defp timing_total(%__MODULE__{query: %Query{cpu_time: value}})
+       when is_number(value) and value > 0,
+       do: value
 
   defp timing_total(%__MODULE__{} = profile) do
-    total = Enum.reduce(profile.children, 0, &(&2 + total_operator_timing(&1)))
+    total = Enum.reduce(profile.operators, 0, &(&2 + total_operator_timing(&1)))
     if total > 0, do: total, else: nil
   end
 
   defp total_operator_timing(%Operator{} = operator) do
-    (operator.operator_timing || 0) +
-      Enum.reduce(operator.children, 0, &(&2 + total_operator_timing(&1)))
+    (operator.timing || 0) + Enum.reduce(operator.children, 0, &(&2 + total_operator_timing(&1)))
   end
 
   defp flatten_operator(%Operator{} = operator, path, total) do
     row = %{
       path: Enum.reverse(path),
-      name: operator.operator_name,
-      type: operator.operator_type,
-      timing: operator.operator_timing,
-      timing_percent: timing_percent(operator.operator_timing, total),
-      cpu_time: operator.cpu_time,
-      cardinality: operator.operator_cardinality,
-      rows_scanned: operator.operator_rows_scanned,
-      cumulative_cardinality: operator.cumulative_cardinality,
-      cumulative_rows_scanned: operator.cumulative_rows_scanned,
-      result_set_size: operator.result_set_size,
+      name: operator.name || operator.type,
+      type: operator.type,
+      timing: operator.timing,
+      timing_percent: timing_percent(operator.timing, total),
+      cardinality: operator.intermediate_rows,
+      rows_scanned: operator.rows_scanned,
+      size_bytes: operator.intermediate_size_bytes,
       extra_info: operator.extra_info || %{}
     }
 
@@ -361,6 +389,9 @@ defmodule QuackDB.Profile do
   end
 
   defp timing_percent(_timing, _total), do: nil
+
+  defp query_metric(%__MODULE__{query: %Query{} = query}, key), do: Map.fetch!(query, key)
+  defp query_metric(%__MODULE__{}, _key), do: nil
 
   defp metric_line(label, value), do: [String.pad_trailing(label <> ":", 16), value, "\n"]
 
