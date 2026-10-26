@@ -1,5 +1,7 @@
 defmodule QuackDB.DDL do
-  import QuackDB.SQL.Fragment, only: [column: 1, table: 1, check_constraint: 1]
+  import QuackDB.SQL.Fragment,
+    only: [alias_name: 1, column: 1, column_list: 1, schema: 1, table: 1, check_constraint: 1]
+
   alias QuackDB.DDL.Check
 
   @moduledoc """
@@ -211,6 +213,137 @@ defmodule QuackDB.DDL do
     Enum.each(options, &sequence_option/1)
     ["DROP SEQUENCE ", if_exists(options), table(name)]
   end
+
+  @doc """
+  Builds a `CREATE SCHEMA` statement.
+
+  A list names a nested schema, which DuckDB 2.0 creates inside its parent:
+
+      QuackDB.query!(conn, DDL.create_schema(:finance))
+      QuackDB.query!(conn, DDL.create_schema([:finance, :reports]))
+      QuackDB.query!(conn, DDL.create_table({[:finance, :reports], :ledger}, id: :integer))
+
+  Supports `if_not_exists: true`.
+  """
+  @spec create_schema(QuackDB.SQL.Fragment.schema(), keyword()) :: iodata()
+  def create_schema(name, options \\ []) do
+    options = Keyword.validate!(options, if_not_exists: false)
+    ["CREATE SCHEMA ", if_not_exists(options), schema(name)]
+  end
+
+  @doc "Builds a `DROP SCHEMA` statement. Supports `if_exists: true` and `cascade: true`."
+  @spec drop_schema(QuackDB.SQL.Fragment.schema(), keyword()) :: iodata()
+  def drop_schema(name, options \\ []) do
+    options = Keyword.validate!(options, if_exists: false, cascade: false)
+
+    [
+      "DROP SCHEMA ",
+      if_exists(options),
+      schema(name),
+      if(options[:cascade], do: " CASCADE", else: [])
+    ]
+  end
+
+  @doc """
+  Builds a DuckDB 2.0 `CREATE TRIGGER` statement that runs `statement`, a SQL
+  statement such as an `INSERT` or `UPDATE`, when `event` changes `table`.
+
+      QuackDB.query!(conn, DDL.create_trigger(:events_count, :events,
+        "UPDATE event_stats SET total = total + (SELECT count(*) FROM inserted)",
+        event: :insert,
+        referencing: [new_table: :inserted]
+      ))
+
+  Options:
+
+    * `:event` (required) - `:insert`, `:delete`, `:update`, or
+      `{:update, columns}` for `UPDATE OF columns`.
+    * `:timing` - `:after` (default) or `:before`.
+    * `:for_each` - `:statement` (default) or `:row`. Row triggers refer to the
+      changed row as `NEW` and `OLD`.
+    * `:referencing` - transition tables as `[old_table: alias, new_table: alias]`.
+    * `:or_replace` and `:if_not_exists` - booleans.
+
+  DuckDB 2.0 does not run `BEFORE ... FOR EACH ROW` or `UPDATE ... FOR EACH ROW`
+  triggers yet, and a table cannot mix row and statement triggers; the server
+  rejects those.
+  """
+  @spec create_trigger(
+          QuackDB.SQL.Fragment.identifier_name(),
+          QuackDB.SQL.Fragment.table(),
+          iodata(),
+          keyword()
+        ) ::
+          iodata()
+  def create_trigger(name, table, statement, options) do
+    options =
+      Keyword.validate!(options, [
+        :event,
+        timing: :after,
+        for_each: :statement,
+        referencing: [],
+        or_replace: false,
+        if_not_exists: false
+      ])
+
+    [
+      "CREATE ",
+      if(options[:or_replace], do: "OR REPLACE ", else: []),
+      "TRIGGER ",
+      if_not_exists(options),
+      alias_name(name),
+      trigger_timing(options[:timing]),
+      trigger_event(options[:event]),
+      " ON ",
+      table(table),
+      trigger_referencing(options[:referencing]),
+      trigger_for_each(options[:for_each]),
+      " ",
+      statement
+    ]
+  end
+
+  @doc "Builds a `DROP TRIGGER name ON table` statement, optionally with `if_exists: true`."
+  @spec drop_trigger(
+          QuackDB.SQL.Fragment.identifier_name(),
+          QuackDB.SQL.Fragment.table(),
+          keyword()
+        ) ::
+          iodata()
+  def drop_trigger(name, table, options \\ []) do
+    options = Keyword.validate!(options, if_exists: false)
+    ["DROP TRIGGER ", if_exists(options), alias_name(name), " ON ", table(table)]
+  end
+
+  defp trigger_timing(:after), do: " AFTER "
+  defp trigger_timing(:before), do: " BEFORE "
+
+  defp trigger_timing(other),
+    do: raise(ArgumentError, "invalid trigger :timing: #{inspect(other)}")
+
+  defp trigger_event(:insert), do: "INSERT"
+  defp trigger_event(:delete), do: "DELETE"
+  defp trigger_event(:update), do: "UPDATE"
+  defp trigger_event({:update, [_ | _] = columns}), do: ["UPDATE OF ", column_list(columns)]
+  defp trigger_event(other), do: raise(ArgumentError, "invalid trigger :event: #{inspect(other)}")
+
+  defp trigger_referencing([]), do: []
+
+  defp trigger_referencing(tables) when is_list(tables) do
+    [" REFERENCING" | Enum.map(tables, &trigger_transition_table/1)]
+  end
+
+  defp trigger_transition_table({:old_table, name}), do: [" OLD TABLE AS ", alias_name(name)]
+  defp trigger_transition_table({:new_table, name}), do: [" NEW TABLE AS ", alias_name(name)]
+
+  defp trigger_transition_table(other),
+    do: raise(ArgumentError, "invalid trigger :referencing entry: #{inspect(other)}")
+
+  defp trigger_for_each(:statement), do: " FOR EACH STATEMENT"
+  defp trigger_for_each(:row), do: " FOR EACH ROW"
+
+  defp trigger_for_each(other),
+    do: raise(ArgumentError, "invalid trigger :for_each: #{inspect(other)}")
 
   defp sequence_option({:start, value}) when is_integer(value),
     do: [" START ", Integer.to_string(value)]

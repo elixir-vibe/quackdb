@@ -73,6 +73,18 @@ defmodule QuackDB.SQL do
   @spec set(atom() | String.t(), parameter()) :: iodata()
   def set(name, value), do: ["SET ", identifier!(name, :setting), " = ", literal!(value), ";"]
 
+  @doc """
+  Builds `SET VARIABLE name = value;`. Queries read it as `$name` in DuckDB
+  2.0, or with `QuackDB.Ecto.Analytics.variable/1`.
+  """
+  @spec set_variable(atom() | String.t(), parameter()) :: iodata()
+  def set_variable(name, value),
+    do: ["SET VARIABLE ", identifier!(name, :variable), " = ", literal!(value), ";"]
+
+  @doc "Builds `RESET VARIABLE name;`."
+  @spec reset_variable(atom() | String.t()) :: iodata()
+  def reset_variable(name), do: ["RESET VARIABLE ", identifier!(name, :variable), ";"]
+
   @doc "Builds a `SET GLOBAL name = value;` statement."
   @spec set_global(atom() | String.t(), parameter()) :: iodata()
   def set_global(name, value),

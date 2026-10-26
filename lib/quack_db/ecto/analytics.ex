@@ -212,6 +212,68 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
       end
     end
 
+    @doc """
+    Builds DuckDB 2.0's `json_set(json, path, value)`, which creates or
+    replaces the value at `path`. The value is converted with `to_json`, so
+    Elixir strings set JSON strings. Paths are JSON path strings or lists such
+    as `[:address, :city]`.
+    """
+    defmacro json_set(expression, path, value),
+      do: json_mutation("json_set", expression, path, value)
+
+    @doc "Builds `json_insert(json, path, value)`, which only adds a missing value."
+    defmacro json_insert(expression, path, value),
+      do: json_mutation("json_insert", expression, path, value)
+
+    @doc "Builds `json_replace(json, path, value)`, which only changes an existing value."
+    defmacro json_replace(expression, path, value),
+      do: json_mutation("json_replace", expression, path, value)
+
+    @doc "Builds `json_remove(json, path)`."
+    defmacro json_remove(expression, path) do
+      quote do
+        fragment("json_remove(?, ?)", unquote(expression), unquote(json_path_argument(path)))
+      end
+    end
+
+    @doc """
+    Reads a DuckDB variable set with `SET VARIABLE`, using DuckDB 2.0's
+    `$name` shorthand. Pass a pinned value to read a variable named at runtime
+    through `getvariable/1`.
+    """
+    defmacro variable({:^, _meta, [_name]} = name) do
+      quote do
+        fragment("getvariable(?)", unquote(name))
+      end
+    end
+
+    defmacro variable(name) when is_atom(name) or is_binary(name) do
+      name = to_string(name)
+
+      unless Regex.match?(~r/^[A-Za-z_][A-Za-z0-9_]*$/, name) do
+        raise ArgumentError,
+              "DuckDB variable names must be plain identifiers, got: #{inspect(name)}"
+      end
+
+      quote do
+        fragment(unquote("$" <> name))
+      end
+    end
+
+    defp json_mutation(function, expression, path, value) do
+      quote do
+        fragment(
+          unquote("#{function}(?, ?, to_json(?))"),
+          unquote(expression),
+          unquote(json_path_argument(path)),
+          unquote(value)
+        )
+      end
+    end
+
+    defp json_path_argument(path) when is_list(path), do: json_path!(path)
+    defp json_path_argument(path), do: path
+
     defmacro date_trunc(part, timestamp) when is_atom(part) do
       sql = IO.iodata_to_binary(["date_trunc(", date_part_literal!(part), ", ?)"])
 

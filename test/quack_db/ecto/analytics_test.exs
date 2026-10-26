@@ -169,6 +169,38 @@ defmodule QuackDB.Ecto.AnalyticsTest do
                "FROM \"events\" AS q0 WHERE (json_extract_string(q0.\"payload\", '$.user.name') = 'duck')"
   end
 
+  test "builds DuckDB 2.0 JSON mutation and variable expressions" do
+    query =
+      from(event in "events",
+        where: variable(:min_score) < json_extract(event.payload, [:score]),
+        select: %{
+          renamed: json_set(event.payload, [:user, :name], ^"goose"),
+          added: json_insert(event.payload, "$.tags", ^["new"]),
+          bumped: json_replace(event.payload, [:score], 11),
+          trimmed: json_remove(event.payload, [:secret]),
+          dynamic: variable(^"threshold")
+        }
+      )
+
+    assert query |> Ecto.Adapters.QuackDB.Connection.all() |> IO.iodata_to_binary() ==
+             ~S[SELECT json_set(q0."payload", '$.user.name', to_json(?)) AS "renamed", ] <>
+               ~S[json_insert(q0."payload", '$.tags', to_json(?)) AS "added", ] <>
+               ~S[json_replace(q0."payload", '$.score', to_json(11)) AS "bumped", ] <>
+               ~S[json_remove(q0."payload", '$.secret') AS "trimmed", ] <>
+               ~S[getvariable(?) AS "dynamic" FROM "events" AS q0 ] <>
+               ~S[WHERE ($min_score < json_extract(q0."payload", '$.score'))]
+  end
+
+  test "rejects DuckDB variable names that are not identifiers" do
+    assert_raise ArgumentError, ~r/plain identifiers/, fn ->
+      Code.eval_string("""
+      import Ecto.Query
+      import QuackDB.Ecto.Analytics
+      from(event in "events", select: variable("not-ok"))
+      """)
+    end
+  end
+
   test "builds JSON and time-series expressions" do
     query =
       from(event in "events",
