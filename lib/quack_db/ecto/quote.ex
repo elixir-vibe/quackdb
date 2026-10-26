@@ -13,7 +13,13 @@ defmodule QuackDB.Ecto.Quote do
     [?\", name, ?\"]
   end
 
+  # A dotted prefix names a path, which DuckDB resolves as a nested schema
+  # (DuckDB 2.0) or as catalog.schema.
   @spec name(atom() | String.t() | nil, atom() | String.t()) :: iodata()
   def name(nil, name), do: name(name)
-  def name(prefix, name), do: [name(prefix), ?., name(name)]
+
+  def name(prefix, name) do
+    path = prefix |> to_string() |> String.split(".") |> Enum.map(&name/1)
+    [Enum.intersperse(path, ?.), ?., name(name)]
+  end
 end

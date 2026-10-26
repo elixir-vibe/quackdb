@@ -46,10 +46,10 @@ if Code.ensure_loaded?(Ecto.Query) do
       [
         with_ctes(query.with_ctes),
         "UPDATE ",
-        source(query.from, 0),
+        source(query.from, 0, root_context(query)),
         " SET ",
         updates(query.updates),
-        update_from(query.joins),
+        update_from(query.joins, root_context(query)),
         mutation_wheres(query),
         mutation_rowid_filter(query)
       ]
@@ -62,8 +62,8 @@ if Code.ensure_loaded?(Ecto.Query) do
       [
         with_ctes(query.with_ctes),
         "DELETE FROM ",
-        source(query.from, 0),
-        delete_using(query.joins),
+        source(query.from, 0, root_context(query)),
+        delete_using(query.joins, root_context(query)),
         mutation_wheres(query),
         mutation_rowid_filter(query)
       ]
@@ -353,15 +353,13 @@ if Code.ensure_loaded?(Ecto.Query) do
       Enum.at(joins, binding - 1)
     end
 
-    defp source(from, index), do: source(from, index, root_context(%Ecto.Query{}))
-
-    defp source(%{source: {table, nil}}, index, context) when is_binary(table) do
-      [source_name(table), " AS ", binding_alias(index, context)]
-    end
-
-    defp source(%{source: {table, schema}}, index, context)
+    defp source(%{source: {table, schema}} = expr, index, context)
          when is_binary(table) and is_atom(schema) do
-      [source_name(table), " AS ", binding_alias(index, context)]
+      [
+        source_name(table, source_prefix(expr, schema, context)),
+        " AS ",
+        binding_alias(index, context)
+      ]
     end
 
     defp source(%{source: %Ecto.SubQuery{query: query}}, index, context) do
@@ -392,6 +390,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp root_context(%Ecto.Query{} = query) do
       %{
         prefix: "",
+        query_prefix: query.prefix,
         aliases: query.aliases || %{},
         parent: nil,
         subqueries: [],
@@ -404,6 +403,7 @@ if Code.ensure_loaded?(Ecto.Query) do
 
       %{
         prefix: prefix,
+        query_prefix: query.prefix || parent.query_prefix,
         aliases: query.aliases || %{},
         parent: parent,
         subqueries: [],
@@ -464,39 +464,45 @@ if Code.ensure_loaded?(Ecto.Query) do
 
     defp contains_parent_as?(_other), do: false
 
-    defp source_name(table) do
+    defp source_name(table, prefix) do
       if QuackDB.Source.source?(table) do
         table
       else
-        quote_name(table)
+        QuackDB.Ecto.Quote.name(prefix, table)
       end
     end
 
-    defp update_from([]), do: []
+    # The source's own prefix, then its schema's @schema_prefix, then the query's.
+    defp source_prefix(%{prefix: prefix}, _schema, _context) when prefix != nil, do: prefix
 
-    defp update_from(joins) do
+    defp source_prefix(_expr, schema, context) when schema != nil,
+      do: schema.__schema__(:prefix) || context.query_prefix
+
+    defp source_prefix(_expr, _schema, context), do: context.query_prefix
+
+    defp update_from([], _context), do: []
+
+    defp update_from(joins, context) do
       [
         " FROM ",
         joins
         |> Enum.with_index(1)
-        |> Enum.map(fn {join, index} -> source(join, index) end)
+        |> Enum.map(fn {join, index} -> source(join, index, context) end)
         |> Enum.intersperse(", ")
       ]
     end
 
-    defp delete_using([]), do: []
+    defp delete_using([], _context), do: []
 
-    defp delete_using(joins) do
+    defp delete_using(joins, context) do
       [
         " USING ",
         joins
         |> Enum.with_index(1)
-        |> Enum.map(fn {join, index} -> source(join, index) end)
+        |> Enum.map(fn {join, index} -> source(join, index, context) end)
         |> Enum.intersperse(", ")
       ]
     end
-
-    defp joins(joins), do: joins(joins, root_context(%Ecto.Query{}))
 
     defp joins(joins, context) do
       joins
@@ -594,8 +600,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp mutation_rowid_subquery(%Ecto.Query{group_bys: [], havings: []} = query) do
       [
         "SELECT q0.rowid FROM ",
-        source(query.from, 0),
-        joins(query.joins),
+        source(query.from, 0, root_context(query)),
+        joins(query.joins, root_context(query)),
         wheres(query.wheres),
         order_bys(query.order_bys),
         limit(query.limit),
@@ -606,8 +612,8 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp mutation_rowid_subquery(%Ecto.Query{} = query) do
       [
         "SELECT rowid FROM (SELECT q0.rowid AS rowid FROM ",
-        source(query.from, 0),
-        joins(query.joins),
+        source(query.from, 0, root_context(query)),
+        joins(query.joins, root_context(query)),
         wheres(query.wheres),
         group_bys(query.group_bys),
         havings(query.havings),
