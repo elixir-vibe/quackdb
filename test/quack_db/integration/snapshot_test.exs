@@ -141,7 +141,9 @@ defmodule QuackDB.Integration.SnapshotTest do
         )
 
       assert [{"insert", 1}] = change_types(from: placed_at, to: placed_at)
-      assert length(change_types(from: placed_at, to: last_at)) == 5
+
+      assert change_types(from: placed_at, to: last_at) ==
+               change_types(from: from, to: current_snapshot())
 
       # An update deletes the row's old version, so deletions include it.
       assert [{1, "new"}, {2, "new"}] =
