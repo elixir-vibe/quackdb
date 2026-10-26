@@ -139,7 +139,13 @@ from day in series(Date.range(~D[2024-01-01], ~D[2024-01-31])),
 
 Sources are Ecto sources too: `Source.parquet/2`, `Source.csv/2`, `Source.json/2`, and lakehouse catalogs can be queried where the data already lives, and materialized with `QuackDB.DDL.create_table(as: query)` when you want an index on them.
 
-See the [Ecto guide](https://hexdocs.pm/quackdb/ecto.html), [Sources](https://hexdocs.pm/quackdb/sources.html), [Full-text search](https://hexdocs.pm/quackdb/full-text-search.html), and [Spatial](https://hexdocs.pm/quackdb/spatial.html).
+Delta and DuckLake tables keep their history, and any Ecto query reads them at an earlier snapshot, preloads included:
+
+```elixir
+Order |> preload(:items) |> Repo.all(snapshot: ~U[2026-10-20 14:03:11Z])
+```
+
+See the [Ecto guide](https://hexdocs.pm/quackdb/ecto.html), [Sources](https://hexdocs.pm/quackdb/sources.html), [Snapshots and time travel](https://hexdocs.pm/quackdb/snapshots.html), [Full-text search](https://hexdocs.pm/quackdb/full-text-search.html), and [Spatial](https://hexdocs.pm/quackdb/spatial.html).
 
 ## Statements as Elixir
 

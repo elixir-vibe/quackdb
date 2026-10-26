@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Snapshots and time travel for Delta and DuckLake tables. `QuackDB.Ecto.Snapshot.put_snapshot/2` reads every table in an Ecto query, assoc joins and subqueries included, at a `DateTime` or `version: n`; `put_snapshot/3` reads one binding. Delegating a repo's `prepare_query/3` to `QuackDB.Ecto.Snapshot` adds a `:snapshot` option that preloads inherit.
+- `QuackDB.DuckLake` builds DuckLake snapshot listings, row changes between snapshots, commit messages, and snapshot expiry. Its table functions work as Ecto sources.
+- `QuackDB.DDL.attach/3` and `detach/2`, for DuckLake catalogs, Delta tables, and other attachable databases.
+- The [Snapshots and Time Travel](guides/snapshots.md) guide, including when to use Delta or DuckLake.
+
+### Fixed
+
+- Ecto `hints:` on `from` and joins are rendered after the source alias instead of being dropped. `update_all` and `delete_all` raise on hints.
+- `QuackDB.Source` options accept `DateTime` and other struct values, such as `Source.delta(path, timestamp: at)`, instead of raising.
+
 ## 0.6.0 - 2026-10-26
 
 QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quack protocol version 3. DuckDB 1.5 servers are no longer supported: the two protocol versions are not wire-compatible, and connecting to an older server fails with `:unsupported_quack_version`.

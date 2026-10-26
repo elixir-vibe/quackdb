@@ -103,6 +103,7 @@ defmodule QuackDB.MixProject do
         "guides/managed-duckdb.md",
         "guides/explorer.md",
         "guides/sources.md",
+        "guides/snapshots.md",
         "guides/spatial.md",
         "guides/full-text-search.md",
         "guides/telemetry.md",

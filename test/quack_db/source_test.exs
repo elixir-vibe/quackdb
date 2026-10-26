@@ -47,6 +47,9 @@ defmodule QuackDB.SourceTest do
     assert Source.delta("s3://bucket/table", version: 5) ==
              "delta_scan('s3://bucket/table', version = 5)"
 
+    assert Source.delta("s3://bucket/table", timestamp: ~U[2026-09-01 12:00:00Z]) ==
+             "delta_scan('s3://bucket/table', timestamp = TIMESTAMPTZ '2026-09-01T12:00:00Z')"
+
     assert Source.iceberg("s3://bucket/table", allow_moved_paths: true) ==
              "iceberg_scan('s3://bucket/table', allow_moved_paths = TRUE)"
   end

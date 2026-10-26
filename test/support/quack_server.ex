@@ -4,6 +4,9 @@ defmodule QuackDB.IntegrationRepo do
   use Ecto.Repo,
     otp_app: :quackdb,
     adapter: Ecto.Adapters.QuackDB
+
+  @impl true
+  defdelegate prepare_query(operation, query, opts), to: QuackDB.Ecto.Snapshot
 end
 
 defmodule QuackDB.QuackServerCase do

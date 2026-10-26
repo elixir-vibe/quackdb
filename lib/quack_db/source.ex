@@ -107,6 +107,7 @@ defmodule QuackDB.Source do
       "iceberg_scan" -> true
       "histogram_values" -> true
       "generate_series" -> true
+      "ducklake_" <> _function -> true
       _other -> false
     end
   end
@@ -146,7 +147,9 @@ defmodule QuackDB.Source do
     do: struct_literal(values)
 
   defp literal!({:map, values}) when is_map(values), do: ["MAP ", map_entries(values)]
-  defp literal!(values) when is_map(values), do: struct_literal(values)
+
+  defp literal!(values) when is_map(values) and not is_struct(values),
+    do: struct_literal(values)
 
   defp literal!(value) when is_atom(value) and not is_boolean(value) and not is_nil(value),
     do: literal!(Atom.to_string(value))
