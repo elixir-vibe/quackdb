@@ -12,7 +12,7 @@ defmodule QuackDB.ProtocolFixtures do
     chunks = Keyword.get(options, :chunks, [])
     names = Keyword.get(options, :names, ["n"])
     needs_more_fetch? = Keyword.get(options, :needs_more_fetch?, false)
-    result_uuid = Keyword.get(options, :result_uuid, 42)
+    query_uuid = Keyword.get(options, :query_uuid, 42)
 
     IO.iodata_to_binary([
       Codec.encode_header(%Header{type: :prepare_response, connection_id: "conn-1"}),
@@ -20,21 +20,31 @@ defmodule QuackDB.ProtocolFixtures do
       Writer.field(2, Writer.list(names, &Writer.string/1)),
       Writer.field(3, Writer.bool(needs_more_fetch?)),
       Writer.field(4, Writer.list(chunks, &Writer.nullable(&1, fn chunk -> chunk end))),
-      Writer.field(5, Writer.hugeint(result_uuid)),
+      Writer.field(5, Writer.hugeint(query_uuid)),
       Writer.end_object()
     ])
   end
 
+  # Takes chunk wrappers like the prepare response fixture; a fetch response
+  # carries the bare chunks as a blob after its body.
   def fetch_response(chunks, options \\ []) do
     batch_index = Keyword.get(options, :batch_index, nil)
+    total_batches = Keyword.get(options, :total_batches, nil)
 
     IO.iodata_to_binary([
       Codec.encode_header(%Header{type: :fetch_response, connection_id: "conn-1"}),
-      Writer.field(1, Writer.list(chunks, &Writer.nullable(&1, fn chunk -> chunk end))),
-      Writer.field(2, Writer.optional_index(batch_index)),
-      Writer.end_object()
+      optional_field(1, length(chunks), &Writer.uleb128/1),
+      optional_field(2, total_batches, &Writer.optional_index/1),
+      optional_field(3, batch_index, &Writer.optional_index/1),
+      Writer.end_object(),
+      Enum.map(chunks, &unwrap_chunk/1)
     ])
   end
+
+  defp optional_field(_field_id, value, _write) when value in [nil, 0], do: []
+  defp optional_field(field_id, value, write), do: Writer.field(field_id, write.(value))
+
+  defp unwrap_chunk([[<<300::little-16>>, chunk], _end_object]), do: chunk
 
   def error_response(message) do
     IO.iodata_to_binary([

@@ -2,30 +2,22 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
   defmodule Ecto.Adapters.QuackDB.AppendInsert do
     @moduledoc false
 
-    import QuackDB.SQL.Fragment, only: [table: 1]
-
+    # Native appends stream rows into `INSERT INTO ... SELECT * FROM
+    # scan_data_from_quack_client(...)`, so the INSERT names its columns and
+    # carries ON CONFLICT and RETURNING itself.
     def run(adapter_meta, schema_meta, header, rows, on_conflict, returning, placeholders, opts) do
-      with :ok <- assert_supported!(schema_meta, rows, on_conflict, returning, placeholders, opts),
+      with :ok <- assert_supported!(rows, on_conflict, placeholders),
            conn <- ecto_connection(adapter_meta),
-           append_header <- append_header(schema_meta, header),
-           options <- append_options(schema_meta, append_header, opts),
+           options <- append_options(schema_meta, header, on_conflict, returning, opts),
            {:ok, %QuackDB.Result{} = result} <-
-             insert_all(conn, schema_meta, append_header, rows, on_conflict, returning, options) do
+             insert_all(conn, schema_meta, header, rows, options) do
         {result.num_rows, result.rows}
       else
         {:error, %QuackDB.Error{} = error} -> raise error
       end
     end
 
-    defp insert_all(conn, schema_meta, header, rows, on_conflict, returning, options) do
-      if insert_select?(schema_meta, header, on_conflict, returning) do
-        insert_select(conn, schema_meta, header, rows, on_conflict, returning, options)
-      else
-        direct_insert_all(conn, schema_meta, header, rows, options)
-      end
-    end
-
-    defp direct_insert_all(conn, schema_meta, header, rows, options) do
+    defp insert_all(conn, schema_meta, header, rows, options) do
       case Keyword.get(options, :append_shape, :columns) do
         :columns ->
           columns = append_columns(header, rows, options)
@@ -35,104 +27,6 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
           rows = append_rows(header, rows, options)
           QuackDB.insert_rows(conn, schema_meta.source, rows, options)
       end
-    end
-
-    defp insert_select?(_schema_meta, _header, _on_conflict, returning) when returning != [],
-      do: true
-
-    defp insert_select?(_schema_meta, _header, {:nothing, _params, _targets}, _returning),
-      do: true
-
-    defp insert_select?(%{schema: nil}, _header, _on_conflict, _returning), do: false
-
-    defp insert_select?(schema_meta, header, _on_conflict, _returning) do
-      MapSet.new(header) != MapSet.new(schema_source_order(schema_meta))
-    end
-
-    defp insert_select(conn, schema_meta, header, rows, on_conflict, returning, options) do
-      case DBConnection.status(conn, options) do
-        :idle ->
-          DBConnection.transaction(
-            conn,
-            fn tx ->
-              case do_insert_select(
-                     tx,
-                     schema_meta,
-                     header,
-                     rows,
-                     on_conflict,
-                     returning,
-                     options
-                   ) do
-                {:ok, result} -> result
-                {:error, error} -> DBConnection.rollback(tx, error)
-              end
-            end,
-            options
-          )
-
-        _status ->
-          do_insert_select(conn, schema_meta, header, rows, on_conflict, returning, options)
-      end
-    end
-
-    defp do_insert_select(conn, schema_meta, header, rows, on_conflict, returning, options) do
-      temp_columns = append_columns!(schema_meta, header, options)
-      temp_table = temp_table_name(temp_columns)
-      create_statement = create_temp_table(temp_table, temp_columns)
-      clear_statement = clear_temp_table(temp_table)
-
-      insert_statement =
-        insert_from_temp_statement(schema_meta, temp_columns, temp_table, on_conflict, returning)
-
-      try do
-        with {:ok, _result} <- QuackDB.query(conn, create_statement, [], options),
-             {:ok, _result} <- QuackDB.query(conn, clear_statement, [], options),
-             {:ok, _result} <- append_temp_data(conn, temp_table, header, rows, options),
-             {:ok, %QuackDB.Result{} = result} <-
-               QuackDB.query(conn, insert_statement, [], options) do
-          {:ok, result}
-        end
-      after
-        _ = QuackDB.query(conn, clear_statement, [], options)
-      end
-    end
-
-    defp temp_table_name(columns) do
-      hash = columns |> :erlang.phash2(4_294_967_296) |> Integer.to_string(36)
-      "quackdb_append_#{hash}"
-    end
-
-    defp append_columns!(_schema_meta, header, options) do
-      types = Keyword.fetch!(options, :columns)
-
-      Enum.map(header, fn source ->
-        %{
-          source: source,
-          type: column_type!(types, source)
-        }
-      end)
-    end
-
-    defp append_header(%{schema: nil}, header), do: header
-
-    defp append_header(schema_meta, header) do
-      schema_sources = schema_source_order(schema_meta)
-
-      if MapSet.new(header) == MapSet.new(schema_sources), do: schema_sources, else: header
-    end
-
-    defp schema_source_order(%{schema: schema}) do
-      Enum.map(schema.__schema__(:fields), &schema.__schema__(:field_source, &1))
-    end
-
-    defp create_temp_table(temp_table, columns) do
-      ddl_columns = Enum.map(columns, fn column -> {column.source, column.type} end)
-      QuackDB.DDL.create_table(temp_table, ddl_columns, temporary: true, if_not_exists: true)
-    end
-
-    defp clear_temp_table(temp_table) do
-      ["DELETE FROM ", table(temp_table)]
     end
 
     defp column_type!(columns, column) do
@@ -155,99 +49,36 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       end
     end
 
-    defp append_temp_data(conn, temp_table, header, rows, options) do
-      case Keyword.get(options, :append_shape, :columns) do
-        :columns ->
-          columns = append_columns(header, rows, options)
-          QuackDB.insert_columns(conn, temp_table, columns, options)
-
-        :rows ->
-          rows = append_rows(header, rows, options)
-          QuackDB.insert_rows(conn, temp_table, rows, options)
-      end
-    end
-
-    defp insert_from_temp_statement(schema_meta, columns, temp_table, on_conflict, returning) do
-      header = Enum.map(columns, & &1.source)
-
-      QuackDB.DML.insert_into_select(
-        {schema_meta.prefix, schema_meta.source},
-        header,
-        temp_table,
-        header,
-        on_conflict: dml_on_conflict(on_conflict),
-        returning: returning
-      )
-    end
-
     defp dml_on_conflict({:raise, _params, []}), do: :raise
     defp dml_on_conflict({:nothing, _params, []}), do: :nothing
     defp dml_on_conflict({:nothing, _params, targets}), do: {:nothing, targets}
 
-    defp assert_supported!(
-           _schema_meta,
-           {%Ecto.Query{}, _params},
-           _on_conflict,
-           _returning,
-           _placeholders,
-           _opts
-         ) do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append does not support insert_all from queries"
-      )
-    end
-
-    defp assert_supported!(
-           _schema_meta,
-           %Ecto.Query{},
-           _on_conflict,
-           _returning,
-           _placeholders,
-           _opts
-         ) do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append does not support insert_all from queries"
-      )
-    end
-
-    defp assert_supported!(schema_meta, _rows, {:raise, _params, []}, returning, [], opts)
-         when is_list(returning) do
-      assert_insert_select_columns!(schema_meta, returning != [], opts, "returning")
-    end
-
-    defp assert_supported!(schema_meta, _rows, {:nothing, _params, _targets}, returning, [], opts)
-         when is_list(returning) do
-      assert_insert_select_columns!(schema_meta, true, opts, "on_conflict: :nothing")
-    end
-
-    defp assert_supported!(_schema_meta, _rows, _on_conflict, _returning, placeholders, _opts)
-         when placeholders != [] do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append does not support placeholders"
-      )
-    end
-
-    defp assert_supported!(_schema_meta, _rows, _on_conflict, _returning, _placeholders, _opts) do
-      unsupported!(
-        :schema_inserts,
-        "insert_method: :append only supports plain insert_all or on_conflict: :nothing"
-      )
-    end
-
-    defp assert_insert_select_columns!(_schema_meta, false, _opts, _feature), do: :ok
-
-    defp assert_insert_select_columns!(schema_meta, true, opts, feature) do
-      if schema_meta.schema != nil or Keyword.has_key?(opts, :columns) do
-        :ok
-      else
+    defp assert_supported!({%Ecto.Query{}, _params}, _on_conflict, _placeholders),
+      do:
         unsupported!(
           :schema_inserts,
-          "insert_method: :append with #{feature} requires a schema or explicit append columns"
+          "insert_method: :append does not support insert_all from queries"
         )
-      end
+
+    defp assert_supported!(%Ecto.Query{}, _on_conflict, _placeholders),
+      do:
+        unsupported!(
+          :schema_inserts,
+          "insert_method: :append does not support insert_all from queries"
+        )
+
+    defp assert_supported!(_rows, _on_conflict, placeholders) when placeholders != [],
+      do: unsupported!(:schema_inserts, "insert_method: :append does not support placeholders")
+
+    defp assert_supported!(_rows, {conflict, _params, _targets}, _placeholders)
+         when conflict in [:raise, :nothing],
+         do: :ok
+
+    defp assert_supported!(_rows, _on_conflict, _placeholders) do
+      unsupported!(
+        :schema_inserts,
+        "insert_method: :append only supports on_conflict: :raise or :nothing"
+      )
     end
 
     defp ecto_connection(%{pid: pool} = adapter_meta) do
@@ -382,11 +213,13 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
       KeyError -> nil
     end
 
-    defp append_options(schema_meta, header, opts) do
+    defp append_options(schema_meta, header, on_conflict, returning, opts) do
       opts =
         opts
         |> base_options()
         |> maybe_put_schema(schema_meta)
+        |> Keyword.put(:on_conflict, dml_on_conflict(on_conflict))
+        |> Keyword.put(:returning, returning)
 
       case Keyword.fetch(opts, :columns) do
         {:ok, _columns} -> opts

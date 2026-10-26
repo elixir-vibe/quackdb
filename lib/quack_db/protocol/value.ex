@@ -56,7 +56,8 @@ defmodule QuackDB.Protocol.Value do
              :timestamp,
              :timestamp_ns,
              :time_tz,
-             :timestamp_tz
+             :timestamp_tz,
+             :timestamp_tz_ns
            ] do
     with {:ok, value, rest} <- Reader.read_int64(binary), do: {:ok, temporal(name, value), rest}
   end
@@ -177,4 +178,6 @@ defmodule QuackDB.Protocol.Value do
   defp temporal(:time_ns, value), do: QuackDB.NanosecondTime.new(value)
   defp temporal(:time_tz, value), do: QuackDB.TimeWithTimeZone.from_bits(value)
   defp temporal(:timestamp_ns, value), do: QuackDB.NanosecondTimestamp.new(value)
+  # The UTC instant; Elixir has no nanosecond DateTime.
+  defp temporal(:timestamp_tz_ns, value), do: QuackDB.NanosecondTimestamp.new(value)
 end

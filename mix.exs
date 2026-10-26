@@ -10,6 +10,7 @@ defmodule QuackDB.MixProject do
       deps: deps(),
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")],
       package: package(),
       description: "DuckDB for Elixir: supervised server, DBConnection client, and Ecto adapter",
       source_url: "https://github.com/elixir-vibe/quackdb",

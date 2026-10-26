@@ -7,23 +7,37 @@ defmodule QuackDB.DBConnection do
 
   use DBConnection
 
+  import QuackDB.SQL.Fragment,
+    only: [column: 1, insert_columns: 1, on_conflict: 1, returning: 1, table: 1]
+
   alias QuackDB.Error
   alias QuackDB.Protocol.Codec
   alias QuackDB.Protocol.DataChunk
   alias QuackDB.Protocol.Message.ConnectionRequest
   alias QuackDB.Protocol.Message.ConnectionResponse
   alias QuackDB.Protocol.Message.Disconnect
+  alias QuackDB.Protocol.Message.Acknowledgement
+  alias QuackDB.Protocol.Message.CancelRequest
   alias QuackDB.Protocol.Message.ErrorResponse
-  alias QuackDB.Protocol.Message.AppendRequest
   alias QuackDB.Protocol.Message.FetchRequest
   alias QuackDB.Protocol.Message.FetchResponse
+  alias QuackDB.Protocol.Message.HeartbeatRequest
   alias QuackDB.Protocol.Message.PrepareRequest
+  alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Message.PrepareResponse
+  alias QuackDB.Protocol.Message.SendDataRequest
+  alias QuackDB.Protocol.Message.SendDataResponse
+  alias QuackDB.Protocol.Message.SuccessResponse
   alias QuackDB.Query
   alias QuackDB.Result
   alias QuackDB.Telemetry
 
   @disconnect_timeout 1_000
+  # The server hands each streamed chunk to the INSERT pipeline as is, so a
+  # chunk must not exceed DuckDB's standard vector size.
+  @max_chunk_rows 2048
+  @default_heartbeat_timeout 60
+  @default_fetch_retries 1
   @sql_command_atoms ~w(
     alter analyze attach begin call checkpoint commit copy create delete detach drop explain insert
     install load pragma rollback select set summarize truncate update use vacuum
@@ -40,7 +54,10 @@ defmodule QuackDB.DBConnection do
     :transport_owner,
     :transport_options,
     :client_version,
+    :client_id,
     :telemetry_prefix,
+    heartbeat_timeout: @default_heartbeat_timeout,
+    acknowledge_results?: false,
     next_query_id: 1,
     status: :idle,
     cursors: %{}
@@ -55,7 +72,10 @@ defmodule QuackDB.DBConnection do
           transport_owner: pid() | nil,
           transport_options: keyword(),
           client_version: String.t(),
+          client_id: String.t(),
           telemetry_prefix: [atom()],
+          heartbeat_timeout: pos_integer(),
+          acknowledge_results?: boolean(),
           next_query_id: pos_integer(),
           status: DBConnection.status(),
           cursors: map()
@@ -84,9 +104,15 @@ defmodule QuackDB.DBConnection do
 
   @impl true
   def ping(state) do
-    case execute_statement(%Query{statement: "SELECT 1"}, [], [], state) do
-      {:ok, _query, _result, state} -> {:ok, state}
-      {:error, error, state} -> {:disconnect, error, state}
+    case request(state, %HeartbeatRequest{}, []) do
+      {:ok, {_header, %SuccessResponse{}}} ->
+        {:ok, state}
+
+      {:ok, {header, _body}} ->
+        {:disconnect, unexpected_message(:success_response, header), state}
+
+      {:error, error} ->
+        {:disconnect, error, state}
     end
   end
 
@@ -105,7 +131,9 @@ defmodule QuackDB.DBConnection do
         state
       ) do
     if params == [] do
-      append_rows(query, table, rows, Keyword.merge(insert_options, options), state)
+      query
+      |> append_rows(table, rows, Keyword.merge(insert_options, options), state)
+      |> disconnect_on_fatal()
     else
       {:error,
        Error.new(:unsupported_params, "append queries do not accept params", source: :client),
@@ -120,7 +148,9 @@ defmodule QuackDB.DBConnection do
         state
       ) do
     if params == [] do
-      append_columns(query, table, columns, Keyword.merge(insert_options, options), state)
+      query
+      |> append_columns(table, columns, Keyword.merge(insert_options, options), state)
+      |> disconnect_on_fatal()
     else
       {:error,
        Error.new(:unsupported_params, "append queries do not accept params", source: :client),
@@ -129,7 +159,7 @@ defmodule QuackDB.DBConnection do
   end
 
   def handle_execute(%Query{} = query, params, options, state) do
-    execute_statement(query, params, options, state)
+    query |> execute_statement(params, options, state) |> disconnect_on_fatal()
   end
 
   @impl true
@@ -164,18 +194,21 @@ defmodule QuackDB.DBConnection do
 
   @impl true
   def handle_declare(%Query{} = query, params, options, state) do
-    declare_query(query, params, options, state)
+    query |> declare_query(params, options, state) |> disconnect_on_fatal()
   end
 
   @impl true
   def handle_fetch(_query, %QuackDB.Cursor{} = cursor, options, state) do
     cursor_state = Map.fetch!(state.cursors, cursor.ref)
 
-    if cursor_state.mode == :columnar do
-      handle_fetch_columnar(cursor_state, cursor, options, state)
-    else
-      handle_fetch_rows(cursor_state, cursor, options, state)
-    end
+    result =
+      if cursor_state.mode == :columnar do
+        handle_fetch_columnar(cursor_state, cursor, options, state)
+      else
+        handle_fetch_rows(cursor_state, cursor, options, state)
+      end
+
+    disconnect_on_fatal(result)
   end
 
   @impl true
@@ -186,16 +219,69 @@ defmodule QuackDB.DBConnection do
   @impl true
   def disconnect(_error, %{connection_id: nil}), do: :ok
 
+  # DBConnection disconnects on timeouts while the query may still run, and
+  # the pooled transport may still be waiting on it. Cancel and disconnect
+  # over a fresh HTTP connection so the server stops the query either way.
   def disconnect(_error, state) do
-    request = Codec.encode(%Disconnect{}, connection_id: state.connection_id)
-    _ignored = state.transport.(state.uri, request, timeout: @disconnect_timeout)
+    options = [timeout: @disconnect_timeout]
+    _ignored = side_request(state, %CancelRequest{}, options)
+    _ignored = side_request(state, %Disconnect{}, options)
 
     if state.transport_owner do
-      GenServer.stop(state.transport_owner, :normal, @disconnect_timeout)
+      stop_transport(state.transport_owner)
     end
 
     :ok
   end
+
+  @doc false
+  @spec cancel(String.t() | URI.t(), String.t(), Keyword.t()) :: :ok | {:error, Error.t()}
+  def cancel(uri, connection_id, options \\ []) when is_binary(connection_id) do
+    message = %CancelRequest{query_uuid: Keyword.get(options, :query_uuid, 0)}
+    body = Codec.encode(message, connection_id: connection_id)
+
+    with {:ok, uri} <- normalize_uri(uri),
+         {:ok, response} <- QuackDB.Transport.post(uri, body, transport_options(options)),
+         {:ok, decoded} <- Codec.decode(response) do
+      case decoded do
+        {_header, %SuccessResponse{}} -> :ok
+        {_header, %ErrorResponse{} = response} -> {:error, Error.server(response)}
+        {header, _body} -> {:error, unexpected_message(:success_response, header)}
+      end
+    end
+  end
+
+  defp normalize_uri(%URI{} = uri), do: {:ok, uri}
+  defp normalize_uri(uri) when is_binary(uri), do: QuackDB.URI.normalize(uri)
+
+  defp side_request(%{transport_owner: nil} = state, message, options),
+    do: request(state, message, options)
+
+  defp side_request(state, message, options) do
+    body = Codec.encode(message, connection_id: state.connection_id)
+    QuackDB.Transport.post(state.uri, body, Keyword.merge(state.transport_options, options))
+  end
+
+  defp stop_transport(owner) do
+    GenServer.stop(owner, :normal, @disconnect_timeout)
+  catch
+    :exit, _reason -> Process.exit(owner, :kill)
+  end
+
+  defp disconnect_on_fatal({:error, %Error{} = error, state}) do
+    if Error.disconnect?(error), do: {:disconnect, error, state}, else: {:error, error, state}
+  end
+
+  defp disconnect_on_fatal(result), do: result
+
+  # A timed-out request leaves its query running on the server; the closed
+  # HTTP connection reconnects for the cancel.
+  defp cancel_after_timeout(%Error{metadata: %{reason: :timeout}}, query_uuid, state, options) do
+    _ignored = request(state, %CancelRequest{query_uuid: query_uuid}, options)
+    :ok
+  end
+
+  defp cancel_after_timeout(_error, _query_uuid, _state, _options), do: :ok
 
   defp declare_query(%Query{} = query, params, options, state) do
     with {:ok, statement} <- QuackDB.SQL.format(query.statement, params) do
@@ -208,9 +294,15 @@ defmodule QuackDB.DBConnection do
   defp do_declare_query(%Query{} = query, statement, options, state) do
     {query_id, state} = next_query_id(state)
     options = Keyword.put(options, :client_query_id, query_id)
+    query_uuid = new_query_uuid()
 
     request =
-      %PrepareRequest{sql_query: statement}
+      %PrepareRequest{
+        sql_query: statement,
+        query_uuid: query_uuid,
+        inline_rows:
+          Keyword.get_lazy(options, :inline_rows, fn -> Keyword.get(options, :max_rows, 500) end)
+      }
       |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
 
     with {:ok, response} <- state.transport.(state.uri, request, options),
@@ -221,18 +313,20 @@ defmodule QuackDB.DBConnection do
       {:ok, query, cursor, state}
     else
       {:error, error} ->
+        cancel_after_timeout(error, query_uuid, state, options)
+
         {:error, annotate_error(error, query, state),
          %{state | status: failed_status(state.status)}}
     end
   end
 
   defp normalize_declare_response(
-         {_header, %ErrorResponse{message: message}},
+         {_header, %ErrorResponse{} = response},
          _query,
          _options,
          _state
        ) do
-    {:error, Error.server(message)}
+    {:error, Error.server(response)}
   end
 
   defp normalize_declare_response({_header, %PrepareResponse{} = response}, query, options, state) do
@@ -242,12 +336,12 @@ defmodule QuackDB.DBConnection do
       query
       | columns: response.result_names,
         result_types: response.result_types,
-        result_uuid: response.result_uuid
+        query_uuid: response.query_uuid
     }
 
     cursor = %QuackDB.Cursor{
       ref: ref,
-      result_uuid: response.result_uuid,
+      query_uuid: response.query_uuid,
       columns: response.result_names,
       result_types: response.result_types,
       connection_id: state.connection_id,
@@ -259,12 +353,14 @@ defmodule QuackDB.DBConnection do
         %{
           mode: :columnar,
           queued_chunks: response.results,
+          next_batch: 1,
           done?: not response.needs_more_fetch
         }
       else
         %{
           mode: :rows,
           queued_rows: materialize_rows(response.results, response.result_names),
+          next_batch: 1,
           done?: not response.needs_more_fetch
         }
       end
@@ -283,33 +379,36 @@ defmodule QuackDB.DBConnection do
     with {:ok, columns} <- DataChunk.columns_from_rows(rows, options),
          {:ok, batches} <- append_batches(rows, options) do
       options = Keyword.put(options, :columns, columns)
-      {query_id, state} = next_query_id(state)
-      options = Keyword.put(options, :client_query_id, query_id)
-      metadata = append_metadata(query, table, rows, batches, options, state)
+      build_chunk = &DataChunk.from_rows(&1, options)
 
-      Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
-        append_started_at = System.monotonic_time()
-
-        {result, append_metrics} =
-          case append_batches(table, batches, options, state) do
-            {:ok, metrics} ->
-              result = append_result(rows, state)
-
-              {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
-
-            {:error, error} ->
-              {{:error, annotate_error(error, query, state),
-                %{state | status: failed_status(state.status)}}, empty_append_metrics()}
-          end
-
-        append_duration = System.monotonic_time() - append_started_at
-        {result, append_stop_metadata(result, append_metrics, append_duration)}
-      end)
+      send_data_append(
+        query,
+        table,
+        columns,
+        length(rows),
+        {batches, build_chunk},
+        options,
+        state
+      )
     else
-      {:error, error} ->
-        {:error, annotate_error(error, query, state),
-         %{state | status: failed_status(state.status)}}
+      {:error, error} -> append_error(error, query, state)
     end
+  end
+
+  defp append_columns(%Query{} = query, table, columns, options, state) do
+    with {:ok, row_count} <- column_row_count(columns, options),
+         {:ok, resolved} <- DataChunk.columns_from_column_values(columns, options),
+         {:ok, batches} <- append_column_batches(columns, row_count, options) do
+      options = Keyword.put(options, :columns, resolved)
+      build_chunk = &DataChunk.from_columns(&1, options)
+      send_data_append(query, table, resolved, row_count, {batches, build_chunk}, options, state)
+    else
+      {:error, error} -> append_error(error, query, state)
+    end
+  end
+
+  defp append_error(error, query, state) do
+    {:error, annotate_error(error, query, state), %{state | status: failed_status(state.status)}}
   end
 
   defp append_batches([], options) do
@@ -335,38 +434,6 @@ defmodule QuackDB.DBConnection do
      Error.new(:invalid_batch_size, "append batch_size must be a positive integer",
        source: :client
      )}
-  end
-
-  defp append_columns(%Query{} = query, table, columns, options, state) do
-    with {:ok, row_count} <- column_row_count(columns, options),
-         {:ok, batches} <- append_column_batches(columns, row_count, options) do
-      {query_id, state} = next_query_id(state)
-      options = Keyword.put(options, :client_query_id, query_id)
-      metadata = append_metadata(query, table, row_count, batches, options, state)
-
-      Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
-        append_started_at = System.monotonic_time()
-
-        {result, append_metrics} =
-          case append_column_batches(table, batches, options, state) do
-            {:ok, metrics} ->
-              result = append_result(row_count, state)
-
-              {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
-
-            {:error, error} ->
-              {{:error, annotate_error(error, query, state),
-                %{state | status: failed_status(state.status)}}, empty_append_metrics()}
-          end
-
-        append_duration = System.monotonic_time() - append_started_at
-        {result, append_stop_metadata(result, append_metrics, append_duration)}
-      end)
-    else
-      {:error, error} ->
-        {:error, annotate_error(error, query, state),
-         %{state | status: failed_status(state.status)}}
-    end
   end
 
   defp column_row_count(columns, _options) do
@@ -458,57 +525,140 @@ defmodule QuackDB.DBConnection do
     |> Enum.map(fn chunks -> Enum.zip(names, Tuple.to_list(chunks)) end)
   end
 
-  defp append_batches(table, batches, options, state) do
-    Enum.reduce_while(batches, {:ok, empty_append_metrics()}, fn rows, {:ok, metrics} ->
-      case append_batch(table, rows, options, state) do
-        {:ok, batch_metrics} -> {:cont, {:ok, merge_append_metrics(metrics, batch_metrics)}}
-        {:error, _error} = error -> {:halt, error}
-      end
+  # Appends stream through `scan_data_from_quack_client`: an INSERT that reads
+  # a client stream is prepared without inline rows, the batches follow as
+  # send-data requests, a terminal request closes the stream against its batch
+  # count, and the INSERT's own result (a row count or RETURNING rows) is
+  # fetched like any other result.
+  defp send_data_append(query, table, columns, row_count, {batches, build_chunk}, options, state) do
+    {query_id, state} = next_query_id(state)
+    options = Keyword.put(options, :client_query_id, query_id)
+    metadata = append_metadata(query, table, row_count, batches, options, state)
+
+    Telemetry.span(state.telemetry_prefix, :append, metadata, fn ->
+      append_started_at = System.monotonic_time()
+
+      {result, append_metrics} =
+        case stream_append(table, columns, {batches, build_chunk}, options, state) do
+          {:ok, result, metrics} ->
+            {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
+
+          {:error, error, metrics} ->
+            {append_error(error, query, state), metrics}
+        end
+
+      append_duration = System.monotonic_time() - append_started_at
+      {result, append_stop_metadata(result, append_metrics, append_duration)}
     end)
   end
 
-  defp append_column_batches(table, batches, options, state) do
-    Enum.reduce_while(batches, {:ok, empty_append_metrics()}, fn columns, {:ok, metrics} ->
-      case append_column_batch(table, columns, options, state) do
-        {:ok, batch_metrics} -> {:cont, {:ok, merge_append_metrics(metrics, batch_metrics)}}
-        {:error, _error} = error -> {:halt, error}
-      end
-    end)
-  end
+  defp stream_append(table, columns, {batches, build_chunk}, options, state) do
+    stream_id = new_stream_id()
+    query_uuid = new_query_uuid()
 
-  defp append_batch(table, rows, options, state) do
-    encode_started_at = System.monotonic_time()
+    prepare = %PrepareRequest{
+      sql_query: send_data_statement(table, columns, stream_id, options),
+      query_uuid: query_uuid,
+      inline_rows: 0
+    }
 
-    with {:ok, chunk} <- DataChunk.from_rows(rows, options),
-         request = %AppendRequest{
-           schema_name: Keyword.get(options, :schema, ""),
-           table_name: to_string(table),
-           append_chunk: chunk
-         },
-         encoded <-
-           Codec.encode(request,
-             connection_id: state.connection_id,
-             client_query_id: Keyword.get(options, :client_query_id)
-           ) do
-      encode_duration = System.monotonic_time() - encode_started_at
-      append_encoded(encoded, options, state, encode_duration)
+    with {:ok, prepared} <- prepare_send_data(prepare, state, options),
+         {:ok, metrics} <- send_batches(stream_id, batches, build_chunk, options, state),
+         {:ok, chunks} <- fetch_remaining_chunks(prepared, state, options) do
+      {:ok, append_result(prepared, chunks, options, state), metrics}
+    else
+      {:error, error} ->
+        _ignored = request(state, %CancelRequest{query_uuid: query_uuid}, options)
+        {:error, error, empty_append_metrics()}
     end
   end
 
-  defp normalize_append_response({_header, %ErrorResponse{message: message}}) do
-    {:error, Error.server(message)}
+  defp prepare_send_data(prepare, state, options) do
+    case request(state, prepare, options) do
+      {:ok, {_header, %PrepareResponse{} = response}} -> {:ok, response}
+      {:ok, {header, _body}} -> {:error, unexpected_message(:prepare_response, header)}
+      {:error, _error} = error -> error
+    end
   end
 
-  defp normalize_append_response({_header, %QuackDB.Protocol.Message.SuccessResponse{}}), do: :ok
+  defp send_data_statement(table, columns, stream_id, options) do
+    names = Enum.map(columns, & &1.name)
 
-  defp normalize_append_response({header, _body}) do
-    {:error,
-     Error.new(:unexpected_message, "expected success response, got #{header.type}",
-       source: :protocol
-     )}
+    prototype =
+      columns
+      |> Enum.map(&[column(&1.name), " ", LogicalType.to_sql(&1.type)])
+      |> Enum.intersperse(", ")
+
+    [
+      "INSERT INTO ",
+      table({Keyword.get(options, :schema), table}),
+      insert_columns(names),
+      " SELECT * FROM scan_data_from_quack_client(",
+      QuackDB.SQL.literal!(stream_id),
+      ", NULL::STRUCT(",
+      prototype,
+      "))",
+      on_conflict(Keyword.get(options, :on_conflict, :raise)),
+      returning(Keyword.get(options, :returning, []))
+    ]
+    |> IO.iodata_to_binary()
   end
 
-  defp append_encoded(encoded, options, state, encode_duration) do
+  defp send_batches(stream_id, batches, build_chunk, options, state) do
+    batches
+    |> Enum.reduce_while({:ok, empty_append_metrics(), 0}, fn batch, {:ok, metrics, sent} ->
+      case send_batch(stream_id, batch, sent + 1, build_chunk, options, state) do
+        {:ok, :empty} ->
+          {:cont, {:ok, metrics, sent}}
+
+        {:ok, batch_metrics} ->
+          {:cont, {:ok, merge_append_metrics(metrics, batch_metrics), sent + 1}}
+
+        {:error, _error} = error ->
+          {:halt, error}
+      end
+    end)
+    |> case do
+      {:ok, metrics, sent} ->
+        terminal = %SendDataRequest{stream_id: stream_id, total_batches: sent}
+        encoded = encode_request(terminal, state, options)
+
+        with {:ok, _terminal_metrics} <- send_encoded(encoded, options, state, 0) do
+          {:ok, metrics}
+        end
+
+      {:error, _error} = error ->
+        error
+    end
+  end
+
+  defp send_batch(stream_id, batch, batch_index, build_chunk, options, state) do
+    encode_started_at = System.monotonic_time()
+
+    with {:ok, chunk} <- build_chunk.(batch) do
+      if chunk.row_count == 0 do
+        {:ok, :empty}
+      else
+        message = %SendDataRequest{
+          stream_id: stream_id,
+          batch_index: batch_index,
+          chunks: DataChunk.split(chunk, @max_chunk_rows)
+        }
+
+        encoded = encode_request(message, state, options)
+        send_encoded(encoded, options, state, System.monotonic_time() - encode_started_at)
+      end
+    end
+  end
+
+  defp encode_request(message, state, options) do
+    Codec.encode(message,
+      connection_id: state.connection_id,
+      client_query_id: Keyword.get(options, :client_query_id)
+    )
+  end
+
+  defp send_encoded(encoded, options, state, encode_duration) do
     {transport_duration, transport_result} =
       timed(fn -> state.transport.(state.uri, encoded, options) end)
 
@@ -516,7 +666,7 @@ defmodule QuackDB.DBConnection do
       {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
 
       with {:ok, decoded} <- decode_result,
-           :ok <- normalize_append_response(decoded) do
+           :ok <- normalize_send_data_response(decoded) do
         {:ok,
          append_batch_metrics(
            encode_duration,
@@ -527,6 +677,16 @@ defmodule QuackDB.DBConnection do
          )}
       end
     end
+  end
+
+  defp normalize_send_data_response({_header, %SendDataResponse{}}), do: :ok
+
+  defp normalize_send_data_response({_header, %ErrorResponse{} = response}) do
+    {:error, Error.server(response)}
+  end
+
+  defp normalize_send_data_response({header, _body}) do
+    {:error, unexpected_message(:send_data_response, header)}
   end
 
   defp append_batch_metrics(
@@ -580,37 +740,30 @@ defmodule QuackDB.DBConnection do
     {System.monotonic_time() - started_at, result}
   end
 
-  defp append_column_batch(table, columns, options, state) do
-    encode_started_at = System.monotonic_time()
+  # A prepare without inline rows answers before the INSERT binds its result,
+  # so the server cannot name the columns yet: they are DuckDB's `Count`, or
+  # the requested RETURNING columns.
+  defp append_result(%PrepareResponse{} = response, chunks, options, state) do
+    columns =
+      case Keyword.get(options, :returning, []) do
+        [] -> ["Count"]
+        returning -> Enum.map(returning, &to_string/1)
+      end
 
-    with {:ok, chunk} <- DataChunk.from_columns(columns, options),
-         request = %AppendRequest{
-           schema_name: Keyword.get(options, :schema, ""),
-           table_name: to_string(table),
-           append_chunk: chunk
-         },
-         encoded <-
-           Codec.encode(request,
-             connection_id: state.connection_id,
-             client_query_id: Keyword.get(options, :client_query_id)
-           ) do
-      encode_duration = System.monotonic_time() - encode_started_at
-      append_encoded(encoded, options, state, encode_duration)
-    end
-  end
-
-  defp append_result(rows, state) when is_list(rows), do: append_result(length(rows), state)
-
-  defp append_result(row_count, state) do
     %Result{
       command: :insert,
-      columns: [],
-      rows: nil,
-      num_rows: row_count,
+      columns: columns,
+      rows: materialize_rows(response.results ++ chunks, columns),
       connection_id: state.connection_id,
       messages: [],
-      metadata: %{}
+      metadata: %{query_uuid: response.query_uuid}
     }
+    |> then(&%{&1 | num_rows: length(&1.rows)})
+    |> Result.normalize()
+  end
+
+  defp new_stream_id do
+    16 |> :crypto.strong_rand_bytes() |> Base.encode16(case: :lower)
   end
 
   defp execute_statement(%Query{} = query, params, options, state) do
@@ -624,6 +777,7 @@ defmodule QuackDB.DBConnection do
   defp do_execute_statement(%Query{} = query, statement, params, options, state) do
     {query_id, state} = next_query_id(state)
     options = Keyword.put(options, :client_query_id, query_id)
+    query_uuid = new_query_uuid()
 
     Telemetry.span(
       state.telemetry_prefix,
@@ -632,21 +786,25 @@ defmodule QuackDB.DBConnection do
       fn ->
         {encode_duration, request} =
           timed(fn ->
-            %PrepareRequest{sql_query: statement}
+            %PrepareRequest{
+              sql_query: statement,
+              query_uuid: query_uuid,
+              inline_rows: Keyword.get(options, :inline_rows)
+            }
             |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
           end)
 
         metrics = query_metrics(encode_duration, request)
 
         {result, metrics} =
-          execute_query_request(query, request, options, state, metrics)
+          execute_query_request({query, query_uuid}, request, options, state, metrics)
 
         {result, query_stop_metadata(result, metrics)}
       end
     )
   end
 
-  defp execute_query_request(query, request, options, state, metrics) do
+  defp execute_query_request({query, query_uuid}, request, options, state, metrics) do
     {transport_duration, transport_result} =
       timed(fn -> state.transport.(state.uri, request, options) end)
 
@@ -656,6 +814,8 @@ defmodule QuackDB.DBConnection do
         decode_query_response(query, response, options, state, metrics)
 
       {:error, error} ->
+        cancel_after_timeout(error, query_uuid, state, options)
+
         result =
           {:error, annotate_error(error, query, state),
            %{state | status: failed_status(state.status)}}
@@ -701,12 +861,12 @@ defmodule QuackDB.DBConnection do
   end
 
   defp normalize_query_response(
-         {_header, %ErrorResponse{message: message}},
+         {_header, %ErrorResponse{} = response},
          _query,
          _state,
          _options
        ) do
-    {:error, Error.server(message)}
+    {:error, Error.server(response)}
   end
 
   defp normalize_query_response({_header, %PrepareResponse{} = response}, query, state, options) do
@@ -717,7 +877,7 @@ defmodule QuackDB.DBConnection do
         query
         | columns: response.result_names,
           result_types: response.result_types,
-          result_uuid: response.result_uuid
+          query_uuid: response.query_uuid
       }
 
       result =
@@ -730,7 +890,7 @@ defmodule QuackDB.DBConnection do
           messages: [],
           metadata: %{
             needs_more_fetch: response.needs_more_fetch,
-            result_uuid: response.result_uuid
+            query_uuid: response.query_uuid
           }
         }
         |> Result.normalize()
@@ -746,56 +906,107 @@ defmodule QuackDB.DBConnection do
      )}
   end
 
-  defp fetch_remaining_chunks(%PrepareResponse{needs_more_fetch: false}, _state, _options),
-    do: {:ok, []}
-
-  defp fetch_remaining_chunks(%PrepareResponse{} = response, state, options) do
-    fetch_chunks(response.result_uuid, state, options, [])
+  defp fetch_remaining_chunks(
+         %PrepareResponse{needs_more_fetch: false} = response,
+         state,
+         options
+       ) do
+    with :ok <- acknowledge(response.query_uuid, state, options), do: {:ok, []}
   end
 
-  defp fetch_chunks(result_uuid, state, options, chunks) do
+  defp fetch_remaining_chunks(%PrepareResponse{} = response, state, options) do
+    with {:ok, chunks} <- fetch_all_batches(response.query_uuid, 1, state, options, []),
+         :ok <- acknowledge(response.query_uuid, state, options) do
+      {:ok, chunks}
+    end
+  end
+
+  defp fetch_all_batches(query_uuid, batch_index, state, options, chunks) do
+    case fetch_batch(query_uuid, batch_index, state, options) do
+      {:ok, {:batch, batch}} ->
+        fetch_all_batches(
+          query_uuid,
+          batch_index + 1,
+          state,
+          options,
+          Enum.reverse(batch, chunks)
+        )
+
+      {:ok, :done} ->
+        {:ok, Enum.reverse(chunks)}
+
+      {:error, _error} = error ->
+        error
+    end
+  end
+
+  # Fetches one dense batch. `ack_index` tells the server every earlier batch
+  # arrived, so it can drop them; a retry of the same index gets the same batch.
+  defp fetch_batch(query_uuid, batch_index, state, options) do
     Telemetry.span(
       state.telemetry_prefix,
       :fetch,
-      fetch_metadata(result_uuid, options, state),
+      fetch_metadata(query_uuid, batch_index, options, state),
       fn ->
+        message = %FetchRequest{
+          query_uuid: query_uuid,
+          batch_index: batch_index,
+          ack_index: batch_index - 1
+        }
+
         {encode_duration, request} =
-          timed(fn ->
-            Codec.encode(%FetchRequest{uuid: result_uuid}, connection_id: state.connection_id)
-          end)
+          timed(fn -> Codec.encode(message, connection_id: state.connection_id) end)
 
         metrics = query_metrics(encode_duration, request)
+        retries = Keyword.get(options, :fetch_retries, @default_fetch_retries)
 
         {result, metrics} =
-          execute_fetch_request(result_uuid, request, options, state, chunks, metrics)
+          execute_fetch_request(batch_index, request, options, state, metrics, retries)
+
+        with {:error, error} <- result do
+          cancel_after_timeout(error, query_uuid, state, options)
+        end
 
         {result, fetch_stop_metadata(result, metrics)}
       end
     )
   end
 
-  defp execute_fetch_request(result_uuid, request, options, state, chunks, metrics) do
+  # The server keeps a served batch until a later request acknowledges it, so
+  # a fetch that lost its HTTP connection can ask for the same batch again.
+  defp execute_fetch_request(batch_index, request, options, state, metrics, retries) do
+    case execute_fetch_request(batch_index, request, options, state, metrics) do
+      {{:error, %Error{source: :transport} = error}, _metrics}
+      when retries > 0 and error.metadata.reason != :timeout ->
+        execute_fetch_request(batch_index, request, options, state, metrics, retries - 1)
+
+      result ->
+        result
+    end
+  end
+
+  defp execute_fetch_request(batch_index, request, options, state, metrics) do
     {transport_duration, transport_result} =
       timed(fn -> state.transport.(state.uri, request, options) end)
 
     case transport_result do
       {:ok, response} ->
         metrics = put_transport_metrics(metrics, transport_duration, response)
-        decode_fetch_response(result_uuid, response, options, state, chunks, metrics)
+        decode_fetch_response(batch_index, response, metrics)
 
       {:error, error} ->
         {{:error, error}, Map.put(metrics, :transport_duration, transport_duration)}
     end
   end
 
-  defp decode_fetch_response(result_uuid, response, options, state, chunks, metrics) do
+  defp decode_fetch_response(batch_index, response, metrics) do
     {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
     metrics = Map.put(metrics, :decode_duration, decode_duration)
 
     case decode_result do
       {:ok, decoded} ->
         {normalize_duration, result} =
-          timed(fn -> normalize_fetch_response(decoded, result_uuid, state, options, chunks) end)
+          timed(fn -> normalize_fetch_response(decoded, batch_index) end)
 
         {result, Map.put(metrics, :normalize_duration, normalize_duration)}
 
@@ -804,41 +1015,49 @@ defmodule QuackDB.DBConnection do
     end
   end
 
-  defp normalize_fetch_response(
-         {_header, %FetchResponse{results: []}},
-         _result_uuid,
-         _state,
-         _options,
-         chunks
-       ) do
-    {:ok, Enum.reverse(chunks)}
+  defp normalize_fetch_response({_header, %FetchResponse{results: []} = response}, batch_index) do
+    case response.total_batches do
+      total when total in [nil, batch_index - 1] ->
+        {:ok, :done}
+
+      total ->
+        {:error,
+         Error.new(
+           :incomplete_result,
+           "server reported #{total} result batches but the client received #{batch_index - 1}",
+           source: :protocol
+         )}
+    end
   end
 
-  defp normalize_fetch_response(
-         {_header, %FetchResponse{} = response},
-         result_uuid,
-         state,
-         options,
-         chunks
-       ) do
-    fetch_chunks(result_uuid, state, options, Enum.reverse(response.results, chunks))
+  defp normalize_fetch_response({_header, %FetchResponse{} = response}, batch_index) do
+    if response.batch_index in [nil, batch_index] do
+      {:ok, {:batch, response.results}}
+    else
+      {:error,
+       Error.new(
+         :unexpected_batch,
+         "requested result batch #{batch_index}, got #{response.batch_index}",
+         source: :protocol
+       )}
+    end
   end
 
-  defp normalize_fetch_response(
-         {_header, %ErrorResponse{message: message}},
-         _result_uuid,
-         _state,
-         _options,
-         _chunks
-       ) do
-    {:error, Error.server(message)}
+  defp normalize_fetch_response({_header, %ErrorResponse{} = response}, _batch_index) do
+    {:error, Error.server(response)}
   end
 
-  defp normalize_fetch_response({header, _body}, _result_uuid, _state, _options, _chunks) do
-    {:error,
-     Error.new(:unexpected_message, "expected fetch response, got #{header.type}",
-       source: :protocol
-     )}
+  defp normalize_fetch_response({header, _body}, _batch_index) do
+    {:error, unexpected_message(:fetch_response, header)}
+  end
+
+  # With reconnects enabled the server keeps the last result until the client
+  # confirms it arrived. A failed acknowledgement does not fail the query.
+  defp acknowledge(_query_uuid, %{acknowledge_results?: false}, _options), do: :ok
+
+  defp acknowledge(query_uuid, state, options) do
+    _ignored = request(state, %Acknowledgement{query_uuid: query_uuid}, options)
+    :ok
   end
 
   defp handle_fetch_rows(cursor_state, cursor, options, state) do
@@ -889,45 +1108,58 @@ defmodule QuackDB.DBConnection do
   end
 
   defp fetch_cursor_state(cursor_state, cursor, options, state) do
-    request =
-      Codec.encode(%FetchRequest{uuid: cursor.result_uuid}, connection_id: state.connection_id)
+    case fetch_batch(cursor.query_uuid, cursor_state.next_batch, state, options) do
+      {:ok, :done} ->
+        with :ok <- acknowledge(cursor.query_uuid, state, options),
+             do: {:ok, %{cursor_state | done?: true}}
 
-    with {:ok, response} <- state.transport.(state.uri, request, options),
-         {:ok, decoded} <- Codec.decode(response) do
-      update_cursor_from_fetch(decoded, cursor_state, cursor)
+      {:ok, {:batch, chunks}} ->
+        {:ok,
+         queue_cursor_chunks(
+           %{cursor_state | next_batch: cursor_state.next_batch + 1},
+           chunks,
+           cursor
+         )}
+
+      {:error, _error} = error ->
+        error
     end
   end
 
-  defp update_cursor_from_fetch({_header, %FetchResponse{results: []}}, cursor_state, _cursor) do
-    {:ok, %{cursor_state | done?: true}}
+  defp queue_cursor_chunks(%{mode: :columnar} = cursor_state, chunks, _cursor) do
+    %{cursor_state | queued_chunks: cursor_state.queued_chunks ++ chunks}
   end
 
-  defp update_cursor_from_fetch(
-         {_header, %FetchResponse{} = response},
-         %{mode: :columnar} = cursor_state,
-         _cursor
-       ) do
-    {:ok, %{cursor_state | queued_chunks: cursor_state.queued_chunks ++ response.results}}
+  defp queue_cursor_chunks(cursor_state, chunks, cursor) do
+    %{
+      cursor_state
+      | queued_rows: cursor_state.queued_rows ++ materialize_rows(chunks, cursor.columns)
+    }
   end
 
-  defp update_cursor_from_fetch({_header, %FetchResponse{} = response}, cursor_state, cursor) do
-    rows = materialize_rows(response.results, cursor.columns)
-    {:ok, %{cursor_state | queued_rows: cursor_state.queued_rows ++ rows}}
+  defp request(state, message, options) do
+    encoded =
+      Codec.encode(message,
+        connection_id: state.connection_id,
+        client_query_id: Keyword.get(options, :client_query_id)
+      )
+
+    with {:ok, response} <- state.transport.(state.uri, encoded, options) do
+      case Codec.decode(response) do
+        {:ok, {_header, %ErrorResponse{} = response}} -> {:error, Error.server(response)}
+        other -> other
+      end
+    end
   end
 
-  defp update_cursor_from_fetch(
-         {_header, %ErrorResponse{message: message}},
-         _cursor_state,
-         _cursor
-       ) do
-    {:error, Error.server(message)}
+  # Zero is reserved for the server's internal catalog traffic.
+  defp new_query_uuid do
+    <<_sign::1, uuid::127>> = :crypto.strong_rand_bytes(16)
+    if uuid == 0, do: new_query_uuid(), else: uuid
   end
 
-  defp update_cursor_from_fetch({header, _body}, _cursor_state, _cursor) do
-    {:error,
-     Error.new(:unexpected_message, "expected fetch response, got #{header.type}",
-       source: :protocol
-     )}
+  defp unexpected_message(expected, header) do
+    Error.new(:unexpected_message, "expected #{expected}, got #{header.type}", source: :protocol)
   end
 
   defp put_cursor_state(state, ref, cursor_state) do
@@ -965,7 +1197,8 @@ defmodule QuackDB.DBConnection do
   defp build_state(options) do
     uri = Keyword.get(options, :uri, "http://localhost:9494")
 
-    with {:ok, uri} <- QuackDB.URI.normalize(uri) do
+    with {:ok, uri} <- QuackDB.URI.normalize(uri),
+         :ok <- validate_heartbeat_timeout(Keyword.get(options, :heartbeat_timeout)) do
       {:ok,
        %__MODULE__{
          uri: uri,
@@ -974,9 +1207,28 @@ defmodule QuackDB.DBConnection do
          transport_owner: nil,
          transport_options: transport_options(options),
          client_version: Keyword.get(options, :client_version, client_version()),
+         client_id: Keyword.get(options, :client_id, ""),
+         heartbeat_timeout: Keyword.get(options, :heartbeat_timeout, @default_heartbeat_timeout),
+         acknowledge_results?: Keyword.get(options, :acknowledge_results, false),
          telemetry_prefix: Keyword.get(options, :telemetry_prefix, Telemetry.default_prefix())
        }}
     end
+  end
+
+  # DuckDB bounds the lease so that it fits in signed 64-bit milliseconds.
+  defp validate_heartbeat_timeout(nil), do: :ok
+
+  defp validate_heartbeat_timeout(seconds)
+       when is_integer(seconds) and seconds > 0 and seconds <= div(0x7FFF_FFFF_FFFF_FFFF, 1000),
+       do: :ok
+
+  defp validate_heartbeat_timeout(seconds) do
+    {:error,
+     Error.new(
+       :invalid_heartbeat_timeout,
+       "expected :heartbeat_timeout to be a positive number of seconds, got: #{inspect(seconds)}",
+       source: :client
+     )}
   end
 
   defp connect_quack(state) do
@@ -990,14 +1242,37 @@ defmodule QuackDB.DBConnection do
       %ConnectionRequest{
         auth_string: state.token,
         client_duckdb_version: state.client_version,
-        client_platform: client_platform()
+        client_platform: client_platform(),
+        client_id: state.client_id,
+        heartbeat_timeout_seconds: state.heartbeat_timeout
       }
       |> Codec.encode()
 
-    with {:ok, response} <- state.transport.(state.uri, request, []),
+    with {:ok, response} <- handshake(state, request),
          {:ok, decoded} <- Codec.decode(response) do
       normalize_connect_response(decoded, state)
     end
+  end
+
+  # A DuckDB 1.5 server cannot parse the version 3 handshake and answers with
+  # a bare HTTP 500.
+  defp handshake(state, request) do
+    case state.transport.(state.uri, request, []) do
+      {:error, %Error{code: :http_error, metadata: %{status: 500}} = error} ->
+        {:error, unsupported_quack_version("the server rejected the handshake", error)}
+
+      result ->
+        result
+    end
+  end
+
+  defp unsupported_quack_version(reason, cause) do
+    Error.new(
+      :unsupported_quack_version,
+      "#{reason}; QuackDB requires Quack protocol version 3 (DuckDB 2.0)",
+      source: :protocol,
+      metadata: %{cause: cause}
+    )
   end
 
   defp start_transport(%{transport: nil, uri: uri} = state) do
@@ -1018,12 +1293,33 @@ defmodule QuackDB.DBConnection do
     Keyword.take(options, [:connect_timeout, :receive_timeout, :shutdown_timeout, :mint_options])
   end
 
-  defp normalize_connect_response({header, %ConnectionResponse{} = response}, state) do
-    {:ok, %{state | connection_id: header.connection_id, server: response}}
+  defp normalize_connect_response(
+         {header, %ConnectionResponse{quack_version: 3} = response},
+         state
+       ) do
+    {:ok,
+     %{
+       state
+       | connection_id: header.connection_id,
+         server: response,
+         heartbeat_timeout: response.heartbeat_timeout_seconds
+     }}
   end
 
-  defp normalize_connect_response({_header, %ErrorResponse{message: message}}, _state) do
-    {:error, Error.server(message)}
+  defp normalize_connect_response({_header, %ConnectionResponse{} = response}, _state) do
+    reason = "the server selected Quack protocol version #{response.quack_version}"
+    {:error, unsupported_quack_version(reason, response)}
+  end
+
+  defp normalize_connect_response(
+         {_header, %ErrorResponse{message: "Unsupported Quack version" <> _rest} = response},
+         _state
+       ) do
+    {:error, unsupported_quack_version(response.message, Error.server(response))}
+  end
+
+  defp normalize_connect_response({_header, %ErrorResponse{} = response}, _state) do
+    {:error, Error.server(response)}
   end
 
   defp normalize_connect_response({header, _body}, _state) do
@@ -1057,33 +1353,11 @@ defmodule QuackDB.DBConnection do
         row_count + chunk.row_count
       )
     else
-      {selected_chunk, remaining_chunk} = split_chunk(chunk, remaining_rows)
+      {selected_chunk, remaining_chunk} = DataChunk.split_at(chunk, remaining_rows)
 
       {Enum.reverse([selected_chunk | selected]), [remaining_chunk | chunks],
        row_count + remaining_rows}
     end
-  end
-
-  defp split_chunk(chunk, row_count) do
-    {selected_columns, remaining_columns} =
-      Enum.map_reduce(chunk.columns, [], fn column, remaining_columns ->
-        {selected_values, remaining_values} = Enum.split(column.values, row_count)
-
-        selected_column = %{column | values: selected_values}
-        remaining_column = %{column | values: remaining_values}
-
-        {selected_column, [remaining_column | remaining_columns]}
-      end)
-
-    selected = %{chunk | row_count: row_count, columns: selected_columns}
-
-    remaining = %{
-      chunk
-      | row_count: chunk.row_count - row_count,
-        columns: Enum.reverse(remaining_columns)
-    }
-
-    {selected, remaining}
   end
 
   defp cursor_result(cursor, rows) do
@@ -1137,10 +1411,11 @@ defmodule QuackDB.DBConnection do
     })
   end
 
-  defp fetch_metadata(result_uuid, options, state) do
+  defp fetch_metadata(query_uuid, batch_index, options, state) do
     options
     |> metadata_from_options(state)
-    |> Map.put(:result_uuid, result_uuid)
+    |> Map.put(:query_uuid, query_uuid)
+    |> Map.put(:batch_index, batch_index)
   end
 
   defp metadata_from_options(options, state) do
@@ -1193,8 +1468,13 @@ defmodule QuackDB.DBConnection do
 
   defp maybe_put_rows_per_second(metadata, _result, _duration), do: metadata
 
-  defp fetch_stop_metadata({:ok, chunks}, metrics) do
+  defp fetch_stop_metadata({:ok, {:batch, chunks}}, metrics) do
     %{chunks: length(chunks), result: :ok}
+    |> Map.merge(metrics)
+  end
+
+  defp fetch_stop_metadata({:ok, :done}, metrics) do
+    %{chunks: 0, result: :ok}
     |> Map.merge(metrics)
   end
 

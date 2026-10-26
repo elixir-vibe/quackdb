@@ -98,8 +98,44 @@ defmodule QuackDB.Protocol.DataChunk do
     end
   end
 
+  @doc """
+  Splits a chunk into chunks of at most `max_rows` rows each.
+  """
+  @spec split(t(), pos_integer()) :: [t()]
+  def split(%__MODULE__{row_count: row_count} = chunk, max_rows) when row_count <= max_rows,
+    do: [chunk]
+
+  def split(%__MODULE__{} = chunk, max_rows) do
+    {selected, remaining} = split_at(chunk, max_rows)
+    [selected | split(remaining, max_rows)]
+  end
+
+  @doc """
+  Splits a chunk after its first `row_count` rows.
+  """
+  @spec split_at(t(), non_neg_integer()) :: {t(), t()}
+  def split_at(%__MODULE__{} = chunk, row_count) do
+    {selected_columns, remaining_columns} =
+      chunk.columns
+      |> Enum.map(fn column ->
+        {selected, remaining} = Enum.split(column.values, row_count)
+        {%{column | values: selected}, %{column | values: remaining}}
+      end)
+      |> Enum.unzip()
+
+    {%{chunk | row_count: row_count, columns: selected_columns},
+     %{chunk | row_count: chunk.row_count - row_count, columns: remaining_columns}}
+  end
+
   @spec decode_wrapper(binary()) :: Reader.read_result(t())
   def decode_wrapper(binary), do: decode_wrapper(binary, nil)
+
+  @doc """
+  Decodes one bare `DataChunk` object, as found in the raw chunk blob that
+  follows fetch responses and send-data requests.
+  """
+  @spec decode(binary()) :: Reader.read_result(t())
+  def decode(binary), do: decode_chunk(binary, %__MODULE__{})
 
   @spec rows(t(), [String.t()] | nil) :: [[term()]]
   def rows(chunk, names \\ nil)
@@ -318,6 +354,11 @@ defmodule QuackDB.Protocol.DataChunk do
   end
 
   defp normalize_type(%LogicalType{} = type), do: {:ok, type}
+
+  # VARIANT and JSON values travel as JSON text; the INSERT casts them to the
+  # column type, which keeps objects, arrays, and scalars apart.
+  defp normalize_type(:variant), do: {:ok, LogicalType.json(:variant)}
+  defp normalize_type(:json), do: {:ok, LogicalType.json(:json)}
   defp normalize_type(type) when is_atom(type), do: {:ok, LogicalType.new(type)}
 
   defp normalize_type({:decimal, width, scale}),
@@ -472,8 +513,6 @@ defmodule QuackDB.Protocol.DataChunk do
       end
     end
   end
-
-  defp decode(binary), do: decode_chunk(binary, %__MODULE__{})
 
   defp decode_chunk(binary, chunk) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do

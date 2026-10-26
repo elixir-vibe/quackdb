@@ -16,10 +16,10 @@ defmodule QuackDB.Protocol.UnsupportedTypeTest do
     end
   end
 
-  test "reports VARIANT vectors as unsupported" do
+  test "refuses to encode VARIANT vectors" do
     type = %LogicalType{id: 109, name: :variant, type_info: %{type: 5, children: []}}
 
-    assert_raise QuackDB.Error, ~r/unsupported logical type/, fn ->
+    assert_raise QuackDB.Error, ~r/variant vectors are not encodable/, fn ->
       DataChunk.encode_wrapper(%DataChunk{
         row_count: 0,
         types: [type],

@@ -7,11 +7,11 @@ defmodule QuackDB.Query do
           statement: iodata(),
           columns: [String.t()] | nil,
           result_types: [term()] | nil,
-          result_uuid: integer() | nil,
+          query_uuid: integer() | nil,
           operation: term() | nil
         }
 
-  defstruct [:statement, :columns, :result_types, :result_uuid, :operation]
+  defstruct [:statement, :columns, :result_types, :query_uuid, :operation]
 end
 
 defimpl DBConnection.Query, for: QuackDB.Query do
@@ -42,7 +42,7 @@ defimpl Inspect, for: QuackDB.Query do
     fields = [
       statement: QuackDB.Inspect.truncate(query.statement),
       columns: query.columns,
-      result_uuid: query.result_uuid
+      query_uuid: query.query_uuid
     ]
 
     concat(QuackDB.Inspect.container("QuackDB.Query", fields, opts))

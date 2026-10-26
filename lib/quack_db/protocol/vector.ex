@@ -9,6 +9,7 @@ defmodule QuackDB.Protocol.Vector do
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Reader
   alias QuackDB.Protocol.Value
+  alias QuackDB.Protocol.Variant
   alias QuackDB.Protocol.Writer
 
   defstruct [:type, vector_type: :flat, values: []]
@@ -61,6 +62,15 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
+  defp encode_values(%LogicalType{name: name}, _values, _row_count)
+       when name in [:variant, :tuple] do
+    raise Error.new(
+            :unsupported_type,
+            "#{name} vectors are not encodable; append plain values and let DuckDB cast them",
+            source: :protocol
+          )
+  end
+
   defp encode_values(type, values, row_count) do
     physical_type = LogicalType.physical_type(type)
 
@@ -92,7 +102,8 @@ defmodule QuackDB.Protocol.Vector do
               :timestamp_ms,
               :timestamp_ns,
               :timestamp_sec,
-              :timestamp_tz
+              :timestamp_tz,
+              :timestamp_tz_ns
             ] do
     if Enum.any?(values, &is_nil/1) do
       values
@@ -107,11 +118,21 @@ defmodule QuackDB.Protocol.Vector do
     values |> Enum.map(&encode_fixed_value(type, physical_type, &1)) |> IO.iodata_to_binary()
   end
 
-  defp encode_variable_values(type, values, :varchar, row_count) do
-    Writer.field(
-      102,
-      Writer.list(values, row_count, fn value -> Writer.blob(encode_string_like(type, value)) end)
-    )
+  # DuckDB 2.0 serializes strings as one lengths blob and one bytes blob.
+  # Lengths are written for every row; NULL rows have length zero.
+  defp encode_variable_values(type, values, :varchar, _row_count) do
+    {lengths, bytes, byte_count} =
+      Enum.reduce(values, {[], [], 0}, fn value, {lengths, bytes, byte_count} ->
+        encoded = encode_string_like(type, value)
+        size = byte_size(encoded)
+        {[<<size::little-unsigned-32>> | lengths], [encoded | bytes], byte_count + size}
+      end)
+
+    [
+      Writer.field(107, Writer.optional_index(byte_count)),
+      Writer.field(108, Writer.blob(lengths |> Enum.reverse() |> IO.iodata_to_binary())),
+      Writer.field(109, Writer.blob(bytes |> Enum.reverse() |> IO.iodata_to_binary()))
+    ]
   end
 
   defp encode_variable_values(type, values, :struct, _row_count) do
@@ -254,6 +275,33 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
+  # A shredded VARIANT is a STRUCT of the unshredded leftovers and the typed
+  # tree. The leftovers stay in their raw layout so the tree can reference
+  # them by index.
+  defp decode_body(binary, %LogicalType{name: :variant} = type, row_count, :shredded) do
+    with {:ok, shredded_type, rest} <- read_required(binary, 91, &LogicalType.decode/1),
+         [unshredded, typed] <- LogicalType.struct_children(shredded_type),
+         raw_type = put_struct_children(shredded_type, [variant_layout(unshredded), typed]),
+         {:ok, shredded, rest} <- read_required(rest, 92, &decode(&1, raw_type, row_count)),
+         {:ok, field_end, rest} <- Reader.read_field_id(rest),
+         :ok <- expect_vector_end(field_end),
+         rows = Enum.map(shredded.values, &(&1 && {&1[unshredded.name], &1[typed.name]})),
+         {:ok, values} <-
+           Variant.decode_shredded(
+             Enum.map(rows, &(&1 && elem(&1, 0))),
+             typed.type,
+             Enum.map(rows, &(&1 && elem(&1, 1)))
+           ) do
+      {:ok, %__MODULE__{type: type, vector_type: :shredded, values: values}, rest}
+    else
+      children when is_list(children) ->
+        error(:invalid_variant, "shredded VARIANT data must be a struct with two children")
+
+      error ->
+        error
+    end
+  end
+
   defp decode_body(_binary, _type, _row_count, vector_type) do
     error(:unsupported_vector_type, "#{vector_type} vectors are not implemented yet")
   end
@@ -301,9 +349,7 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp decode_variable_values(binary, type, :varchar, row_count, validity) do
-    read_blob_list = fn rest -> Reader.read_list(rest, &Reader.read_blob/1) end
-
-    with {:ok, values, rest} <- read_required(binary, 102, read_blob_list),
+    with {:ok, values, rest} <- read_string_values(binary, row_count),
          :ok <- expect_value_count(values, row_count, :varchar) do
       values =
         values
@@ -313,6 +359,37 @@ defmodule QuackDB.Protocol.Vector do
         end)
 
       {:ok, values, rest}
+    end
+  end
+
+  defp decode_variable_values(
+         binary,
+         %LogicalType{name: :variant} = type,
+         :struct,
+         row_count,
+         validity
+       ) do
+    with {:ok, rows, rest} <-
+           decode_variable_values(binary, variant_layout(type), :struct, row_count, validity),
+         {:ok, values} <- Variant.decode_rows(rows) do
+      {:ok, values, rest}
+    end
+  end
+
+  # TUPLE children are unnamed, so decode them by position.
+  defp decode_variable_values(
+         binary,
+         %LogicalType{name: :tuple} = type,
+         :struct,
+         row_count,
+         validity
+       ) do
+    children = LogicalType.struct_children(type)
+    indexed = Enum.with_index(children, fn child, index -> %{child | name: index} end)
+    layout = %{put_struct_children(type, indexed) | name: :struct}
+
+    with {:ok, rows, rest} <- decode_variable_values(binary, layout, :struct, row_count, validity) do
+      {:ok, Enum.map(rows, &tuple_row(&1, length(children))), rest}
     end
   end
 
@@ -365,6 +442,41 @@ defmodule QuackDB.Protocol.Vector do
     error(:unsupported_physical_type, "#{physical_type} vectors are not implemented yet")
   end
 
+  defp read_string_values(binary, row_count) do
+    case Reader.read_field_id(binary) do
+      {:ok, 107, rest} ->
+        with {:ok, byte_count, rest} <- Reader.read_optional_index(rest),
+             {:ok, lengths, rest} <- read_required(rest, 108, &Reader.read_blob/1),
+             :ok <- expect_blob_size(lengths, 4 * row_count),
+             {:ok, bytes, rest} <- read_required(rest, 109, &Reader.read_blob/1),
+             :ok <- expect_blob_size(bytes, byte_count || 0),
+             {:ok, values} <- split_string_bytes(lengths, bytes, []) do
+          {:ok, values, rest}
+        end
+
+      {:ok, 102, rest} ->
+        Reader.read_list(rest, &Reader.read_blob/1)
+
+      {:ok, field_id, _rest} ->
+        error(:unexpected_field, "expected string vector field 107 or 102, got #{field_id}")
+
+      {:error, _error} = error ->
+        error
+    end
+  end
+
+  defp split_string_bytes(<<>>, <<>>, values), do: {:ok, Enum.reverse(values)}
+
+  defp split_string_bytes(<<size::little-unsigned-32, lengths::binary>>, bytes, values)
+       when byte_size(bytes) >= size do
+    <<value::binary-size(^size), bytes::binary>> = bytes
+    split_string_bytes(lengths, bytes, [value | values])
+  end
+
+  defp split_string_bytes(_lengths, _bytes, _values) do
+    error(:invalid_string_lengths, "string lengths do not match the serialized string data")
+  end
+
   defp encode_fixed_value(_type, physical_type, nil) do
     :binary.copy(<<0>>, LogicalType.fixed_size(physical_type))
   end
@@ -400,7 +512,8 @@ defmodule QuackDB.Protocol.Vector do
               :timestamp_ms,
               :timestamp_ns,
               :timestamp_sec,
-              :timestamp_tz
+              :timestamp_tz,
+              :timestamp_tz_ns
             ],
        do: <<temporal_unscaled(name, value)::little-signed-64>>
 
@@ -477,8 +590,9 @@ defmodule QuackDB.Protocol.Vector do
   defp temporal_unscaled(:time_tz, %QuackDB.TimeWithTimeZone{} = value),
     do: QuackDB.TimeWithTimeZone.to_bits(value)
 
-  defp temporal_unscaled(:timestamp_ns, %QuackDB.NanosecondTimestamp{nanoseconds: nanoseconds}),
-    do: nanoseconds
+  defp temporal_unscaled(name, %QuackDB.NanosecondTimestamp{nanoseconds: nanoseconds})
+       when name in [:timestamp_ns, :timestamp_tz_ns],
+       do: nanoseconds
 
   defp temporal_unscaled(_type, value) when is_integer(value), do: value
 
@@ -524,6 +638,14 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp encode_string_like(_type, nil), do: ""
+
+  defp encode_string_like(%LogicalType{type_info: %{encoding: :json}}, value)
+       when is_binary(value),
+       do: value
+
+  defp encode_string_like(%LogicalType{type_info: %{encoding: encoding}}, value)
+       when encoding in [:json, :variant],
+       do: JSON.encode!(value)
 
   defp encode_string_like(%LogicalType{name: name}, value)
        when name in [:blob, :bit, :geometry] and is_binary(value),
@@ -742,6 +864,11 @@ defmodule QuackDB.Protocol.Vector do
     take_struct_row(columns, valid?, row, [{name, rest} | advanced])
   end
 
+  defp tuple_row(nil, _size), do: nil
+
+  defp tuple_row(row, size),
+    do: 0..(size - 1)//1 |> Enum.map(&Map.fetch!(row, &1)) |> List.to_tuple()
+
   defp maybe_read_validity(binary, false, _row_count), do: {:ok, nil, binary}
 
   defp maybe_read_validity(binary, true, row_count),
@@ -940,6 +1067,10 @@ defmodule QuackDB.Protocol.Vector do
     (byte &&& 1 <<< rem(index, 8)) != 0
   end
 
+  @doc false
+  @spec decode_string_value(LogicalType.t(), binary()) :: term()
+  def decode_string_value(type, value), do: decode_string_like(type, value)
+
   defp decode_string_like(%{name: name}, value) when name in [:blob, :geometry], do: value
   defp decode_string_like(%{name: :bit}, value), do: decode_bitstring(value)
 
@@ -1080,6 +1211,14 @@ defmodule QuackDB.Protocol.Vector do
         )
   end
 
+  # Decodes a VARIANT through its physical STRUCT layout.
+  defp variant_layout(%LogicalType{name: :variant} = type), do: %{type | name: :struct}
+  defp variant_layout(%LogicalType{name: :struct} = type), do: type
+  defp variant_layout(%{type: type} = child), do: %{child | type: variant_layout(type)}
+
+  defp put_struct_children(%LogicalType{type_info: info} = type, children),
+    do: %{type | type_info: %{info | children: children}}
+
   defp expect_blob_size(blob, size) when byte_size(blob) == size, do: :ok
 
   defp expect_blob_size(blob, size),
@@ -1090,6 +1229,7 @@ defmodule QuackDB.Protocol.Vector do
   defp vector_type(2), do: {:ok, :constant}
   defp vector_type(3), do: {:ok, :dictionary}
   defp vector_type(4), do: {:ok, :sequence}
+  defp vector_type(5), do: {:ok, :shredded}
   defp vector_type(id), do: error(:unknown_vector_type, "unknown vector type #{id}")
 
   defp error(code, message), do: {:error, Error.new(code, message, source: :protocol)}

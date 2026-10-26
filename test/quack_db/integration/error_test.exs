@@ -25,9 +25,10 @@ defmodule QuackDB.Integration.ErrorTest do
                columns: [{"id", :integer}]
              )
 
-    assert append_error.metadata == query_error.metadata
-    assert "Failed to append: " <> json = append_error.message
-    assert JSON.decode!(json)["exception_type"] == "Constraint"
+    assert Map.take(append_error.metadata, [:exception_type, :exception_message]) ==
+             Map.take(query_error.metadata, [:exception_type, :exception_message])
+
+    assert JSON.decode!(append_error.message)["exception_type"] == "Constraint"
     refute append_error.retriable?
   end
 

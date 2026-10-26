@@ -39,6 +39,7 @@ defmodule QuackDB.Protocol.LogicalType do
     uinteger: 30,
     ubigint: 31,
     timestamp_tz: 32,
+    timestamp_tz_ns: 33,
     time_tz: 34,
     time_ns: 35,
     bit: 36,
@@ -51,7 +52,9 @@ defmodule QuackDB.Protocol.LogicalType do
     list: 101,
     map: 102,
     enum: 104,
-    array: 108
+    array: 108,
+    variant: 109,
+    tuple: 110
   }
 
   @names Map.new(@ids, fn {name, id} -> {id, name} end)
@@ -66,6 +69,16 @@ defmodule QuackDB.Protocol.LogicalType do
   def new(name, type_info \\ nil) when is_atom(name) do
     %__MODULE__{id: id(name), name: name, type_info: type_info}
   end
+
+  @doc """
+  Returns DuckDB's `JSON` type, a VARCHAR alias, for appending JSON text.
+
+  `:json` sends strings as JSON text as they are; `:variant` encodes every
+  value, so strings become JSON strings.
+  """
+  @spec json(:json | :variant) :: t()
+  def json(encoding) when encoding in [:json, :variant],
+    do: new(:varchar, %{type: 1, alias: "JSON", encoding: encoding})
 
   @spec decimal_info(pos_integer(), non_neg_integer()) :: map()
   def decimal_info(width, scale), do: %{type: 2, width: width, scale: scale}
@@ -88,6 +101,60 @@ defmodule QuackDB.Protocol.LogicalType do
     end
   end
 
+  @sql_names %{
+    sqlnull: "\"NULL\"",
+    timestamp_sec: "TIMESTAMP_S",
+    timestamp_ms: "TIMESTAMP_MS",
+    timestamp_ns: "TIMESTAMP_NS",
+    timestamp_tz: "TIMESTAMPTZ",
+    timestamp_tz_ns: "TIMESTAMPTZ_NS",
+    time_tz: "TIMETZ"
+  }
+
+  @doc """
+  Renders a logical type as DuckDB SQL, for casts and type prototypes.
+  """
+  @spec to_sql(t()) :: iodata()
+  def to_sql(%__MODULE__{name: :decimal, type_info: %{width: width, scale: scale}}),
+    do: ["DECIMAL(", Integer.to_string(width), ", ", Integer.to_string(scale), ")"]
+
+  def to_sql(%__MODULE__{name: :list} = type), do: [to_sql(child_type(type)), "[]"]
+
+  def to_sql(%__MODULE__{name: :array} = type),
+    do: [to_sql(child_type(type)), "[", Integer.to_string(array_size(type)), "]"]
+
+  def to_sql(%__MODULE__{name: :map} = type) do
+    [key, value] = type |> child_type() |> struct_children()
+    ["MAP(", to_sql(key.type), ", ", to_sql(value.type), ")"]
+  end
+
+  def to_sql(%__MODULE__{name: :struct} = type) do
+    fields =
+      type
+      |> struct_children()
+      |> Enum.map(&[QuackDB.Type.quote_identifier(&1.name), " ", to_sql(&1.type)])
+      |> Enum.intersperse(", ")
+
+    ["STRUCT(", fields, ")"]
+  end
+
+  def to_sql(%__MODULE__{name: :enum, type_info: %{values: values}}) do
+    ["ENUM(", values |> Enum.map(&QuackDB.SQL.literal!/1) |> Enum.intersperse(", "), ")"]
+  end
+
+  def to_sql(%__MODULE__{type_info: %{alias: alias_name}}) when is_binary(alias_name),
+    do: alias_name
+
+  def to_sql(%__MODULE__{name: name}) when is_map_key(@sql_names, name),
+    do: Map.fetch!(@sql_names, name)
+
+  def to_sql(%__MODULE__{name: name}) when is_atom(name) and name != nil,
+    do: name |> Atom.to_string() |> String.upcase()
+
+  def to_sql(type) do
+    raise Error.new(:unsupported_type, "cannot render #{inspect(type)} as SQL", source: :client)
+  end
+
   @spec physical_type(t()) :: atom()
   def physical_type(%__MODULE__{name: :boolean}), do: :bool
   def physical_type(%__MODULE__{name: :tinyint}), do: :int8
@@ -107,7 +174,8 @@ defmodule QuackDB.Protocol.LogicalType do
              :timestamp_ns,
              :timestamp_ms,
              :time_tz,
-             :timestamp_tz
+             :timestamp_tz,
+             :timestamp_tz_ns
            ],
       do: :int64
 
@@ -122,7 +190,10 @@ defmodule QuackDB.Protocol.LogicalType do
   def physical_type(%__MODULE__{name: :uhugeint}), do: :uint128
   def physical_type(%__MODULE__{name: :uuid}), do: :int128
   def physical_type(%__MODULE__{name: :interval}), do: :interval
-  def physical_type(%__MODULE__{name: name}) when name in [:struct], do: :struct
+
+  def physical_type(%__MODULE__{name: name}) when name in [:struct, :tuple, :variant],
+    do: :struct
+
   def physical_type(%__MODULE__{name: name}) when name in [:list, :map], do: :list
   def physical_type(%__MODULE__{name: :array}), do: :array
 

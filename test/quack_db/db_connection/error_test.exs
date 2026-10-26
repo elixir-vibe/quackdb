@@ -194,7 +194,7 @@ defmodule QuackDB.DBConnection.ErrorTest do
            ProtocolFixtures.prepare_response(
              chunks: [initial_chunk],
              needs_more_fetch?: true,
-             result_uuid: 42
+             query_uuid: 42
            )}
 
         {:ok, {%Header{type: :fetch_request}, _fetch}} ->

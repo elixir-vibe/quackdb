@@ -9,7 +9,7 @@ defmodule QuackDB.ResultTest do
       columns: ["Count"],
       rows: [[2]],
       num_rows: 1,
-      metadata: %{result_uuid: 123}
+      metadata: %{query_uuid: 123}
     }
 
     assert Result.normalize(result) == %Result{
@@ -17,7 +17,7 @@ defmodule QuackDB.ResultTest do
              columns: nil,
              rows: nil,
              num_rows: 2,
-             metadata: %{result_uuid: 123, duckdb_columns: ["Count"], duckdb_rows: [[2]]}
+             metadata: %{query_uuid: 123, duckdb_columns: ["Count"], duckdb_rows: [[2]]}
            }
   end
 

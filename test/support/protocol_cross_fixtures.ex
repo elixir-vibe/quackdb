@@ -1,9 +1,7 @@
 defmodule QuackDB.ProtocolCrossFixtures do
   @moduledoc false
 
-  alias QuackDB.Protocol.Codec
   alias QuackDB.Protocol.DataChunk
-  alias QuackDB.Protocol.Message.AppendRequest
 
   defmodule Fixture do
     @moduledoc false
@@ -13,9 +11,7 @@ defmodule QuackDB.ProtocolCrossFixtures do
   def all do
     [
       data_chunk_scalar(),
-      data_chunk_nested(),
-      append_request_scalar(),
-      append_request_nested()
+      data_chunk_nested()
     ]
   end
 
@@ -35,22 +31,6 @@ defmodule QuackDB.ProtocolCrossFixtures do
     }
   end
 
-  def append_request_scalar do
-    %Fixture{
-      name: "scalar AppendRequest",
-      file: "append_request_scalar.bin",
-      encoder: :encode_scalar_append_request
-    }
-  end
-
-  def append_request_nested do
-    %Fixture{
-      name: "nested AppendRequest",
-      file: "append_request_nested.bin",
-      encoder: :encode_nested_append_request
-    }
-  end
-
   def encode_scalar_data_chunk do
     scalar_chunk()
     |> DataChunk.encode_wrapper()
@@ -61,14 +41,6 @@ defmodule QuackDB.ProtocolCrossFixtures do
     nested_chunk()
     |> DataChunk.encode_wrapper()
     |> IO.iodata_to_binary()
-  end
-
-  def encode_scalar_append_request do
-    encode_append_request(scalar_chunk())
-  end
-
-  def encode_nested_append_request do
-    encode_append_request(nested_chunk())
   end
 
   def scalar_chunk do
@@ -139,12 +111,6 @@ defmodule QuackDB.ProtocolCrossFixtures do
     ]
 
     build_chunk!(rows, columns)
-  end
-
-  defp encode_append_request(chunk) do
-    %AppendRequest{schema_name: "main", table_name: "events", append_chunk: chunk}
-    |> Codec.encode(connection_id: "conn-1")
-    |> IO.iodata_to_binary()
   end
 
   defp build_chunk!(rows, columns) do

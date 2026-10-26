@@ -17,7 +17,7 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
             {:columns, list()} | {:batch_size, pos_integer()} | {:schema, String.t()}
 
     @doc """
-    Appends an `Explorer.DataFrame` to a DuckDB table through Quack's native append protocol.
+    Appends an `Explorer.DataFrame` to a DuckDB table by streaming binary vectors into an `INSERT`.
 
     This uses `QuackDB.insert_columns/4` to preserve Explorer's columnar shape and
     avoid row materialization. Pass `:columns` to override inferred DuckDB types.

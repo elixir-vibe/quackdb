@@ -11,7 +11,7 @@ defmodule QuackDB.DBConnection.QueryTest do
              QuackDB.prepare_execute(connection, "SELECT 1 AS n")
 
     assert query.columns == ["n"]
-    assert query.result_uuid == 42
+    assert query.query_uuid == 42
     assert result.rows == [[1]]
     assert result.command == :select
     assert result.connection_id == "conn-1"

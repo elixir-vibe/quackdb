@@ -11,42 +11,22 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
     alias QuackDB.Result
 
     test "appends Explorer dataframes through native column append" do
-      parent = self()
-
-      transport = fn _uri, request, _options ->
-        case request |> IO.iodata_to_binary() |> Codec.decode() do
-          {:ok, {%Header{type: :connection_request}, _body}} ->
-            response = [
-              Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-              <<1::little-16, 5, "1.5.0">>,
-              <<2::little-16, 6, "darwin">>,
-              <<3::little-16, 1>>,
-              <<0xFFFF::little-16>>
-            ]
-
-            {:ok, IO.iodata_to_binary(response)}
-
-          {:ok, {%Header{type: :append_request}, append}} ->
-            send(parent, {:append, append})
-
-            response =
-              Codec.encode(%QuackDB.Protocol.Message.SuccessResponse{}, connection_id: "conn-1")
-
-            {:ok, IO.iodata_to_binary(response)}
-        end
-      end
-
       connection =
-        start_supervised!({QuackDB, uri: "http://localhost:9494", transport: transport})
+        start_supervised!(
+          {QuackDB,
+           uri: "http://localhost:9494",
+           transport: QuackDB.TestTransports.append_transport(self())}
+        )
 
       dataframe = DataFrame.new(%{id: [1, 2], name: ["duck", "goose"]})
 
       assert {:ok, %QuackDB.Result{command: :insert, num_rows: 2}} =
                QuackDB.Explorer.insert_dataframe(connection, "events", dataframe)
 
-      assert_received {:append, append}
-      assert append.table_name == "events"
-      assert append.append_chunk.row_count == 2
+      assert_received {:statement, ~s|INSERT INTO "events" | <> _rest}
+
+      assert_received {:send_data,
+                       %QuackDB.Protocol.Message.SendDataRequest{chunks: [%{row_count: 2}]}}
     end
 
     test "converts columnar results to Explorer dataframes" do
@@ -76,15 +56,7 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
              {:ok, {%Header{type: :connection_request}, _body}},
              Codec.decode(IO.iodata_to_binary(request))
            ) do
-          response = [
-            Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-            <<1::little-16, 5, "1.5.0">>,
-            <<2::little-16, 6, "darwin">>,
-            <<3::little-16, 1>>,
-            <<0xFFFF::little-16>>
-          ]
-
-          {:ok, IO.iodata_to_binary(response)}
+          {:ok, QuackDB.TestTransports.connection_response()}
         else
           chunk =
             QuackDB.ProtocolFixtures.scalar_chunk_wrapper([
@@ -113,15 +85,7 @@ if Code.ensure_loaded?(Explorer.DataFrame) do
              {:ok, {%Header{type: :connection_request}, _body}},
              Codec.decode(IO.iodata_to_binary(request))
            ) do
-          response = [
-            Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-            <<1::little-16, 5, "1.5.0">>,
-            <<2::little-16, 6, "darwin">>,
-            <<3::little-16, 1>>,
-            <<0xFFFF::little-16>>
-          ]
-
-          {:ok, IO.iodata_to_binary(response)}
+          {:ok, QuackDB.TestTransports.connection_response()}
         else
           {:ok, {%Header{type: :prepare_request}, request}} =
             request |> IO.iodata_to_binary() |> Codec.decode()
