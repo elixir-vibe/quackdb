@@ -426,13 +426,9 @@ defmodule QuackDB.Protocol.Vector do
              &decode(&1, LogicalType.child_type(type), array_size * row_count)
            ) do
       values =
-        for row_index <- 0..(row_count - 1)//1 do
-          if valid?(validity, row_index) do
-            Enum.slice(child_vector.values, row_index * array_size, array_size)
-          else
-            nil
-          end
-        end
+        child_vector.values
+        |> Enum.chunk_every(array_size)
+        |> apply_validity(validity, 0, [])
 
       {:ok, values, rest}
     end
@@ -1043,21 +1039,25 @@ defmodule QuackDB.Protocol.Vector do
     )
   end
 
+  # Selections index the dictionary at random, so look values up in a tuple.
   defp select_dictionary_values(values, selection) do
-    Enum.reduce_while(selection, {:ok, []}, fn index, {:ok, selected} ->
-      case Enum.fetch(values, index) do
-        {:ok, value} ->
-          {:cont, {:ok, [value | selected]}}
+    dictionary = List.to_tuple(values)
+    size = tuple_size(dictionary)
 
-        :error ->
-          {:halt,
-           error(:dictionary_index_out_of_range, "dictionary index #{index} is out of range")}
-      end
-    end)
-    |> case do
-      {:ok, selected} -> {:ok, Enum.reverse(selected)}
-      error -> error
+    case Enum.find(selection, &(&1 >= size)) do
+      nil ->
+        {:ok, Enum.map(selection, &elem(dictionary, &1))}
+
+      index ->
+        error(:dictionary_index_out_of_range, "dictionary index #{index} is out of range")
     end
+  end
+
+  defp apply_validity([], _validity, _index, values), do: Enum.reverse(values)
+
+  defp apply_validity([value | rest], validity, index, values) do
+    value = if valid?(validity, index), do: value, else: nil
+    apply_validity(rest, validity, index + 1, [value | values])
   end
 
   defp valid?(nil, _index), do: true

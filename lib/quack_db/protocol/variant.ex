@@ -51,6 +51,13 @@ defmodule QuackDB.Protocol.Variant do
 
   @string_types %{16 => :varchar, 17 => :blob, 31 => :bignum, 32 => :bit, 33 => :geometry}
 
+  # Built once at compile time: {logical type, physical type} per type id.
+  @fixed_decoders Map.new(@fixed_types, fn {id, name} ->
+                    type = LogicalType.new(name)
+                    {id, {type, LogicalType.physical_type(type)}}
+                  end)
+  @string_decoders Map.new(@string_types, fn {id, name} -> {id, LogicalType.new(name)} end)
+
   @null 0
   @bool_true 1
   @bool_false 2
@@ -66,7 +73,7 @@ defmodule QuackDB.Protocol.Variant do
   def decode_rows(rows) do
     collect(rows, fn
       nil -> {:ok, nil}
-      row -> value(row, 0)
+      row -> row |> index_row() |> value(0)
     end)
   end
 
@@ -84,7 +91,7 @@ defmodule QuackDB.Protocol.Variant do
         {:ok, nil}
 
       {row, wrapper} ->
-        case resolve(shredded_type, wrapper, row) do
+        case resolve(shredded_type, wrapper, index_row(row)) do
           {:ok, :missing} -> {:ok, nil}
           other -> other
         end
@@ -142,9 +149,25 @@ defmodule QuackDB.Protocol.Variant do
   defp overlay_fields(overlay, _row) when overlay in [nil, 0], do: {:ok, %{}}
   defp overlay_fields(overlay, row), do: value(row, overlay - 1)
 
+  # A row's keys, children, and values are looked up by index while walking
+  # its tree, so they become tuples once instead of being walked per lookup.
+  defp index_row(nil), do: nil
+
+  defp index_row(row) do
+    %{
+      keys: to_tuple(row["keys"]),
+      children: to_tuple(row["children"]),
+      values: to_tuple(row["values"]),
+      data: row["data"]
+    }
+  end
+
+  defp to_tuple(nil), do: {}
+  defp to_tuple(list), do: List.to_tuple(list)
+
   defp value(row, index) do
-    with {:ok, %{"type_id" => type_id, "byte_offset" => offset}} <- fetch(row["values"], index),
-         {:ok, payload} <- payload(row["data"], offset) do
+    with {:ok, %{"type_id" => type_id, "byte_offset" => offset}} <- fetch(row.values, index),
+         {:ok, payload} <- payload(row.data, offset) do
       decode_value(type_id, payload, row)
     end
   end
@@ -153,16 +176,16 @@ defmodule QuackDB.Protocol.Variant do
   defp decode_value(@bool_true, _payload, _row), do: {:ok, true}
   defp decode_value(@bool_false, _payload, _row), do: {:ok, false}
 
-  defp decode_value(type_id, payload, _row) when is_map_key(@fixed_types, type_id) do
-    type = LogicalType.new(Map.fetch!(@fixed_types, type_id))
+  defp decode_value(type_id, payload, _row) when is_map_key(@fixed_decoders, type_id) do
+    {type, physical_type} = Map.fetch!(@fixed_decoders, type_id)
 
-    with {:ok, value, _rest} <- Value.decode_fixed(payload, type, LogicalType.physical_type(type)) do
+    with {:ok, value, _rest} <- Value.decode_fixed(payload, type, physical_type) do
       {:ok, value}
     end
   end
 
-  defp decode_value(type_id, payload, _row) when is_map_key(@string_types, type_id) do
-    type = LogicalType.new(Map.fetch!(@string_types, type_id))
+  defp decode_value(type_id, payload, _row) when is_map_key(@string_decoders, type_id) do
+    type = Map.fetch!(@string_decoders, type_id)
 
     with {:ok, bytes, _rest} <- Reader.read_blob(payload) do
       {:ok, QuackDB.Protocol.Vector.decode_string_value(type, bytes)}
@@ -189,7 +212,7 @@ defmodule QuackDB.Protocol.Variant do
   defp decode_value(@object, payload, row) do
     with {:ok, children} <- nested_children(payload, row) do
       Enum.reduce_while(children, {:ok, %{}}, fn child, {:ok, acc} ->
-        with {:ok, key} <- fetch(row["keys"], child["keys_index"]),
+        with {:ok, key} <- fetch(row.keys, child["keys_index"]),
              {:ok, value} <- value(row, child["values_index"]) do
           {:cont, {:ok, Map.put(acc, key, value)}}
         else
@@ -206,7 +229,7 @@ defmodule QuackDB.Protocol.Variant do
   defp nested_children(payload, row) do
     with {:ok, count, rest} <- Reader.read_uleb128(payload),
          {:ok, first} <- first_child(count, rest) do
-      {:ok, Enum.slice(row["children"] || [], first, count)}
+      collect(first..(first + count - 1)//1, &fetch(row.children, &1))
     end
   end
 
@@ -223,14 +246,11 @@ defmodule QuackDB.Protocol.Variant do
   defp payload(_data, offset),
     do: error(:invalid_variant, "VARIANT byte offset #{offset} is outside its data")
 
-  defp fetch(list, index) when is_list(list) and is_integer(index) and index >= 0 do
-    case Enum.fetch(list, index) do
-      {:ok, value} -> {:ok, value}
-      :error -> error(:invalid_variant, "VARIANT index #{index} is out of range")
-    end
-  end
+  defp fetch(tuple, index) when is_integer(index) and index >= 0 and index < tuple_size(tuple),
+    do: {:ok, elem(tuple, index)}
 
-  defp fetch(_list, index), do: error(:invalid_variant, "invalid VARIANT index #{inspect(index)}")
+  defp fetch(_tuple, index),
+    do: error(:invalid_variant, "VARIANT index #{inspect(index)} is out of range")
 
   defp collect(values, fun) do
     values
