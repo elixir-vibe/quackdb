@@ -181,14 +181,16 @@ end)
 
 ## Rows changed between snapshots
 
-`DuckLake.changes/3` reads the rows of one table that changed after snapshot
-`:from` up to `:to`, with `snapshot_id`, `rowid`, and `change_type`: `insert`,
-`delete`, `update_preimage`, or `update_postimage`. `DuckLake.insertions/3` and
-`DuckLake.deletions/3` read only inserted or deleted rows; an update deletes the
-row's old version and inserts the new one.
+`DuckLake.changes/3` reads the rows of one table that changed in snapshots
+`:from` through `:to`, both included, with `snapshot_id`, `rowid`, and
+`change_type`: `insert`, `delete`, `update_preimage`, or `update_postimage`.
+`:from` and `:to` are snapshot ids, or `DateTime`s that take the snapshots
+committed between them. `DuckLake.insertions/3` and `DuckLake.deletions/3`
+read only inserted or deleted rows; an update deletes the row's old version
+and inserts the new one.
 
 ```elixir
-from change in DuckLake.changes(:lake, Order, from: 41, to: 42),
+from change in DuckLake.changes(:lake, Order, from: 42, to: 42),
   order_by: [change.snapshot_id, change.rowid],
   select: %{type: change.change_type, id: change.id, status: change.status}
 ```

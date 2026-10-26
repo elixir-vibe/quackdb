@@ -128,6 +128,21 @@ defmodule QuackDB.Integration.SnapshotTest do
                {"delete", 2, "new"}
              ]
 
+      # Both ends are included, for snapshot ids and for commit times.
+      assert [{"insert", 1}] = change_types(from: from, to: from)
+
+      [placed_at, last_at] =
+        Repo.all(
+          from(s in DuckLake.snapshots(:snapshot_lake),
+            where: s.snapshot_id in [^from, ^current_snapshot()],
+            order_by: s.snapshot_id,
+            select: s.snapshot_time
+          )
+        )
+
+      assert [{"insert", 1}] = change_types(from: placed_at, to: placed_at)
+      assert length(change_types(from: placed_at, to: last_at)) == 5
+
       # An update deletes the row's old version, so deletions include it.
       assert [{1, "new"}, {2, "new"}] =
                Repo.all(
@@ -233,6 +248,15 @@ defmodule QuackDB.Integration.SnapshotTest do
 
       assert message =~ "does not support time travel"
     end
+  end
+
+  defp change_types(range) do
+    Repo.all(
+      from(c in DuckLake.changes(:snapshot_lake, Order, range),
+        order_by: [c.snapshot_id, c.change_type],
+        select: {c.change_type, c.id}
+      )
+    )
   end
 
   defp current_snapshot do

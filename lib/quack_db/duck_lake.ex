@@ -43,8 +43,9 @@ defmodule QuackDB.DuckLake do
 
   @doc """
   Builds a `ducklake_table_changes(...)` fragment with the rows of `table`
-  that changed after snapshot `:from` up to `:to`, both snapshot ids or
-  `DateTime`s. Each row has the table's columns and `snapshot_id`, `rowid`,
+  that changed in snapshots `:from` through `:to`, both included. Both are
+  snapshot ids or `DateTime`s; `DateTime`s take the snapshots committed
+  between them. Each row has the table's columns and `snapshot_id`, `rowid`,
   and `change_type`: `insert`, `delete`, `update_preimage`, or
   `update_postimage`.
 
