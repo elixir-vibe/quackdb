@@ -85,6 +85,12 @@ if Code.ensure_loaded?(Ecto.Query) do
             "Ecto combinations are unsupported for update_all/delete_all; use Repo.query/3"
           )
 
+        Enum.any?([query.from | query.joins], &(&1.hints != [])) ->
+          unsupported!(
+            :mutation_hints,
+            "table hints, including snapshots, are unsupported for update_all/delete_all"
+          )
+
         true ->
           :ok
       end
@@ -353,7 +359,42 @@ if Code.ensure_loaded?(Ecto.Query) do
       Enum.at(joins, binding - 1)
     end
 
-    defp source(%{source: {table, schema}} = expr, index, context)
+    # Hints follow the alias, where DuckDB expects AT (...) and TABLESAMPLE.
+    defp source(expr, index, context) do
+      [table_ref(expr, index, context), snapshot_clause(expr, context), hints(expr)]
+    end
+
+    defp hints(%{hints: [_ | _] = hints}),
+      do: for(hint <- hints, is_binary(hint), do: [?\s, hint])
+
+    defp hints(_expr), do: []
+
+    # QuackDB.Ecto.Snapshot tags a whole statement with a snapshot on its from
+    # hints, because Ecto's planner rebuilds assoc joins without their hints.
+    # The clause reaches every table the statement reads, except CTE names,
+    # source helpers, and tables that carry an AT hint of their own.
+    defp snapshot_clause(%{source: {table, _schema}, hints: hints}, %{snapshot: clause} = context)
+         when is_binary(table) and is_binary(clause) do
+      cond do
+        table in context.cte_names -> []
+        QuackDB.Source.source?(table) -> []
+        Enum.any?(hints, &match?("AT " <> _clause, &1)) -> []
+        true -> [?\s, clause]
+      end
+    end
+
+    defp snapshot_clause(_expr, _context), do: []
+
+    defp statement_snapshot(%Ecto.Query{from: %{hints: hints}}) do
+      Enum.find_value(hints, fn
+        {QuackDB.Ecto.Snapshot, clause} -> clause
+        _hint -> nil
+      end)
+    end
+
+    defp statement_snapshot(_query), do: nil
+
+    defp table_ref(%{source: {table, schema}} = expr, index, context)
          when is_binary(table) and is_atom(schema) do
       [
         source_name(table, source_prefix(table, expr, schema, context)),
@@ -362,16 +403,16 @@ if Code.ensure_loaded?(Ecto.Query) do
       ]
     end
 
-    defp source(%{source: %Ecto.SubQuery{query: query}}, index, context) do
+    defp table_ref(%{source: %Ecto.SubQuery{query: query}}, index, context) do
       subquery_context = subquery_context(query, context, index)
       ["(", all(query, subquery_context), ") AS ", binding_alias(index, context)]
     end
 
-    defp source(%{source: {:fragment, _meta, parts}}, index, context) do
+    defp table_ref(%{source: {:fragment, _meta, parts}}, index, context) do
       [fragment(parts, context), " AS ", binding_alias(index, context)]
     end
 
-    defp source(%{source: {:values, _meta, [types, _idx, num_rows]}}, index, context) do
+    defp table_ref(%{source: {:values, _meta, [types, _idx, num_rows]}}, index, context) do
       keys = Keyword.keys(types)
       columns = keys |> Enum.map(&quote_name/1) |> Enum.intersperse(", ")
       row = keys |> Enum.map(fn _ -> "?" end) |> Enum.intersperse(", ")
@@ -380,7 +421,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       ["(VALUES ", rows, ") AS ", binding_alias(index, context), "(", columns, ")"]
     end
 
-    defp source(_from, _index, _context) do
+    defp table_ref(_from, _index, _context) do
       unsupported!(
         :source,
         "only table, source helper, fragment, and subquery sources are supported in Ecto queries"
@@ -395,6 +436,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         aliases: query.aliases || %{},
         parent: nil,
         subqueries: [],
+        snapshot: statement_snapshot(query),
         literal_tagged?: false
       }
     end
@@ -403,7 +445,12 @@ if Code.ensure_loaded?(Ecto.Query) do
     # sees the CTE names of the statement it belongs to.
     defp scoped_context(%Ecto.Query{} = query, context) do
       scoped = root_context(query)
-      %{scoped | cte_names: scoped.cte_names ++ context.cte_names}
+
+      %{
+        scoped
+        | cte_names: scoped.cte_names ++ context.cte_names,
+          snapshot: scoped.snapshot || context.snapshot
+      }
     end
 
     defp subquery_context(%Ecto.Query{} = query, parent, index) do
@@ -416,6 +463,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         aliases: query.aliases || %{},
         parent: parent,
         subqueries: [],
+        snapshot: statement_snapshot(query) || parent.snapshot,
         literal_tagged?: parent.literal_tagged?
       }
     end

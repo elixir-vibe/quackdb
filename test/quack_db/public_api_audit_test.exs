@@ -11,6 +11,7 @@ if Code.ensure_loaded?(Ecto.Query.API) do
         QuackDB.Ecto.Map,
         QuackDB.Ecto.Regex,
         QuackDB.Ecto.Series,
+        QuackDB.Ecto.Snapshot,
         QuackDB.Ecto.Spatial,
         QuackDB.Ecto.Star,
         QuackDB.Ecto.Struct,
