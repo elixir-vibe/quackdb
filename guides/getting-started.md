@@ -5,7 +5,7 @@ QuackDB connects Elixir applications to a DuckDB process through DuckDB's Quack 
 ## Requirements
 
 - Elixir 1.19 or newer
-- DuckDB 1.5.6 or newer with the `quack` extension
+- DuckDB 2.0 with the `quack` extension (Quack protocol version 3)
 - A running Quack server
 
 ## Install
@@ -15,7 +15,7 @@ Add `:quackdb` to your dependencies:
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.29"}
+    {:quackdb, "~> 0.6.0"}
   ]
 end
 ```
@@ -25,7 +25,7 @@ Optional integrations are compiled only when their packages are available. Add E
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.29"},
+    {:quackdb, "~> 0.6.0"},
     {:explorer, "~> 0.11"}
   ]
 end
@@ -290,7 +290,7 @@ Repo.transaction(fn ->
 end)
 ```
 
-Use a persistent table when the workflow must span calls. Temporary secrets are different: they are shared within the DuckDB instance but are not persisted across restarts. `pool_size: 1` can hide session switching but is not a substitute for keeping a session-scoped workflow together. QuackDB's Ecto append path uses its temporary staging table inside one transaction for this reason. Committing a transaction does not drop temporary tables; drop them explicitly before releasing the connection when they are no longer needed.
+Use a persistent table when the workflow must span calls. Temporary secrets are different: they are shared within the DuckDB instance but are not persisted across restarts. `pool_size: 1` can hide session switching but is not a substitute for keeping a session-scoped workflow together. Committing a transaction does not drop temporary tables; drop them explicitly before releasing the connection when they are no longer needed.
 
 ## Work with command results
 
@@ -438,7 +438,7 @@ QuackDB includes an initial Ecto SQL adapter for raw SQL queries. The Ecto adapt
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.29"},
+    {:quackdb, "~> 0.6.0"},
     {:ecto_sql, "~> 3.13"}
   ]
 end
@@ -728,7 +728,7 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-Use `insert_method: :append` to opt into Quack's native append protocol for bulk `insert_all` workloads. This path is explicit: ordinary `insert_all` keeps using Ecto SQL generation unless you pass the option.
+Use `insert_method: :append` to stream bulk `insert_all` rows as binary vectors instead of generated SQL. This path is explicit: ordinary `insert_all` keeps using Ecto SQL generation unless you pass the option.
 
 ```elixir
 MyApp.AnalyticsRepo.insert_all(
@@ -739,7 +739,7 @@ MyApp.AnalyticsRepo.insert_all(
 )
 ```
 
-For schema-backed inserts, QuackDB derives append types from the Ecto schema. That means nullable columns can be all `nil` in a batch without passing manual `:columns`, and omitted schema fields can be filled by DuckDB defaults or generated values. `RETURNING` is supported through a temporary append table followed by `INSERT ... RETURNING`; QuackDB keeps that create/append/insert sequence in one transaction so the temporary table remains visible:
+For schema-backed inserts, QuackDB derives append types from the Ecto schema. That means nullable columns can be all `nil` in a batch without passing manual `:columns`, and omitted schema fields are filled by DuckDB defaults or generated values. The rows stream into a single `INSERT`, so `on_conflict: :nothing` and `RETURNING` work directly:
 
 ```elixir
 MyApp.AnalyticsRepo.insert_all(
@@ -928,14 +928,14 @@ Adding a column with `null: false` uses `ADD COLUMN` followed by `SET NOT NULL`.
 
 Constraint violations currently raise database errors rather than returning changeset errors through `unique_constraint/3`, `foreign_key_constraint/3`, or `check_constraint/3`. DuckDB's violation messages do not reliably identify the constraint name Ecto needs; QuackDB does not guess names.
 
-On DuckDB 1.5.5, catalog lookup does not solve this reliably: supplied CHECK names are not preserved, and multiple checks on the same column can share a generated catalog name. A failed write also prevents catalog queries in the same aborted transaction. For these reasons, QuackDB does not automatically rebuild a table to drop a named constraint. Use an explicit SQL migration with a reviewed replacement table definition, preserving data, indexes, and dependent objects.
+DuckDB's catalog does not solve this reliably: supplied CHECK names are not preserved, and multiple checks on the same column can share a generated catalog name. A failed write also prevents catalog queries in the same aborted transaction. For these reasons, QuackDB does not automatically rebuild a table to drop a named constraint. Use an explicit SQL migration with a reviewed replacement table definition, preserving data, indexes, and dependent objects.
 
 ## Current limitations
 
 - Server-side bind parameters are not exposed by this Quack client path yet. QuackDB formats supported parameter values as DuckDB SQL literals client-side.
 - Native appends support row and column batches but not Arrow IPC or automatic local-file/data staging yet.
 - Ecto coverage focuses on analytical reads and common write/setup workflows, not every relational adapter feature.
-- The Quack protocol is versioned with DuckDB releases; QuackDB pins the DuckDB version its managed binary downloads.
+- QuackDB speaks Quack protocol version 3, which DuckDB 2.0 serves; it refuses servers that select another version. QuackDB pins the DuckDB version its managed binary downloads.
 
 ## Supervision and connection options
 
@@ -967,7 +967,7 @@ children =
       duckdb: :managed,
       endpoint: "quack:localhost:9494",
       settings: [threads: System.schedulers_online()],
-      global_settings: [quack_fetch_batch_chunks: 4]
+      global_settings: [quack_target_batch_bytes: 8 * 1024 * 1024]
     ],
     client: [name: MyApp.QuackDB, pool_size: System.schedulers_online()]
   )
@@ -975,7 +975,18 @@ children =
 
 `QuackDB.Server` starts the external `duckdb` executable and serves the Quack protocol. It is a convenience process supervisor, not an embedded DuckDB driver and not required for remote DuckDB servers. Use `duckdb: :managed` for local development convenience, or omit it to use `duckdb` from `PATH`.
 
-The local server defaults to `settings: [threads: System.schedulers_online()]` and `global_settings: [quack_fetch_batch_chunks: 4]`. Use a smaller client `pool_size` such as `1..4` for heavy analytical scans, because DuckDB parallelizes each query internally. Use `System.schedulers_online()` for many small concurrent queries.
+The local server defaults to `settings: [threads: System.schedulers_online()]` and no global settings. DuckDB 2.0 cuts result batches by size: `quack_target_batch_bytes` (32 MiB by default) bounds one fetched batch, so lower it to bound client memory per fetch, and `quack_prepare_inline_rows` sets how many rows the first response carries. Use a smaller client `pool_size` such as `1..4` for heavy analytical scans, because DuckDB parallelizes each query internally. Use `System.schedulers_online()` for many small concurrent queries.
+
+`serve_options` passes `quack_serve` options through. DuckDB 2.0 only listens on localhost unless `allow_other_hostname: true`, and serves HTTPS for any other host unless `disable_ssl: true`; `ssl_cert_file` and `ssl_key_file` select the certificate. The derived client URI follows the same rules. For anything reachable from other machines, DuckDB recommends a TLS-terminating reverse proxy in front of a localhost server instead.
+
+```elixir
+QuackDB.Server.child_specs(
+  server: [endpoint: "quack:10.0.0.5:9494", serve_options: [allow_other_hostname: true, disable_ssl: true]],
+  client: [pool_size: 2]
+)
+```
+
+The server runs the CLI with `-no-agent`, so DuckDB 2.0's agent output mode stays off even when the BEAM runs under a coding agent.
 
 ## Running QuackDB's integration tests
 

@@ -63,6 +63,8 @@ Query stop metadata includes:
 
 Duration values use Erlang native time units. Query `normalize_duration` covers response normalization, remaining fetches for non-streamed queries, and row materialization.
 
+Fetch events cover one result batch each. Their metadata includes the `query_uuid` the client generated for the query and the `batch_index` it requested, counting from 1 after the rows the first response carried.
+
 Append start metadata includes:
 
 ```elixir

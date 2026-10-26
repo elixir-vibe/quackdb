@@ -94,16 +94,16 @@ mix quackdb.install --cache-dir /opt/quackdb/duckdb
 
 ## Version and checksum policy
 
-`QuackDB.Binary.default_version/0` is the DuckDB CLI version pinned by the current QuackDB release. QuackDB ships SHA256 checksums for that version and the supported targets returned by `QuackDB.Binary.known_targets/0`.
+`QuackDB.Binary.default_version/0` is the DuckDB CLI version pinned by the current QuackDB release. QuackDB ships SHA256 checksums for that version and the supported targets returned by `QuackDB.Binary.known_targets/0`. DuckDB publishes the CLI as `duckdb-cli-<target>.tar.gz`; QuackDB verifies the archive checksum before unpacking it.
 
-Other DuckDB versions must pass an explicit checksum:
+Other DuckDB 2.x versions must pass an explicit checksum. QuackDB refuses older CLIs, which do not serve Quack protocol version 3:
 
 ```sh
-mix quackdb.install --version 1.5.6 --sha256 SHA256_HEX
+mix quackdb.install --version 2.0.1 --sha256 SHA256_HEX
 ```
 
 ```elixir
-QuackDB.Binary.install(version: "1.5.6", sha256: "SHA256_HEX")
+QuackDB.Binary.install(version: "2.0.1", sha256: "SHA256_HEX")
 ```
 
 ## Target prefetching
@@ -124,8 +124,11 @@ Supported managed-download targets for the pinned version are:
 - `linux-arm64-musl`
 - `osx-amd64`
 - `osx-arm64`
+- `osx-universal` (prefetch with `--target`; hosts detect their native `osx-*` target)
 
-Windows managed downloads are not supported yet. Use `QUACKDB_BINARY_PATH` or pass `duckdb: "C:/path/to/duckdb.exe"` on Windows until zip extraction and checksum coverage are added.
+DuckDB 2.0 is the last release with full `osx-amd64` support; DuckDB 2.1 plans to drop it.
+
+Windows managed downloads are not supported yet. Use `QUACKDB_BINARY_PATH` or pass `duckdb: "C:/path/to/duckdb.exe"` on Windows.
 
 The musl builds require `libstdc++`. On Alpine Linux, install it in the runtime image:
 

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.6.0 - Unreleased
+
+QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quack protocol version 3. DuckDB 1.5 servers are no longer supported: the two protocol versions are not wire-compatible, and connecting to an older server fails with `:unsupported_quack_version`.
+
+### Breaking changes
+
+- Requires DuckDB 2.0. The managed binary is DuckDB 2.0.0, downloaded as the new `duckdb-cli-<target>.tar.gz` archives with checksums for all Linux and macOS targets, including `osx-universal`. The DuckDB 1.5 checksums are gone, and `QuackDB.Binary` rejects CLIs older than 2.0.
+- `QuackDB.Server` no longer sets the removed `quack_fetch_batch_chunks` setting, which made DuckDB 2.0 exit during boot (#8). DuckDB 2.0 sizes result batches by bytes with `quack_target_batch_bytes`.
+- Native appends no longer use the removed `APPEND_REQUEST` message. Each append is one `INSERT INTO table (columns) SELECT * FROM scan_data_from_quack_client(...)` statement fed by numbered send-data batches. Omitted columns now get their defaults and sequence values, and append errors no longer carry the `Failed to append:` prefix.
+- `QuackDB.Profile` follows DuckDB 2.0's grouped profile JSON: `query`, `parser`, `planner`, `physical_planner`, `optimizer`, `io`, `system`, and `operators`. Operators carry `type`, `timing`, `intermediate_rows`, and `rows_scanned`; the flat 1.5 fields such as `latency` and `operator_timing` are gone.
+- `result_uuid` is renamed `query_uuid` in `QuackDB.Query`, `QuackDB.Cursor`, result metadata, and fetch telemetry, matching the protocol.
+- DuckDB 2.0 itself changes some output: function-call column names follow the new parser (`"version"()`), integer division by zero raises, `EXPLAIN` renders boxes with readable operator names, and database files written by 2.0 cannot be opened by DuckDB 1.5.
+
+### Added
+
+- Query cancellation. `QuackDB.cancel/3` interrupts the query on a remote connection from another process, and the query fails with `:query_cancelled`. A transport timeout cancels its query on the server, and DBConnection disconnects cancel over a fresh HTTP connection.
+- Typed server errors. `QuackDB.Error` metadata carries DuckDB's `:exception_type` (also via `QuackDB.Error.exception_type/1`) and transferable `:extra_info`. A server whose database died returns `:connection_invalidated` and an expired heartbeat lease returns `:connection_expired`; both disconnect so the pool reconnects.
+- Heartbeat leases. Connections request a lease with `:heartbeat_timeout` (60 seconds by default) and DBConnection idle pings renew it with heartbeat messages instead of `SELECT 1`. `:client_id` names the client in server logs.
+- `ON CONFLICT` and `RETURNING` for native appends: `insert_rows/4` and `insert_columns/4` accept `:on_conflict` and `:returning`, and Ecto `insert_all(..., insert_method: :append)` runs `on_conflict: :nothing` and `returning` as one statement instead of staging rows in a temporary table. Schemaless appends can use `returning`.
+- `VARIANT` decoding, unshredded and shredded, into Elixir terms. `:variant` and `:json` append column types send JSON text that DuckDB casts, so mixed objects, arrays, and scalars keep their shapes.
+- `QuackDB.Ecto.Variant` with `variant_extract/2` (keys, 1-based indexes, and paths), `variant_extract_string/2`, `variant_type/1,2`, `variant_typeof/1`, `variant_keys/1,2`, `variant_array_length/1,2`, and `variant_contains/2`, imported by `use QuackDB.Ecto`.
+- `TUPLE` values decode to Elixir tuples, and `TIMESTAMPTZ_NS` values to `QuackDB.NanosecondTimestamp`.
+- Ecto `json_set/3`, `json_insert/3`, `json_replace/3`, and `json_remove/2`, and `variable/1` for DuckDB 2.0's `$name` variables, with `QuackDB.SQL.set_variable/2` and `reset_variable/1`.
+- `QuackDB.DDL.create_trigger/4` and `drop_trigger/3` for DuckDB 2.0 triggers, and `create_schema/2` and `drop_schema/2`. Table names accept nested schema paths such as `{[:finance, :reports], :ledger}`, including the `:schema` append option.
+- Reconnect support: `acknowledge_results: true` confirms each full result to servers running with `quack_enable_reconnects`, and a fetch that lost its HTTP connection requests the same numbered batch again (`:fetch_retries`, default 1).
+- An `:inline_rows` query option caps the rows of the first response; cursors default it to `:max_rows`.
+- `QuackDB.Server` accepts `:serve_options` (`allow_other_hostname`, `disable_ssl`, `ssl_cert_file`, `ssl_key_file`) and derives an `https` URI for non-local hosts as `quack_serve` does. The CLI runs with `-no-agent` so DuckDB 2.0's agent output mode stays off under coding agents.
+
+### Fixed
+
+- Connecting to DuckDB 2.0 failed with `unknown error response field 2` (#8).
+
 ## 0.5.29 - 2026-10-17
 
 ### Fixed
