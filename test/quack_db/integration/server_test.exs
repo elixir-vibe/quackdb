@@ -28,7 +28,7 @@ defmodule QuackDB.Integration.ServerTest do
 
   @tag :managed_duckdb
   test "starts a managed DuckDB binary server" do
-    duckdb = System.find_executable("duckdb")
+    duckdb = QuackDB.TestHelper.duckdb_2_path()
 
     if duckdb do
       token = "quackdb_managed_server_test_#{System.unique_integer([:positive])}"

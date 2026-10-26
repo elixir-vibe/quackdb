@@ -62,6 +62,8 @@ defmodule QuackDB.Server do
   require Logger
 
   @ready_check_timeout 1_000
+  @local_hosts ["localhost", "127.0.0.1", "::1"]
+  @serve_options [:allow_other_hostname, :disable_ssl, :ssl_cert_file, :ssl_key_file]
   @output_tail_bytes 8_192
 
   defstruct [
@@ -93,6 +95,7 @@ defmodule QuackDB.Server do
           | {:boot_sql_source, :init_file | :cmd}
           | {:settings, keyword(QuackDB.SQL.parameter())}
           | {:global_settings, keyword(QuackDB.SQL.parameter())}
+          | {:serve_options, keyword()}
           | {:recovery_mode, :no_wal_writes | String.t()}
           | {:attach_as, atom() | String.t()}
           | {:wait, boolean()}
@@ -129,7 +132,7 @@ defmodule QuackDB.Server do
 
     uri =
       Keyword.get(server_options, :uri) || Keyword.get(client_options, :uri) ||
-        default_uri(endpoint)
+        default_uri(endpoint, Keyword.get(server_options, :serve_options, []))
 
     token =
       Keyword.get(server_options, :token) || Keyword.get(client_options, :token) || random_token()
@@ -281,7 +284,10 @@ defmodule QuackDB.Server do
     duckdb = duckdb_path(options)
     database = Keyword.get(options, :database, ":memory:")
     endpoint = Keyword.get(options, :endpoint, "quack:localhost")
-    uri = Keyword.get(options, :uri, default_uri(endpoint))
+
+    uri =
+      Keyword.get(options, :uri, default_uri(endpoint, Keyword.get(options, :serve_options, [])))
+
     token = Keyword.get_lazy(options, :token, &random_token/0)
     boot_sql = Keyword.get_lazy(options, :boot_sql, fn -> boot_sql(endpoint, token, options) end)
     daemon_options = daemon_options(options)
@@ -338,19 +344,21 @@ defmodule QuackDB.Server do
   defp default_daemon_command(duckdb, database, boot_sql, :init_file) do
     boot_sql_file = write_boot_sql_file!(boot_sql)
 
-    {duckdb, [database, "-csv", "-noheader", "-interactive", "-init", boot_sql_file.path],
-     boot_sql_file}
+    {duckdb, [database | cli_flags(["-init", boot_sql_file.path])], boot_sql_file}
   end
 
   defp default_daemon_command(duckdb, database, boot_sql, :cmd) do
-    {duckdb,
-     [database, "-csv", "-noheader", "-interactive", "-init", "/dev/null", "-cmd", boot_sql], nil}
+    {duckdb, [database | cli_flags(["-init", "/dev/null", "-cmd", boot_sql])], nil}
   end
 
   defp default_daemon_command(_duckdb, _database, _boot_sql, other) do
     raise ArgumentError,
           "expected :boot_sql_source to be :init_file or :cmd, got: #{inspect(other)}"
   end
+
+  # `-no-agent` keeps DuckDB 2.0 from switching to agent output (Markdown
+  # tables, JSON errors) when it detects a coding agent in the environment.
+  defp cli_flags(init_flags), do: ["-csv", "-noheader", "-no-agent", "-interactive" | init_flags]
 
   defp start_daemon(state) do
     MuonTrap.Daemon.start_link(
@@ -639,9 +647,22 @@ defmodule QuackDB.Server do
       quack_extension_sql(options),
       server_settings(options),
       server_global_settings(options),
-      QuackDB.SQL.call(:quack_serve, [endpoint], token: token)
+      QuackDB.SQL.call(:quack_serve, [endpoint], [token: token] ++ serve_options(options))
     ]
     |> IO.iodata_to_binary()
+  end
+
+  defp serve_options(options) do
+    serve_options = Keyword.get(options, :serve_options, [])
+
+    case Keyword.keys(serve_options) -- @serve_options do
+      [] ->
+        serve_options
+
+      unknown ->
+        raise ArgumentError,
+              "unknown :serve_options #{inspect(unknown)}; expected #{inspect(@serve_options)}"
+    end
   end
 
   defp quack_extension_sql(options) do
@@ -704,16 +725,30 @@ defmodule QuackDB.Server do
     [threads: System.schedulers_online()]
   end
 
-  defp default_global_settings do
-    [quack_fetch_batch_chunks: 4]
-  end
+  defp default_global_settings, do: []
 
-  defp default_uri(endpoint) do
+  # quack_serve listens on plain HTTP for local hosts and on HTTPS elsewhere,
+  # unless `disable_ssl` says otherwise.
+  defp default_uri(endpoint, serve_options) do
     case parse_endpoint(endpoint) do
-      {:ok, "localhost", port} -> "http://[::1]:#{port}"
-      {:ok, host, port} -> "http://#{host}:#{port}"
+      {:ok, "localhost", port} -> "#{uri_scheme("localhost", serve_options)}://[::1]:#{port}"
+      {:ok, host, port} -> "#{uri_scheme(host, serve_options)}://#{uri_host(host)}:#{port}"
       :error -> "http://[::1]:9494"
     end
+  end
+
+  defp uri_scheme(host, serve_options) do
+    ssl? =
+      case Keyword.fetch(serve_options, :disable_ssl) do
+        {:ok, disable_ssl} -> not disable_ssl
+        :error -> String.downcase(host) not in @local_hosts
+      end
+
+    if ssl?, do: "https", else: "http"
+  end
+
+  defp uri_host(host) do
+    if String.contains?(host, ":"), do: "[#{host}]", else: host
   end
 
   defp parse_endpoint("quack:" <> rest) do

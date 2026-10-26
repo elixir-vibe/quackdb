@@ -13,30 +13,22 @@ defmodule QuackDB.Binary do
 
   alias QuackDB.Error
 
-  @default_version "1.5.6"
+  @default_version "2.0.0"
   @default_base_url "https://install.duckdb.org"
-  @probe_sql "SELECT 2*3*7"
+  @probe_sql "SELECT version()"
   @checksums %{
-    {"1.5.6", "linux-amd64"} =>
-      "cce2687a38681db644c248198b99ecd86170ff47e324c5f33e50c0042f142839",
-    {"1.5.6", "linux-amd64-musl"} =>
-      "b146bc46094e67f713e0a83a0309910dfbc6696a557e651f484f2d2f80e54f6b",
-    {"1.5.6", "linux-arm64"} =>
-      "1af0541e649a3ae34eb20eec2ca564308bf0e8993e5d6dba6be77bfb289a2718",
-    {"1.5.6", "linux-arm64-musl"} =>
-      "693c977b4a6b97cb5dbb445fb68750bb1e931e4a2b5887d75c2147265e8ce063",
-    {"1.5.6", "osx-amd64"} => "388ce7e8a96307d040a27709a4c193f455ad1d3bbcd576c118bf1ae8158973e7",
-    {"1.5.6", "osx-arm64"} => "7f19ac71f0a4bde308a247ac556d93ee95c03adc327ec85eeab9113294f11dd5",
-    {"1.5.5", "linux-amd64"} =>
-      "c61f21485e6e41d3a0c28ce9904ea18346309cf427b4cf9479bc3564348dc885",
-    {"1.5.5", "linux-amd64-musl"} =>
-      "59bc84a96f58777bb21b67129222628d0ac196bbf722d3107ceb94a8602429d2",
-    {"1.5.5", "linux-arm64"} =>
-      "50c719e603a4e599d435e5321542458edc1cfc5f7eed65979fe9bc5ae4e3ba23",
-    {"1.5.5", "linux-arm64-musl"} =>
-      "b4967d323429af32f4374f92fa67b265f2b680d9b23086244327e158584df764",
-    {"1.5.5", "osx-amd64"} => "52ba07e03926b19454a627365761041faa2615eaed44afb42ce757d62f625f3d",
-    {"1.5.5", "osx-arm64"} => "37144723eb43639a96b47207b44036e6dedc084f81afbf0c18625e7f3deac810"
+    {"2.0.0", "linux-amd64"} =>
+      "c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc",
+    {"2.0.0", "linux-amd64-musl"} =>
+      "3285e4083a79955b0606ab799ebc1493087307cdc76b4827308b1a4dcdb371c9",
+    {"2.0.0", "linux-arm64"} =>
+      "859e1875d2a9515fbb4bf8871061437a14af82320da68c753f094c4b776348fe",
+    {"2.0.0", "linux-arm64-musl"} =>
+      "59aee3049c335917307f5df1b3722af1335fef99199dc89e8064d1b2838620c7",
+    {"2.0.0", "osx-amd64"} => "fbc7013ba09d117396dabf16783281c2add47fc01cdac4855464a03526dc96ee",
+    {"2.0.0", "osx-arm64"} => "188a36fe8883ef52e69165a0cbb6031ef679c8e6c448a1ce22951964149b7f96",
+    {"2.0.0", "osx-universal"} =>
+      "8a8f67e7c7f7d1392fa63ba3971948391392fe2a25fca63e7008e33c50beb4c2"
   }
   @targets @checksums
            |> Enum.map(fn {{_version, target}, _checksum} -> target end)
@@ -111,9 +103,9 @@ defmodule QuackDB.Binary do
   defp download(path, options) do
     with {:ok, target} <- target(options),
          :ok <- File.mkdir_p(Path.dirname(path)),
-         {:ok, compressed} <- fetch(download_url(target, options)),
-         :ok <- verify_checksum(compressed, target, options),
-         {:ok, binary} <- gunzip(compressed),
+         {:ok, archive} <- fetch(download_url(target, options)),
+         :ok <- verify_checksum(archive, target, options),
+         {:ok, binary} <- extract(archive),
          :ok <- File.write(path, binary),
          :ok <- File.chmod(path, 0o755) do
       :ok
@@ -142,11 +134,18 @@ defmodule QuackDB.Binary do
     end
   end
 
-  defp gunzip(compressed) do
-    {:ok, :zlib.gunzip(compressed)}
-  rescue
-    error in ErlangError ->
-      error(:archive_error, "failed to unpack DuckDB binary: #{Exception.message(error)}")
+  # DuckDB 2.0 ships the CLI as a gzipped tarball holding a single `duckdb`.
+  defp extract(archive) do
+    case :erl_tar.extract({:binary, archive}, [:compressed, :memory]) do
+      {:ok, files} ->
+        case List.keyfind(files, ~c"duckdb", 0) do
+          {_name, binary} -> {:ok, binary}
+          nil -> error(:archive_error, "DuckDB archive does not contain a duckdb executable")
+        end
+
+      {:error, reason} ->
+        error(:archive_error, "failed to unpack DuckDB binary: #{inspect(reason)}")
+    end
   end
 
   defp verify_checksum(binary, target, options) do
@@ -182,21 +181,32 @@ defmodule QuackDB.Binary do
   end
 
   defp validate_binary(path) do
-    case System.cmd(path, ["-noheader", "-init", "/dev/null", "-csv", "-batch", "-s", @probe_sql],
-           stderr_to_stdout: true
-         ) do
-      {"42\n", 0} ->
+    args = ["-noheader", "-no-agent", "-init", "/dev/null", "-csv", "-batch", "-s", @probe_sql]
+
+    case System.cmd(path, args, stderr_to_stdout: true) do
+      {"v2." <> _rest, 0} ->
         {:ok, path}
 
-      {"42\r\n", 0} ->
-        {:ok, path}
+      {output, 0} ->
+        error(
+          :unsupported_duckdb_version,
+          "QuackDB requires DuckDB 2.0, got #{String.trim(output)}",
+          %{
+            path: path,
+            output: output
+          }
+        )
 
       {output, status} ->
-        error(:invalid_duckdb_binary, "DuckDB binary probe failed", %{
-          path: path,
-          output: output,
-          status: status
-        })
+        error(
+          :invalid_duckdb_binary,
+          "DuckDB binary probe failed; QuackDB requires the DuckDB 2.0 CLI",
+          %{
+            path: path,
+            output: output,
+            status: status
+          }
+        )
     end
   rescue
     error in ErlangError ->
@@ -211,7 +221,7 @@ defmodule QuackDB.Binary do
   defp download_url(target, options) do
     base_url = options |> Keyword.get(:base_url, @default_base_url) |> String.trim_trailing("/")
     version = Keyword.get(options, :version, @default_version)
-    "#{base_url}/v#{version}/duckdb_cli-#{target}.gz"
+    "#{base_url}/v#{version}/duckdb-cli-#{target}.tar.gz"
   end
 
   defp cached_path(target, options) do

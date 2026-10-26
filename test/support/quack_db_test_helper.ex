@@ -1,6 +1,23 @@
 defmodule QuackDB.TestHelper do
   @moduledoc false
 
+  @doc "Returns the DuckDB 2.0 CLI the integration suite runs against, or nil."
+  def duckdb_2_path do
+    path =
+      case System.get_env("QUACKDB_TEST_DUCKDB") do
+        path when path in [nil, "", "managed"] -> System.find_executable("duckdb")
+        path -> Path.expand(path)
+      end
+
+    with path when is_binary(path) <- path,
+         {"v2." <> _rest, 0} <-
+           System.cmd(path, ["-no-agent", "-version"], stderr_to_stdout: true) do
+      path
+    else
+      _other -> nil
+    end
+  end
+
   def unique_table(prefix) when is_binary(prefix) do
     "#{prefix}_#{System.unique_integer([:positive])}"
   end
