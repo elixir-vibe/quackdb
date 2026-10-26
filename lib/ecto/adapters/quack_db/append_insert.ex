@@ -228,7 +228,10 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL) do
     end
 
     defp maybe_put_schema(opts, %{prefix: nil}), do: opts
-    defp maybe_put_schema(opts, %{prefix: prefix}), do: Keyword.put(opts, :schema, prefix)
+
+    # A dotted prefix names a nested schema path, as in Ecto reads.
+    defp maybe_put_schema(opts, %{prefix: prefix}),
+      do: Keyword.put(opts, :schema, prefix |> to_string() |> String.split("."))
 
     defp maybe_put_schema_columns(opts, %{schema: nil}, _header), do: opts
 

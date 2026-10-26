@@ -22,7 +22,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       assert_read_only_query!(query)
 
       [
-        with_ctes(query.with_ctes),
+        with_ctes(query.with_ctes, context),
         select(query.select, query.distinct, query, context),
         " FROM ",
         source(query.from, 0, context),
@@ -34,7 +34,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         order_bys(query.order_bys, context),
         limit(query.limit, context),
         offset(query.offset, context),
-        combinations(query.combinations),
+        combinations(query.combinations, context),
         lock(query.lock)
       ]
     end
@@ -44,7 +44,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       assert_mutation_query!(query)
 
       [
-        with_ctes(query.with_ctes),
+        with_ctes(query.with_ctes, root_context(query)),
         "UPDATE ",
         source(query.from, 0, root_context(query)),
         " SET ",
@@ -60,7 +60,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       assert_mutation_query!(query)
 
       [
-        with_ctes(query.with_ctes),
+        with_ctes(query.with_ctes, root_context(query)),
         "DELETE FROM ",
         source(query.from, 0, root_context(query)),
         delete_using(query.joins, root_context(query)),
@@ -90,13 +90,13 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
-    defp with_ctes(nil), do: []
+    defp with_ctes(nil, _context), do: []
 
-    defp with_ctes(%Ecto.Query.WithExpr{queries: queries, recursive: recursive}) do
+    defp with_ctes(%Ecto.Query.WithExpr{queries: queries, recursive: recursive}, context) do
       ctes =
         Enum.map(queries, fn
           {name, %{operation: :all}, %Ecto.Query{} = query} ->
-            [quote_name(name), " AS (", all(query), ")"]
+            [quote_name(name), " AS (", all(query, scoped_context(query, context)), ")"]
 
           {name, operation, %Ecto.Query{}} ->
             unsupported!(
@@ -356,7 +356,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp source(%{source: {table, schema}} = expr, index, context)
          when is_binary(table) and is_atom(schema) do
       [
-        source_name(table, source_prefix(expr, schema, context)),
+        source_name(table, source_prefix(table, expr, schema, context)),
         " AS ",
         binding_alias(index, context)
       ]
@@ -391,11 +391,19 @@ if Code.ensure_loaded?(Ecto.Query) do
       %{
         prefix: "",
         query_prefix: query.prefix,
+        cte_names: cte_names(query.with_ctes),
         aliases: query.aliases || %{},
         parent: nil,
         subqueries: [],
         literal_tagged?: false
       }
+    end
+
+    # A separate statement, such as a CTE body or a UNION operand, that still
+    # sees the CTE names of the statement it belongs to.
+    defp scoped_context(%Ecto.Query{} = query, context) do
+      scoped = root_context(query)
+      %{scoped | cte_names: scoped.cte_names ++ context.cte_names}
     end
 
     defp subquery_context(%Ecto.Query{} = query, parent, index) do
@@ -404,6 +412,7 @@ if Code.ensure_loaded?(Ecto.Query) do
       %{
         prefix: prefix,
         query_prefix: query.prefix || parent.query_prefix,
+        cte_names: cte_names(query.with_ctes) ++ parent.cte_names,
         aliases: query.aliases || %{},
         parent: parent,
         subqueries: [],
@@ -472,13 +481,20 @@ if Code.ensure_loaded?(Ecto.Query) do
       end
     end
 
-    # The source's own prefix, then its schema's @schema_prefix, then the query's.
-    defp source_prefix(%{prefix: prefix}, _schema, _context) when prefix != nil, do: prefix
+    defp cte_names(nil), do: []
+    defp cte_names(%Ecto.Query.WithExpr{queries: queries}), do: Enum.map(queries, &elem(&1, 0))
 
-    defp source_prefix(_expr, schema, context) when schema != nil,
-      do: schema.__schema__(:prefix) || context.query_prefix
+    # The source's own prefix, then its schema's @schema_prefix, then the
+    # query's. As in Ecto's planner, the query prefix skips CTE names.
+    defp source_prefix(_table, %{prefix: prefix}, _schema, _context) when prefix != nil,
+      do: prefix
 
-    defp source_prefix(_expr, _schema, context), do: context.query_prefix
+    defp source_prefix(table, _expr, schema, context),
+      do: (schema && schema.__schema__(:prefix)) || query_prefix(table, context)
+
+    defp query_prefix(table, context) do
+      unless table in context.cte_names, do: context.query_prefix
+    end
 
     defp update_from([], _context), do: []
 
@@ -709,11 +725,11 @@ if Code.ensure_loaded?(Ecto.Query) do
     defp offset(nil, _context), do: []
     defp offset(%{expr: expression}, context), do: [" OFFSET ", expr(expression, context)]
 
-    defp combinations([]), do: []
+    defp combinations([], _context), do: []
 
-    defp combinations(combinations) do
+    defp combinations(combinations, context) do
       Enum.map(combinations, fn {operation, query} ->
-        [" ", combination_operator(operation), " ", all(query)]
+        [" ", combination_operator(operation), " ", all(query, scoped_context(query, context))]
       end)
     end
 
