@@ -52,7 +52,7 @@ Streams and other enumerables of row maps/keywords can be appended without mater
 
 ```elixir
 File.stream!("events.ndjson")
-|> Stream.map(&Jason.decode!/1)
+|> Stream.map(&JSON.decode!/1)
 |> QuackDB.insert_stream!(conn, "events", chunk_every: 10_000)
 ```
 

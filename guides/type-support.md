@@ -151,7 +151,7 @@ Supported parameter values:
 - `Decimal.t()`
 - strings
 - `{:blob, binary}`
-- `{:json, map_or_list_or_scalar}` when `Jason` is available
+- `{:json, map_or_list_or_scalar}`
 - `Date.t()`
 - `Time.t()`
 - `NaiveDateTime.t()`

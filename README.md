@@ -164,7 +164,7 @@ Rows, columns, Explorer dataframes, `Table.Reader` data, and streams go in as bi
 QuackDB.insert_rows!(conn, "events", [[id: 1, name: "duck", tags: ["bird", "wetland"]]])
 
 File.stream!("events.ndjson")
-|> Stream.map(&Jason.decode!/1)
+|> Stream.map(&JSON.decode!/1)
 |> QuackDB.insert_stream!(MyApp.AnalyticsRepo, "events", chunk_every: 10_000)
 
 MyApp.AnalyticsRepo.insert_all(MyApp.Event, rows, insert_method: :append, returning: [:id])

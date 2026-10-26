@@ -61,7 +61,7 @@ Enumerable rows can be streamed into native append batches. The connection can b
 
 ```elixir
 File.stream!("events.ndjson")
-|> Stream.map(&Jason.decode!/1)
+|> Stream.map(&JSON.decode!/1)
 |> QuackDB.insert_stream!(MyApp.AnalyticsRepo, "events", chunk_every: 10_000)
 ```
 
