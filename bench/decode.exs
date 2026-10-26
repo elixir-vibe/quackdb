@@ -2,7 +2,8 @@
 #
 #     mix run bench/decode.exs
 #
-# Each line is the median time of several rounds for one decode. The scaling
+# Each line is the median time of several rounds for one decode and the
+# reductions it took; reductions do not vary with machine load. The scaling
 # section decodes 2048 and 8192 values; linear decoders take about 4x as long.
 
 alias QuackDB.Protocol.DataChunk
@@ -28,8 +29,18 @@ defmodule QuackDB.Bench.Decode do
 
     IO.puts(
       String.pad_trailing(label, 42) <>
-        String.pad_leading(:erlang.float_to_binary(median, decimals: 1), 10) <> " µs"
+        String.pad_leading(:erlang.float_to_binary(median, decimals: 1), 10) <>
+        " µs" <> String.pad_leading(Integer.to_string(reductions(fun)), 12) <> " reductions"
     )
+  end
+
+  # Reductions count the work a decode does without depending on machine
+  # load, so they compare runs taken at different times.
+  defp reductions(fun) do
+    {:reductions, before} = Process.info(self(), :reductions)
+    fun.()
+    {:reductions, after_run} = Process.info(self(), :reductions)
+    after_run - before
   end
 
   def chunk(columns, types) do

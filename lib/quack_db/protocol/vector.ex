@@ -332,7 +332,7 @@ defmodule QuackDB.Protocol.Vector do
 
       with {:ok, blob, rest} <- read_required(binary, 102, &Reader.read_blob/1),
            :ok <- expect_blob_size(blob, byte_size),
-           {:ok, values} <- decode_fixed_values(blob, type, physical_type, row_count, validity) do
+           {:ok, values} <- Value.decode_column(blob, type, physical_type, validity) do
         {:ok, values, rest}
       end
     else
@@ -343,14 +343,7 @@ defmodule QuackDB.Protocol.Vector do
   defp decode_variable_values(binary, type, :varchar, row_count, validity) do
     with {:ok, values, rest} <- read_string_values(binary, row_count),
          :ok <- expect_value_count(values, row_count, :varchar) do
-      values =
-        values
-        |> Enum.with_index()
-        |> Enum.map(fn {value, index} ->
-          if valid?(validity, index), do: decode_string_like(type, value), else: nil
-        end)
-
-      {:ok, values, rest}
+      {:ok, decode_strings(values, type, validity, 0, []), rest}
     end
   end
 
@@ -398,13 +391,12 @@ defmodule QuackDB.Protocol.Vector do
 
   defp decode_variable_values(binary, type, :list, row_count, validity) do
     with {:ok, list_size, rest} <- read_required(binary, 104, &Reader.read_uleb128/1),
-         {:ok, entries, rest} <- read_required(rest, 105, &read_list_entries(&1, row_count)),
+         {:ok, entries, rest} <-
+           read_required(rest, 105, &read_list_entries(&1, row_count, list_size)),
          {:ok, child_vector, rest} <-
-           read_required(rest, 106, &decode(&1, LogicalType.child_type(type), list_size)) do
-      with :ok <- validate_list_entries(entries, list_size),
-           {:ok, values} <- list_values(type, entries, child_vector.values, validity) do
-        {:ok, values, rest}
-      end
+           read_required(rest, 106, &decode(&1, LogicalType.child_type(type), list_size)),
+         {:ok, values} <- list_values(type, entries, child_vector.values, validity) do
+      {:ok, values, rest}
     end
   end
 
@@ -417,12 +409,7 @@ defmodule QuackDB.Protocol.Vector do
              104,
              &decode(&1, LogicalType.child_type(type), array_size * row_count)
            ) do
-      values =
-        child_vector.values
-        |> Enum.chunk_every(array_size)
-        |> apply_validity(validity, 0, [])
-
-      {:ok, values, rest}
+      {:ok, split_arrays(child_vector.values, array_size, validity, 0, []), rest}
     end
   end
 
@@ -451,6 +438,13 @@ defmodule QuackDB.Protocol.Vector do
       {:error, _error} = error ->
         error
     end
+  end
+
+  defp decode_strings([], _type, _validity, _index, values), do: Enum.reverse(values)
+
+  defp decode_strings([value | rest], type, validity, index, values) do
+    value = if valid?(validity, index), do: decode_string_like(type, value)
+    decode_strings(rest, type, validity, index + 1, [value | values])
   end
 
   defp split_string_bytes(<<>>, <<>>, values), do: {:ok, Enum.reverse(values)}
@@ -729,117 +723,38 @@ defmodule QuackDB.Protocol.Vector do
     error(:struct_child_mismatch, "struct has more child vectors than child types")
   end
 
-  defp decode_fixed_values(blob, type, physical_type, row_count, nil) do
-    with {:ok, values, <<>>} <-
-           decode_present_fixed_values(blob, type, physical_type, row_count, []) do
-      {:ok, Enum.reverse(values)}
-    end
+  # DuckDB 2.0 allows STRUCTs without fields.
+  defp struct_values([], [], row_count, validity),
+    do: %{} |> List.duplicate(row_count) |> drop_invalid_rows(validity, 0, [])
+
+  defp struct_values(children, child_vectors, _row_count, validity) do
+    names = Enum.map(children, & &1.name)
+
+    child_vectors
+    |> Enum.map(& &1.values)
+    |> struct_rows(names, [])
+    |> drop_invalid_rows(validity, 0, [])
   end
 
-  defp decode_fixed_values(blob, type, physical_type, row_count, validity) do
-    size = LogicalType.fixed_size(physical_type)
+  # Transposes the child columns into one map per row.
+  defp struct_rows([[] | _columns], _names, rows), do: Enum.reverse(rows)
 
-    with {:ok, values, <<>>} <-
-           decode_nullable_fixed_values(
-             blob,
-             type,
-             physical_type,
-             row_count,
-             validity,
-             size,
-             0,
-             []
-           ) do
-      {:ok, Enum.reverse(values)}
-    end
+  defp struct_rows(columns, names, rows) do
+    {values, columns} = heads_and_tails(columns, [], [])
+    struct_rows(columns, names, [:maps.from_list(:lists.zip(names, values)) | rows])
   end
 
-  defp decode_present_fixed_values(rest, _type, _physical_type, 0, values),
-    do: {:ok, values, rest}
+  defp heads_and_tails([], heads, tails), do: {Enum.reverse(heads), Enum.reverse(tails)}
 
-  defp decode_present_fixed_values(binary, type, physical_type, remaining, values) do
-    with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
-      decode_present_fixed_values(rest, type, physical_type, remaining - 1, [value | values])
-    end
-  end
+  defp heads_and_tails([[head | tail] | columns], heads, tails),
+    do: heads_and_tails(columns, [head | heads], [tail | tails])
 
-  defp decode_nullable_fixed_values(
-         rest,
-         _type,
-         _physical_type,
-         0,
-         _validity,
-         _size,
-         _index,
-         values
-       ),
-       do: {:ok, values, rest}
+  defp drop_invalid_rows(rows, nil, _index, _acc), do: rows
+  defp drop_invalid_rows([], _validity, _index, rows), do: Enum.reverse(rows)
 
-  defp decode_nullable_fixed_values(
-         binary,
-         type,
-         physical_type,
-         remaining,
-         validity,
-         size,
-         index,
-         values
-       ) do
-    if valid?(validity, index) do
-      with {:ok, value, rest} <- Value.decode_fixed(binary, type, physical_type) do
-        decode_nullable_fixed_values(
-          rest,
-          type,
-          physical_type,
-          remaining - 1,
-          validity,
-          size,
-          index + 1,
-          [
-            value | values
-          ]
-        )
-      end
-    else
-      <<_ignored::binary-size(^size), rest::binary>> = binary
-
-      decode_nullable_fixed_values(
-        rest,
-        type,
-        physical_type,
-        remaining - 1,
-        validity,
-        size,
-        index + 1,
-        [
-          nil | values
-        ]
-      )
-    end
-  end
-
-  defp struct_values(children, child_vectors, row_count, validity) do
-    columns =
-      Enum.map(Enum.zip(children, child_vectors), fn {%{name: name}, vector} ->
-        {name, vector.values}
-      end)
-
-    build_struct_values(columns, row_count, validity, 0, [])
-  end
-
-  defp build_struct_values(_columns, 0, _validity, _index, values), do: Enum.reverse(values)
-
-  defp build_struct_values(columns, remaining, validity, index, values) do
-    {row, columns} = take_struct_row(columns, valid?(validity, index), %{}, [])
-    build_struct_values(columns, remaining - 1, validity, index + 1, [row | values])
-  end
-
-  defp take_struct_row([], true, row, columns), do: {row, Enum.reverse(columns)}
-  defp take_struct_row([], false, _row, columns), do: {nil, Enum.reverse(columns)}
-
-  defp take_struct_row([{name, [value | rest]} | columns], valid?, row, advanced) do
-    row = if valid?, do: Map.put(row, name, value), else: row
-    take_struct_row(columns, valid?, row, [{name, rest} | advanced])
+  defp drop_invalid_rows([row | rest], validity, index, rows) do
+    row = if valid?(validity, index), do: row
+    drop_invalid_rows(rest, validity, index + 1, [row | rows])
   end
 
   defp tuple_row(nil, _size), do: nil
@@ -875,99 +790,107 @@ defmodule QuackDB.Protocol.Vector do
   defp decode_selection(<<index::little-unsigned-32, rest::binary>>, indexes),
     do: decode_selection(rest, [index | indexes])
 
-  defp read_list_entries(binary, row_count) do
-    with {:ok, entries, rest} <- Reader.read_list(binary, &read_list_entry/1) do
-      if length(entries) == row_count do
-        {:ok, entries, rest}
+  # Each entry is an object with exactly an offset (field 100) and a length
+  # (field 101), so it is matched directly instead of through a field loop.
+  defp read_list_entries(binary, row_count, list_size) do
+    with {:ok, count, rest} <- Reader.read_uleb128(binary) do
+      if count == row_count do
+        read_list_entries(rest, count, list_size, [])
       else
         error(
           :list_entry_count_mismatch,
-          "list vector serialized #{length(entries)} entries for #{row_count} rows"
+          "list vector serialized #{count} entries for #{row_count} rows"
         )
       end
     end
   end
 
-  defp read_list_entry(binary), do: read_list_entry(binary, %{})
+  defp read_list_entries(rest, 0, _list_size, entries), do: {:ok, Enum.reverse(entries), rest}
 
-  defp read_list_entry(binary, entry) do
-    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      cond do
-        field_id == @field_end ->
-          {:ok, entry, rest}
-
-        field_id == 100 ->
-          with {:ok, offset, rest} <- Reader.read_uleb128(rest),
-               do: read_list_entry(rest, Map.put(entry, :offset, offset))
-
-        field_id == 101 ->
-          with {:ok, length, rest} <- Reader.read_uleb128(rest),
-               do: read_list_entry(rest, Map.put(entry, :length, length))
-
-        true ->
-          error(:unknown_list_entry_field, "unknown list entry field #{field_id}")
-      end
-    end
-  end
-
-  defp validate_list_entries(entries, list_size) do
-    Enum.reduce_while(entries, :ok, fn entry, :ok ->
-      with {:ok, offset, length} <- list_entry_bounds(entry) do
-        if offset + length <= list_size do
-          {:cont, :ok}
-        else
-          {:halt,
-           error(
-             :list_entry_out_of_bounds,
-             "list entry offset #{offset} with length #{length} exceeds child vector size #{list_size}"
-           )}
-        end
+  defp read_list_entries(<<100::little-16, rest::binary>>, remaining, list_size, entries) do
+    with {:ok, offset, <<101::little-16, rest::binary>>} <- Reader.read_uleb128(rest),
+         {:ok, length, <<@field_end::little-16, rest::binary>>} <- Reader.read_uleb128(rest) do
+      if offset + length <= list_size do
+        read_list_entries(rest, remaining - 1, list_size, [{offset, length} | entries])
       else
-        {:error, _error} = error -> {:halt, error}
+        error(
+          :list_entry_out_of_bounds,
+          "list entry offset #{offset} with length #{length} exceeds child vector size #{list_size}"
+        )
       end
-    end)
-  end
-
-  defp list_entry_bounds(%{offset: offset, length: length}), do: {:ok, offset, length}
-
-  defp list_entry_bounds(entry) do
-    error(
-      :invalid_list_entry,
-      "LIST entry must include offset and length fields, got #{inspect(entry)}"
-    )
-  end
-
-  defp list_values(type, entries, child_values, validity) do
-    child_values = List.to_tuple(child_values)
-
-    entries
-    |> Enum.with_index()
-    |> Enum.reduce_while({:ok, []}, fn {%{offset: offset, length: length}, row_index},
-                                       {:ok, values} ->
-      if valid?(validity, row_index) do
-        value = tuple_slice(child_values, offset, length)
-
-        case list_value(type, value) do
-          {:ok, value} -> {:cont, {:ok, [value | values]}}
-          {:error, _error} = error -> {:halt, error}
-        end
-      else
-        {:cont, {:ok, [nil | values]}}
-      end
-    end)
-    |> case do
-      {:ok, values} -> {:ok, Enum.reverse(values)}
+    else
+      {:ok, _value, _rest} -> invalid_list_entry()
       {:error, _error} = error -> error
     end
   end
 
-  defp list_value(%{name: :map} = type, entries) do
-    with :ok <- validate_map_child_type(type) do
-      map_entries(entries)
+  defp read_list_entries(_binary, _remaining, _list_size, _entries), do: invalid_list_entry()
+
+  defp invalid_list_entry do
+    error(:invalid_list_entry, "LIST entry must carry an offset and a length field")
+  end
+
+  # DuckDB serializes list children in row order, so lists are split off the
+  # child values front to back; offsets that jump fall back to tuple slicing.
+  # NULL rows carry an empty entry and take no child values.
+  defp list_values(type, entries, child_values, validity) do
+    with :ok <- validate_list_type(type) do
+      lists =
+        case split_lists(entries, child_values, validity, 0, 0, []) do
+          {:ok, lists} -> lists
+          :out_of_order -> slice_lists(entries, List.to_tuple(child_values), validity, 0, [])
+        end
+
+      convert_lists(type, lists)
     end
   end
 
-  defp list_value(_type, entries), do: {:ok, entries}
+  defp validate_list_type(%{name: :map} = type), do: validate_map_child_type(type)
+  defp validate_list_type(_type), do: :ok
+
+  defp split_lists([], _values, _validity, _position, _index, lists),
+    do: {:ok, Enum.reverse(lists)}
+
+  defp split_lists([{offset, length} | entries], values, validity, position, index, lists) do
+    cond do
+      not valid?(validity, index) ->
+        split_lists(entries, values, validity, position, index + 1, [nil | lists])
+
+      offset == position ->
+        {list, values} = Enum.split(values, length)
+        split_lists(entries, values, validity, position + length, index + 1, [list | lists])
+
+      true ->
+        :out_of_order
+    end
+  end
+
+  defp slice_lists([], _values, _validity, _index, lists), do: Enum.reverse(lists)
+
+  defp slice_lists([{offset, length} | entries], values, validity, index, lists) do
+    list = if valid?(validity, index), do: tuple_slice(values, offset, length)
+    slice_lists(entries, values, validity, index + 1, [list | lists])
+  end
+
+  defp convert_lists(%{name: :map}, lists) do
+    lists
+    |> Enum.reduce_while({:ok, []}, fn
+      nil, {:ok, maps} ->
+        {:cont, {:ok, [nil | maps]}}
+
+      entries, {:ok, maps} ->
+        case map_entries(entries) do
+          {:ok, map} -> {:cont, {:ok, [map | maps]}}
+          {:error, _error} = error -> {:halt, error}
+        end
+    end)
+    |> case do
+      {:ok, maps} -> {:ok, Enum.reverse(maps)}
+      error -> error
+    end
+  end
+
+  defp convert_lists(_type, lists), do: {:ok, lists}
 
   defp tuple_slice(tuple, offset, length), do: tuple_slice(tuple, offset, length, [])
 
@@ -1035,11 +958,12 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
-  defp apply_validity([], _validity, _index, values), do: Enum.reverse(values)
+  defp split_arrays([], _size, _validity, _index, arrays), do: Enum.reverse(arrays)
 
-  defp apply_validity([value | rest], validity, index, values) do
-    value = if valid?(validity, index), do: value, else: nil
-    apply_validity(rest, validity, index + 1, [value | values])
+  defp split_arrays(values, size, validity, index, arrays) do
+    {array, rest} = Enum.split(values, size)
+    array = if valid?(validity, index), do: array
+    split_arrays(rest, size, validity, index + 1, [array | arrays])
   end
 
   defp valid?(nil, _index), do: true

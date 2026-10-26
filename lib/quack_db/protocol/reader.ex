@@ -28,6 +28,8 @@ defmodule QuackDB.Protocol.Reader do
   def read_bool(<<>>), do: error(:truncated_bool, "expected a boolean byte")
 
   @spec read_uleb128(binary()) :: read_result(non_neg_integer())
+  # Most field values, offsets, and lengths fit in one byte.
+  def read_uleb128(<<byte, rest::binary>>) when byte < 0x80, do: {:ok, byte, rest}
   def read_uleb128(binary), do: read_uleb128(binary, 0, 0)
 
   @spec read_sleb128(binary()) :: read_result(integer())
