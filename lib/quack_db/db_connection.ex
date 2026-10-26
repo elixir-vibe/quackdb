@@ -58,6 +58,7 @@ defmodule QuackDB.DBConnection do
     :telemetry_prefix,
     heartbeat_timeout: @default_heartbeat_timeout,
     acknowledge_results?: false,
+    copy_binaries?: false,
     next_query_id: 1,
     status: :idle,
     cursors: %{}
@@ -76,6 +77,7 @@ defmodule QuackDB.DBConnection do
           telemetry_prefix: [atom()],
           heartbeat_timeout: pos_integer(),
           acknowledge_results?: boolean(),
+          copy_binaries?: boolean(),
           next_query_id: pos_integer(),
           status: DBConnection.status(),
           cursors: map()
@@ -301,7 +303,8 @@ defmodule QuackDB.DBConnection do
 
     case transport_result do
       {:ok, response} ->
-        {decode_duration, result} = timed(fn -> decode_reply(response) end)
+        copy? = Keyword.get(options, :copy_binaries, state.copy_binaries?)
+        {decode_duration, result} = timed(fn -> decode_reply(response, copy?) end)
 
         {result,
          metrics
@@ -325,9 +328,10 @@ defmodule QuackDB.DBConnection do
     )
   end
 
-  defp decode_reply(response) do
+  defp decode_reply(response, copy?) do
     case Codec.decode(response) do
       {:ok, {_header, %ErrorResponse{} = error}} -> {:error, Error.server(error)}
+      {:ok, {header, message}} when copy? -> {:ok, {header, Codec.copy_binaries(message)}}
       result -> result
     end
   end
@@ -1056,6 +1060,7 @@ defmodule QuackDB.DBConnection do
          client_id: Keyword.get(options, :client_id, ""),
          heartbeat_timeout: Keyword.get(options, :heartbeat_timeout, @default_heartbeat_timeout),
          acknowledge_results?: Keyword.get(options, :acknowledge_results, false),
+         copy_binaries?: Keyword.get(options, :copy_binaries, false),
          telemetry_prefix: Keyword.get(options, :telemetry_prefix, Telemetry.default_prefix())
        }}
     end

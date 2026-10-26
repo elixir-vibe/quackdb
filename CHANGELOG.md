@@ -26,11 +26,18 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 - `QuackDB.DDL.create_trigger/4` and `drop_trigger/3` for DuckDB 2.0 triggers, and `create_schema/2` and `drop_schema/2`. Table names accept nested schema paths such as `{[:finance, :reports], :ledger}`, including the `:schema` append option.
 - Reconnect support: `acknowledge_results: true` confirms each full result to servers running with `quack_enable_reconnects`, and a fetch that lost its HTTP connection requests the same numbered batch again (`:fetch_retries`, default 1).
 - An `:inline_rows` query option caps the rows of the first response; cursors default it to `:max_rows`.
+- A `:copy_binaries` option, per connection or per query, copies decoded strings and blobs off the HTTP response, so keeping a few values from a large result no longer keeps the whole response in memory.
 - `QuackDB.Server` accepts `:serve_options` (`allow_other_hostname`, `disable_ssl`, `ssl_cert_file`, `ssl_key_file`) and derives an `https` URI for non-local hosts as `quack_serve` does. The CLI runs with `-no-agent` so DuckDB 2.0's agent output mode stays off under coding agents.
+
+### Changed
+
+- Faster result decoding. Fixed-width vectors decode with one binary comprehension per column instead of one call per value, temporal values are built from calendar fields, and LIST, ARRAY, STRUCT, and VARCHAR vectors decode in one pass. Per 2048-row vector this takes 2x fewer reductions for integers, lists, and arrays and 4x fewer for timestamps.
 
 ### Fixed
 
 - Connecting to DuckDB 2.0 failed with `unknown error response field 2` (#8).
+- Dictionary, ARRAY, and VARIANT vectors decoded in quadratic time: a 2048-row dictionary vector took 1.2 ms instead of about 60 µs, and a 4000-element VARIANT array 29 ms instead of about 0.5 ms.
+- Empty STRUCT values, which DuckDB 2.0 allows (`SELECT {}`), failed to decode.
 
 ## 0.5.29 - 2026-10-17
 

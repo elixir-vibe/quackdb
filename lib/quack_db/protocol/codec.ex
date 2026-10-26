@@ -88,6 +88,74 @@ defmodule QuackDB.Protocol.Codec do
     end
   end
 
+  # Decoded values never hold binaries in these structs, so copying skips them.
+  @binary_free_structs [
+    Date,
+    Time,
+    NaiveDateTime,
+    DateTime,
+    Decimal,
+    QuackDB.Interval,
+    QuackDB.NanosecondTime,
+    QuackDB.NanosecondTimestamp,
+    QuackDB.TimeWithTimeZone
+  ]
+
+  @doc """
+  Copies every binary in a decoded prepare or fetch response off the
+  response binary.
+
+  Decoded strings, blobs, column names, and type metadata of 64 bytes or more
+  are sub-binaries of the response they came from, so keeping any of them
+  keeps the whole response in memory. Copies are independent of it; shorter
+  binaries already are. Other messages are returned unchanged.
+  """
+  @spec copy_binaries(struct()) :: struct()
+  def copy_binaries(%PrepareResponse{} = response) do
+    %{
+      response
+      | result_names: copy(response.result_names),
+        result_types: copy(response.result_types),
+        results: copy(response.results)
+    }
+  end
+
+  def copy_binaries(%FetchResponse{} = response),
+    do: %{response | results: copy(response.results)}
+
+  def copy_binaries(message), do: message
+
+  defp copy(%DataChunk{} = chunk),
+    do: %{chunk | types: copy(chunk.types), columns: Enum.map(chunk.columns, &copy_vector/1)}
+
+  # Binaries under 64 bytes are already copied out when they are matched, so
+  # only those that still point into a larger binary need a copy.
+  defp copy(binary) when is_binary(binary) do
+    if :binary.referenced_byte_size(binary) > byte_size(binary),
+      do: :binary.copy(binary),
+      else: binary
+  end
+
+  defp copy(list) when is_list(list), do: Enum.map(list, &copy/1)
+  defp copy(%module{} = struct) when module in @binary_free_structs, do: struct
+
+  defp copy(%module{} = struct),
+    do: struct |> Map.from_struct() |> copy() |> then(&struct(module, &1))
+
+  defp copy(map) when is_map(map),
+    do: Map.new(map, fn {key, value} -> {copy(key), copy(value)} end)
+
+  defp copy(tuple) when is_tuple(tuple), do: tuple |> Tuple.to_list() |> copy() |> List.to_tuple()
+  defp copy(term), do: term
+
+  # Only columns whose values can hold binaries are walked.
+  defp copy_vector(vector) do
+    values =
+      if LogicalType.holds_binaries?(vector.type), do: copy(vector.values), else: vector.values
+
+    %{vector | type: copy(vector.type), values: values}
+  end
+
   @spec encode_header(Header.t()) :: iodata()
   def encode_header(%Header{} = header) do
     [

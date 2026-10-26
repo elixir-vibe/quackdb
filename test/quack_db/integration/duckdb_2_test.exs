@@ -313,4 +313,19 @@ defmodule QuackDB.Integration.DuckDB2Test do
 
     assert Enum.sort(keys) == ["kind", "tags"]
   end
+
+  test "copy_binaries releases the response behind kept strings" do
+    sql = "SELECT repeat('x', 200) || i::VARCHAR AS s FROM range(5000) t(i)"
+    shared = start_connection!(pool_size: 1)
+    copied = start_connection!(pool_size: 1, copy_binaries: true)
+
+    [[value] | _rows] = QuackDB.query!(shared, sql).rows
+    assert :binary.referenced_byte_size(value) > 100 * byte_size(value)
+
+    [[value] | _rows] = QuackDB.query!(shared, sql, [], copy_binaries: true).rows
+    assert :binary.referenced_byte_size(value) == byte_size(value)
+
+    [[value] | _rows] = QuackDB.query!(copied, sql).rows
+    assert :binary.referenced_byte_size(value) == byte_size(value)
+  end
 end

@@ -12,9 +12,12 @@ defmodule QuackDB.Protocol.CodecTest do
   alias QuackDB.Protocol.Message.FetchResponse
   alias QuackDB.Protocol.Message.Header
   alias QuackDB.Protocol.Message.HeartbeatRequest
+  alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Message.PrepareRequest
+  alias QuackDB.Protocol.Message.PrepareResponse
   alias QuackDB.Protocol.Message.SendDataRequest
   alias QuackDB.Protocol.Message.SendDataResponse
+  alias QuackDB.Protocol.Vector
   alias QuackDB.Protocol.Writer
 
   test "connection requests advertise protocol version 3 and a heartbeat lease" do
@@ -267,4 +270,80 @@ defmodule QuackDB.Protocol.CodecTest do
 
     assert {:error, %QuackDB.Error{code: :truncated_field_id}} = Codec.decode(binary)
   end
+
+  describe "copy_binaries/1" do
+    test "copies every binary off the response, including nested values and column names" do
+      types = [
+        name: :varchar,
+        tags: {:list, :varchar},
+        meta: {:struct, [label: :varchar, score: :integer]},
+        labels: {:map, :varchar, :varchar},
+        id: :integer
+      ]
+
+      # Shorter binaries are copied out of the response when they are matched.
+      long = String.duplicate("duck", 20)
+
+      row = [
+        name: long,
+        tags: [long, "b"],
+        meta: %{label: long, score: 1},
+        labels: %{"env" => long},
+        id: 7
+      ]
+
+      {:ok, chunk} = DataChunk.from_rows([row], columns: types)
+
+      response =
+        IO.iodata_to_binary(
+          Codec.encode(%PrepareResponse{
+            result_names: ["name", "tags", "meta", "labels", "id"],
+            result_types: chunk.types,
+            results: [chunk],
+            query_uuid: 1
+          })
+        )
+
+      {:ok, {_header, decoded}} = Codec.decode(response)
+      copied = Codec.copy_binaries(decoded)
+
+      assert copied == decoded
+
+      assert Enum.any?(
+               binaries(decoded),
+               &(:binary.referenced_byte_size(&1) == byte_size(response))
+             )
+
+      assert Enum.all?(binaries(copied), &(:binary.referenced_byte_size(&1) == byte_size(&1)))
+    end
+
+    test "copies ENUM labels that decoded values share with the type" do
+      high = String.duplicate("high", 20)
+      type = LogicalType.new(:enum, %{type: 6, values_count: 2, values: ["low", high]})
+      chunk = %DataChunk{row_count: 1, types: [type], columns: [%Vector{type: type, values: [1]}]}
+      binary = chunk |> DataChunk.encode() |> IO.iodata_to_binary()
+
+      {:ok, decoded, ""} = DataChunk.decode(binary)
+      [[label]] = DataChunk.rows(decoded)
+      assert label == high
+      assert :binary.referenced_byte_size(label) == byte_size(binary)
+
+      %FetchResponse{results: [copied]} = Codec.copy_binaries(%FetchResponse{results: [decoded]})
+      [[copied_label]] = DataChunk.rows(copied)
+      assert :binary.referenced_byte_size(copied_label) == byte_size(copied_label)
+    end
+
+    test "leaves other messages unchanged" do
+      assert Codec.copy_binaries(%SendDataResponse{}) == %SendDataResponse{}
+    end
+  end
+
+  defp binaries(term) when is_binary(term), do: [term]
+  defp binaries(term) when is_list(term), do: Enum.flat_map(term, &binaries/1)
+  defp binaries(%_{} = term), do: term |> Map.from_struct() |> binaries()
+
+  defp binaries(term) when is_map(term),
+    do: Enum.flat_map(term, fn {k, v} -> binaries(k) ++ binaries(v) end)
+
+  defp binaries(_term), do: []
 end

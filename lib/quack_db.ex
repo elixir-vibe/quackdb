@@ -22,6 +22,13 @@ defmodule QuackDB do
     * `:fetch_retries` is how often a result batch is requested again after
       its HTTP connection broke (default `1`). Batches are numbered, so a
       retry never skips or repeats rows.
+    * `:copy_binaries` copies decoded strings and blobs off the HTTP response
+      (default `false`); it can also be passed per query. Without it, a
+      decoded string of 64 bytes or more is a slice of the response it
+      arrived in, so keeping it keeps the whole response, up to one result
+      batch, in memory. Copying about doubles decode time for string columns
+      and costs nothing for other columns. Use it when you keep a few values
+      from large results, for example in a cache or a long-lived process.
     * `:connect_timeout`, `:receive_timeout`, `:shutdown_timeout`, and
       `:mint_options` tune the HTTP transport.
 
@@ -44,6 +51,7 @@ defmodule QuackDB do
           | {:client_id, String.t()}
           | {:acknowledge_results, boolean()}
           | {:fetch_retries, non_neg_integer()}
+          | {:copy_binaries, boolean()}
   @type insert_row :: map() | Keyword.t()
   @type insert_column :: {atom() | String.t(), [term()]}
 

@@ -171,6 +171,20 @@ defmodule QuackDB.Protocol.LogicalType do
     raise Error.new(:unsupported_type, "cannot render #{inspect(type)} as SQL", source: :client)
   end
 
+  @doc """
+  Returns whether decoded values of this type can hold binaries: strings,
+  blobs, ENUM labels, or nested values containing them.
+  """
+  @spec holds_binaries?(t()) :: boolean()
+  def holds_binaries?(%__MODULE__{name: name}) when name in [:enum, :variant], do: true
+
+  def holds_binaries?(%__MODULE__{type_info: %{child_type: child}}), do: holds_binaries?(child)
+
+  def holds_binaries?(%__MODULE__{type_info: %{children: children}}),
+    do: Enum.any?(children, &holds_binaries?(&1.type))
+
+  def holds_binaries?(%__MODULE__{} = type), do: physical_type(type) == :varchar
+
   @spec physical_type(t()) :: atom()
   def physical_type(%__MODULE__{name: :boolean}), do: :bool
   def physical_type(%__MODULE__{name: :tinyint}), do: :int8
