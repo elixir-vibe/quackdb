@@ -8,6 +8,8 @@ defmodule QuackDB.Protocol.Value do
   alias QuackDB.Error
   alias QuackDB.Protocol.Reader
 
+  import QuackDB.Protocol.LogicalType, only: [is_int64_temporal: 1]
+
   @spec decode_fixed(binary(), map(), atom()) :: Reader.read_result(term())
   def decode_fixed(binary, _type, :bool) do
     with {:ok, value, rest} <- Reader.read_uint8(binary), do: {:ok, value != 0, rest}
@@ -47,18 +49,7 @@ defmodule QuackDB.Protocol.Value do
 
   def decode_fixed(binary, _type, :uint32), do: Reader.read_uint32(binary)
 
-  def decode_fixed(binary, %{name: name}, :int64)
-      when name in [
-             :time,
-             :time_ns,
-             :timestamp_sec,
-             :timestamp_ms,
-             :timestamp,
-             :timestamp_ns,
-             :time_tz,
-             :timestamp_tz,
-             :timestamp_tz_ns
-           ] do
+  def decode_fixed(binary, %{name: name}, :int64) when is_int64_temporal(name) do
     with {:ok, value, rest} <- Reader.read_int64(binary), do: {:ok, temporal(name, value), rest}
   end
 

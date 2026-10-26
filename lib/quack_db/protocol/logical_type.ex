@@ -11,6 +11,24 @@ defmodule QuackDB.Protocol.LogicalType do
 
   defstruct [:id, :name, :type_info]
 
+  @field_end QuackDB.Protocol.field_end()
+
+  # Temporal types DuckDB stores as one signed 64-bit integer.
+  @int64_temporal [
+    :time,
+    :time_ns,
+    :time_tz,
+    :timestamp,
+    :timestamp_ms,
+    :timestamp_ns,
+    :timestamp_sec,
+    :timestamp_tz,
+    :timestamp_tz_ns
+  ]
+
+  @doc "Guards temporal type names that DuckDB stores as one signed 64-bit integer."
+  defguard is_int64_temporal(name) when name in @int64_temporal
+
   @type id :: non_neg_integer()
   @type t :: %__MODULE__{id: id(), name: atom() | nil, type_info: map() | nil}
 
@@ -164,20 +182,8 @@ defmodule QuackDB.Protocol.LogicalType do
   def physical_type(%__MODULE__{name: name}) when name in [:sqlnull, :date, :integer], do: :int32
   def physical_type(%__MODULE__{name: :uinteger}), do: :uint32
 
-  def physical_type(%__MODULE__{name: name})
-      when name in [
-             :bigint,
-             :time,
-             :time_ns,
-             :timestamp,
-             :timestamp_sec,
-             :timestamp_ns,
-             :timestamp_ms,
-             :time_tz,
-             :timestamp_tz,
-             :timestamp_tz_ns
-           ],
-      do: :int64
+  def physical_type(%__MODULE__{name: name}) when name in [:bigint | @int64_temporal],
+    do: :int64
 
   def physical_type(%__MODULE__{name: :ubigint}), do: :uint64
   def physical_type(%__MODULE__{name: :float}), do: :float
@@ -384,7 +390,7 @@ defmodule QuackDB.Protocol.LogicalType do
   defp decode_type(binary, type) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == @field_end ->
           {:ok, type, rest}
 
         field_id == 100 ->
@@ -419,7 +425,7 @@ defmodule QuackDB.Protocol.LogicalType do
   defp decode_type_info(binary, info) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == @field_end ->
           {:ok, info, rest}
 
         field_id == 100 ->
@@ -491,7 +497,7 @@ defmodule QuackDB.Protocol.LogicalType do
   defp decode_child_type(binary, child) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == @field_end ->
           with :ok <- expect_child_type(child), do: {:ok, child, rest}
 
         field_id == 0 ->

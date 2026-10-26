@@ -5,13 +5,15 @@ defmodule QuackDB.Protocol.Writer do
 
   import Bitwise
 
+  @end_object <<QuackDB.Protocol.field_end()::little-unsigned-16>>
+
   @spec field(non_neg_integer(), iodata()) :: iodata()
   def field(field_id, value) when field_id in 0..0xFFFE do
     [<<field_id::little-unsigned-16>>, value]
   end
 
   @spec end_object() :: <<_::16>>
-  def end_object, do: <<QuackDB.Protocol.field_end()::little-unsigned-16>>
+  def end_object, do: @end_object
 
   @spec bool(boolean()) :: <<_::8>>
   def bool(false), do: <<0>>

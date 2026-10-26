@@ -13,6 +13,8 @@ defmodule QuackDB.Protocol.DataChunk do
 
   defstruct row_count: 0, types: [], columns: []
 
+  @field_end QuackDB.Protocol.field_end()
+
   @type column :: Vector.t()
   @type t :: %__MODULE__{
           row_count: non_neg_integer(),
@@ -500,7 +502,7 @@ defmodule QuackDB.Protocol.DataChunk do
   defp decode_wrapper(binary, chunk) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() and chunk != nil ->
+        field_id == @field_end and chunk != nil ->
           {:ok, chunk, rest}
 
         field_id == 300 ->
@@ -517,7 +519,7 @@ defmodule QuackDB.Protocol.DataChunk do
   defp decode_chunk(binary, chunk) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == @field_end ->
           validate_chunk(chunk, rest)
 
         field_id == 100 ->

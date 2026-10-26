@@ -4,6 +4,7 @@ defmodule QuackDB.Protocol.Vector do
   """
 
   import Bitwise
+  import QuackDB.Protocol.LogicalType, only: [is_int64_temporal: 1]
 
   alias QuackDB.Error
   alias QuackDB.Protocol.LogicalType
@@ -13,6 +14,8 @@ defmodule QuackDB.Protocol.Vector do
   alias QuackDB.Protocol.Writer
 
   defstruct [:type, vector_type: :flat, values: []]
+
+  @field_end QuackDB.Protocol.field_end()
 
   @type t :: %__MODULE__{type: LogicalType.t(), vector_type: atom(), values: [term()]}
 
@@ -93,18 +96,7 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp encode_fixed_blob(%LogicalType{name: name}, :int64, values)
-       when name not in [
-              :decimal,
-              :time,
-              :time_ns,
-              :time_tz,
-              :timestamp,
-              :timestamp_ms,
-              :timestamp_ns,
-              :timestamp_sec,
-              :timestamp_tz,
-              :timestamp_tz_ns
-            ] do
+       when name != :decimal and not is_int64_temporal(name) do
     if Enum.any?(values, &is_nil/1) do
       values
       |> Enum.map(&encode_fixed_value(%LogicalType{name: name}, :int64, &1))
@@ -226,7 +218,7 @@ defmodule QuackDB.Protocol.Vector do
   defp decode_object(binary, type, row_count, vector) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == @field_end ->
           {:ok, vector, rest}
 
         field_id == 90 ->
@@ -500,17 +492,7 @@ defmodule QuackDB.Protocol.Vector do
     do: <<decimal_unscaled(type, value)::little-signed-64>>
 
   defp encode_fixed_value(%LogicalType{name: name}, :int64, value)
-       when name in [
-              :time,
-              :time_ns,
-              :time_tz,
-              :timestamp,
-              :timestamp_ms,
-              :timestamp_ns,
-              :timestamp_sec,
-              :timestamp_tz,
-              :timestamp_tz_ns
-            ],
+       when is_int64_temporal(name),
        do: <<temporal_unscaled(name, value)::little-signed-64>>
 
   defp encode_fixed_value(_type, :int64, value), do: <<value::little-signed-64>>
@@ -911,7 +893,7 @@ defmodule QuackDB.Protocol.Vector do
   defp read_list_entry(binary, entry) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
-        field_id == QuackDB.Protocol.field_end() ->
+        field_id == @field_end ->
           {:ok, entry, rest}
 
         field_id == 100 ->
@@ -1173,7 +1155,7 @@ defmodule QuackDB.Protocol.Vector do
     do: error(:unexpected_field, "expected field #{expected_field_id}, got #{field_id}")
 
   defp expect_vector_end(field_id) do
-    if field_id == QuackDB.Protocol.field_end(),
+    if field_id == @field_end,
       do: :ok,
       else: error(:unexpected_vector_field, "unexpected vector field #{field_id}")
   end
