@@ -296,6 +296,9 @@ MyApp.AnalyticsRepo.all(
 )
 ```
 
+To read Delta or DuckLake tables as they were at an earlier snapshot, see
+[Snapshots and Time Travel](snapshots.md).
+
 Keep lakehouse setup SQL explicit when DuckDB-specific options are clearer than another wrapper:
 
 ```elixir
