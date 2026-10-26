@@ -27,17 +27,32 @@ defmodule QuackDB.Integration.DuckDB2Test do
     assert {:ok, %QuackDB.Result{rows: [[2]]}} = QuackDB.query(connection, "SELECT 2")
   end
 
-  test "an expired heartbeat lease reconnects instead of failing later queries" do
+  # The server renews the lease only when a message arrives; the heartbeat
+  # process keeps it alive while the connection itself is busy or checked out.
+  test "a running query keeps its lease past the heartbeat timeout" do
+    connection = start_connection!(pool_size: 1, heartbeat_timeout: 1, idle_interval: 60_000)
+    connection_id = QuackDB.query!(connection, "SELECT 1").connection_id
+    task = Task.async(fn -> QuackDB.query(connection, @slow_query, [], timeout: 60_000) end)
+
+    # A cancel is a message on the same connection: an expired lease rejects it.
+    Process.sleep(2_500)
+    assert :ok = QuackDB.cancel(System.fetch_env!("QUACKDB_TEST_URI"), connection_id)
+
+    assert {:error, %QuackDB.Error{code: :query_cancelled}} = Task.await(task, 60_000)
+
+    assert {:ok, %QuackDB.Result{connection_id: ^connection_id}} =
+             QuackDB.query(connection, "SELECT 2")
+  end
+
+  test "a checked-out connection keeps its lease while the caller works" do
     connection = start_connection!(pool_size: 1, heartbeat_timeout: 1, idle_interval: 60_000)
 
-    assert {:error, %QuackDB.Error{code: :connection_expired, retriable?: true}} =
+    assert {:ok, %QuackDB.Result{rows: [[2]]}} =
              DBConnection.run(connection, fn conn ->
                QuackDB.query!(conn, "SELECT 1")
                Process.sleep(2_200)
                QuackDB.query(conn, "SELECT 2")
              end)
-
-    assert {:ok, %QuackDB.Result{rows: [[3]]}} = QuackDB.query(connection, "SELECT 3")
   end
 
   test "idle pings keep a short heartbeat lease alive" do
@@ -346,5 +361,90 @@ defmodule QuackDB.Integration.DuckDB2Test do
 
     [payload | _payloads] = QuackDB.IntegrationRepo.all(query, copy_binaries: true)
     assert :binary.referenced_byte_size(payload) == byte_size(payload)
+  end
+
+  test "GEOMETRY appends round-trip and CRS-typed columns decode" do
+    connection = start_connection!(pool_size: 1)
+    table = unique_table("duckdb2_shapes")
+    QuackDB.query!(connection, "CREATE TEMP TABLE #{table} (id INTEGER, geom GEOMETRY)")
+    [[wkb]] = QuackDB.query!(connection, "SELECT ST_AsWKB('POINT(1 2)'::GEOMETRY)").rows
+
+    QuackDB.insert_rows!(connection, table, [[id: 1, geom: wkb], [id: 2, geom: nil]],
+      columns: [id: :integer, geom: :geometry]
+    )
+
+    assert %QuackDB.Result{rows: [[1, "POINT (1 2)"], [2, nil]]} =
+             QuackDB.query!(connection, "SELECT id, ST_AsText(geom) FROM #{table} ORDER BY id")
+
+    assert %QuackDB.Result{rows: [[geometry]]} =
+             QuackDB.query!(connection, "SELECT 'POINT(1 2)'::GEOMETRY('OGC:CRS84')")
+
+    assert geometry == wkb
+  end
+
+  test "DECIMAL with zero scale decodes as Decimal" do
+    connection = start_connection!()
+
+    assert %QuackDB.Result{rows: [[%Decimal{} = whole, %Decimal{} = cents]]} =
+             QuackDB.query!(connection, "SELECT 12::DECIMAL(18, 0), 12.5::DECIMAL(18, 2)")
+
+    assert Decimal.equal?(whole, 12)
+    assert Decimal.equal?(cents, Decimal.new("12.50"))
+  end
+
+  test "unsupported result types fail the query and keep the connection" do
+    connection = start_connection!(pool_size: 1)
+
+    assert {:error, %QuackDB.Error{code: :unsupported_type}} =
+             QuackDB.query(connection, "SELECT 1::UNION(a INTEGER, b VARCHAR)")
+
+    assert {:ok, %QuackDB.Result{rows: [[1]]}} = QuackDB.query(connection, "SELECT 1")
+  end
+
+  test "a failed handshake stops its HTTP connection" do
+    uri = System.fetch_env!("QUACKDB_TEST_URI")
+    {:links, links} = Process.info(self(), :links)
+
+    assert {:error, %QuackDB.Error{}} =
+             QuackDB.DBConnection.connect(uri: uri, token: "not-the-token")
+
+    assert {:links, ^links} = Process.info(self(), :links)
+  end
+
+  test "Ecto CTEs and nested-schema appends under a prefix" do
+    import Ecto.Query
+    alias QuackDB.DDL
+
+    start_repo!()
+    root = unique_table("duckdb2_prefixed")
+    prefix = "#{root}.reports"
+    QuackDB.IntegrationRepo.query!(DDL.create_schema(root))
+    QuackDB.IntegrationRepo.query!(DDL.create_schema([root, :reports]))
+
+    QuackDB.IntegrationRepo.query!(
+      DDL.create_table({[root, :reports], :ledger}, id: :integer, amount: :integer)
+    )
+
+    try do
+      assert {2, _rows} =
+               QuackDB.IntegrationRepo.insert_all(
+                 "ledger",
+                 [[id: 1, amount: 40], [id: 2, amount: 2]],
+                 prefix: prefix,
+                 insert_method: :append
+               )
+
+      large = from(entry in "ledger", where: entry.amount > 10, select: %{id: entry.id})
+
+      query =
+        "ledger"
+        |> with_cte("large", as: ^large)
+        |> join(:inner, [entry], big in "large", on: big.id == entry.id)
+        |> select([entry], entry.amount)
+
+      assert [40] = QuackDB.IntegrationRepo.all(query, prefix: prefix)
+    after
+      QuackDB.IntegrationRepo.query!(DDL.drop_schema(root, cascade: true))
+    end
   end
 end

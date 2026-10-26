@@ -17,7 +17,7 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 
 - Query cancellation. `QuackDB.cancel/3` interrupts the query on a remote connection from another process, and the query fails with `:query_cancelled`. A transport timeout cancels its query on the server, and DBConnection disconnects cancel over a fresh HTTP connection.
 - Typed server errors. `QuackDB.Error` metadata carries DuckDB's `:exception_type` (also via `QuackDB.Error.exception_type/1`) and transferable `:extra_info`. A server whose database died returns `:connection_invalidated` and an expired heartbeat lease returns `:connection_expired`; both disconnect so the pool reconnects.
-- Heartbeat leases. Connections request a lease with `:heartbeat_timeout` (60 seconds by default) and DBConnection idle pings renew it with heartbeat messages instead of `SELECT 1`. `:client_id` names the client in server logs.
+- Heartbeat leases. Connections request a lease with `:heartbeat_timeout` (60 seconds by default) and renew it every third of the lease over a separate HTTP connection, as DuckDB's own client does, so queries, streams, and transactions that outlast the lease keep their connection. DBConnection idle pings send heartbeat messages instead of `SELECT 1`. `:client_id` names the client in server logs.
 - `ON CONFLICT` and `RETURNING` for native appends: `insert_rows/4` and `insert_columns/4` accept `:on_conflict` and `:returning`, and Ecto `insert_all(..., insert_method: :append)` runs `on_conflict: :nothing` and `returning` as one statement instead of staging rows in a temporary table. Schemaless appends can use `returning`.
 - `VARIANT` decoding, unshredded and shredded, into Elixir terms. `:variant` and `:json` append column types send JSON text that DuckDB casts, so mixed objects, arrays, and scalars keep their shapes.
 - `QuackDB.Ecto.Variant` with `variant_extract/2` (keys, 1-based indexes, and paths), `variant_extract_string/2`, `variant_type/1,2`, `variant_typeof/1`, `variant_keys/1,2`, `variant_array_length/1,2`, and `variant_contains/2`, imported by `use QuackDB.Ecto`.
@@ -40,7 +40,11 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 - Connecting to DuckDB 2.0 failed with `unknown error response field 2` (#8).
 - Dictionary, ARRAY, and VARIANT vectors decoded in quadratic time: a 2048-row dictionary vector took 1.2 ms instead of about 60 µs, and a 4000-element VARIANT array 29 ms instead of about 0.5 ms.
 - Empty STRUCT values, which DuckDB 2.0 allows (`SELECT {}`), failed to decode.
-- Ecto reads, `update_all`, and `delete_all` ignored schema prefixes and queried the unqualified table: `from(... prefix: ...)`, `@schema_prefix`, and `Repo.all(query, prefix: ...)` now qualify the source, as inserts and migrations already did. A dotted prefix such as `"finance.reports"` names a nested schema or `catalog.schema`.
+- `GEOMETRY` columns with a coordinate reference system, such as `GEOMETRY('OGC:CRS84')`, failed to decode with `:invalid_string`.
+- `DECIMAL(p, 0)` values decoded as integers instead of `Decimal`, because DuckDB omits a zero scale.
+- Result types QuackDB cannot decode, such as `UNION`, and malformed UTF-8, `BIGNUM`, and `BIT` values raised and killed the connection process. The query now fails with `:unsupported_type` or the matching decode error.
+- A failed handshake (a wrong token, an older server) left its HTTP connection process running, one more on every reconnect attempt.
+- Ecto reads, `update_all`, and `delete_all` ignored schema prefixes and queried the unqualified table: `from(... prefix: ...)`, `@schema_prefix`, and `Repo.all(query, prefix: ...)` now qualify the source, as inserts and migrations already did. A dotted prefix such as `"finance.reports"` names a nested schema or `catalog.schema`, in reads and in `insert_method: :append`. As in Ecto's planner, the query prefix does not apply to CTE names.
 
 ## 0.5.29 - 2026-10-17
 
