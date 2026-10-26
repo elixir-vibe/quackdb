@@ -24,6 +24,7 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 - `TUPLE` values decode to Elixir tuples, and `TIMESTAMPTZ_NS` values to `QuackDB.NanosecondTimestamp`.
 - Ecto `json_set/3`, `json_insert/3`, `json_replace/3`, and `json_remove/2`, and `variable/1` for DuckDB 2.0's `$name` variables, with `QuackDB.SQL.set_variable/2` and `reset_variable/1`.
 - `QuackDB.DDL.create_trigger/4` and `drop_trigger/3` for DuckDB 2.0 triggers, and `create_schema/2` and `drop_schema/2`. Table names accept nested schema paths such as `{[:finance, :reports], :ledger}`, including the `:schema` append option.
+- Ecto migrations can `execute` `QuackDB.DDL` builders directly (`execute DDL.create_trigger(...)`); the adapter accepts iodata DDL.
 - Reconnect support: `acknowledge_results: true` confirms each full result to servers running with `quack_enable_reconnects`, and a fetch that lost its HTTP connection requests the same numbered batch again (`:fetch_retries`, default 1).
 - An `:inline_rows` query option caps the rows of the first response; cursors default it to `:max_rows`.
 - A `:copy_binaries` option, per connection or per query, copies decoded strings and blobs off the HTTP response, so keeping a few values from a large result no longer keeps the whole response in memory.
@@ -31,6 +32,7 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 
 ### Changed
 
+- `{:json, term}` parameters encode with Elixir's built-in `JSON` module, so they no longer need Jason.
 - Faster result decoding. Fixed-width vectors decode with one binary comprehension per column instead of one call per value, temporal values are built from calendar fields, and LIST, ARRAY, STRUCT, and VARCHAR vectors decode in one pass. Per 2048-row vector this takes 2x fewer reductions for integers, lists, and arrays and 4x fewer for timestamps.
 
 ### Fixed

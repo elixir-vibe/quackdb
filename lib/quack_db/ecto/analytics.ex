@@ -75,10 +75,12 @@ if Code.ensure_loaded?(Ecto.Query.API) and Code.ensure_loaded?(Ecto.Adapters.SQL
       %{name: :mad, sql: "mad", arity: 1, class: :statistical_aggregate},
       %{name: :histogram, sql: "histogram", arity: 1, class: :histogram_aggregate},
       %{name: :histogram_exact, sql: "histogram_exact", arity: 2, class: :histogram_aggregate},
+      # DuckDB 2.0 lists only the full signature; sample_size is optional.
       %{
         name: :reservoir_quantile,
         sql: "reservoir_quantile",
         arity: 2,
+        catalog_arity: 3,
         class: :approximate_aggregate
       },
       %{
