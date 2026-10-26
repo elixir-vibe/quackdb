@@ -89,6 +89,16 @@ defmodule QuackDB.DBConnection.ErrorTest do
     assert error.connection_id == "conn-1"
   end
 
+  test "an expired heartbeat lease disconnects so the pool reconnects" do
+    connection = start_supervised!({QuackDB, transport: expired_lease_transport(self())})
+    assert_receive :connected
+
+    assert {:error, %QuackDB.Error{code: :connection_expired}} =
+             QuackDB.query(connection, "SELECT 1")
+
+    assert_receive :connected
+  end
+
   test "exception message includes only present context" do
     error = QuackDB.Error.new(:transport_error, "connection refused", source: :transport)
 
@@ -173,6 +183,20 @@ defmodule QuackDB.DBConnection.ErrorTest do
         {:ok,
          {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT broken_stream"}}} ->
           {:ok, ProtocolFixtures.error_response("open failed")}
+      end
+    end
+  end
+
+  defp expired_lease_transport(parent) do
+    fn _uri, request, _request_options ->
+      case request |> IO.iodata_to_binary() |> Codec.decode() do
+        {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          send(parent, :connected)
+          {:ok, connection_response()}
+
+        # The query, then the cancel and disconnect sent while disconnecting.
+        {:ok, {_header, _message}} ->
+          {:ok, ProtocolFixtures.error_response("Connection heartbeat lease expired")}
       end
     end
   end

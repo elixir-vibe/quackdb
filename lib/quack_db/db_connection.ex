@@ -11,6 +11,7 @@ defmodule QuackDB.DBConnection do
     only: [column: 1, insert_columns: 1, on_conflict: 1, returning: 1, table: 1]
 
   alias QuackDB.Error
+  alias QuackDB.Heartbeat
   alias QuackDB.Protocol.Codec
   alias QuackDB.Protocol.DataChunk
   alias QuackDB.Protocol.Message.ConnectionRequest
@@ -53,6 +54,7 @@ defmodule QuackDB.DBConnection do
     :transport,
     :transport_owner,
     :transport_options,
+    :heartbeat,
     :client_version,
     :client_id,
     :telemetry_prefix,
@@ -72,6 +74,7 @@ defmodule QuackDB.DBConnection do
           transport: function(),
           transport_owner: pid() | nil,
           transport_options: keyword(),
+          heartbeat: pid() | nil,
           client_version: String.t(),
           client_id: String.t(),
           telemetry_prefix: [atom()],
@@ -106,8 +109,8 @@ defmodule QuackDB.DBConnection do
 
   @impl true
   def ping(state) do
-    case state |> request(%HeartbeatRequest{}, []) |> expect(SuccessResponse) do
-      {:ok, _response} -> {:ok, state}
+    case heartbeat(state, []) do
+      :ok -> {:ok, state}
       {:error, error} -> {:disconnect, error, state}
     end
   end
@@ -219,15 +222,12 @@ defmodule QuackDB.DBConnection do
   # the pooled transport may still be waiting on it. Cancel and disconnect
   # over a fresh HTTP connection so the server stops the query either way.
   def disconnect(_error, state) do
+    if state.heartbeat, do: Heartbeat.stop(state.heartbeat)
+
     options = [timeout: @disconnect_timeout]
     _ignored = side_request(state, %CancelRequest{}, options)
     _ignored = side_request(state, %Disconnect{}, options)
-
-    if state.transport_owner do
-      stop_transport(state.transport_owner)
-    end
-
-    :ok
+    stop_transport(state.transport_owner)
   end
 
   @doc false
@@ -248,23 +248,49 @@ defmodule QuackDB.DBConnection do
 
   defp one_shot_post(uri, body, options), do: QuackDB.Transport.post(uri, body, options)
 
-  defp side_request(%{transport_owner: nil} = state, message, options),
-    do: request(state, message, options)
+  defp side_request(state, message, options),
+    do: state |> side_state() |> request(message, options)
 
-  defp side_request(state, message, options) do
+  # A copy of the state that posts each request over a fresh HTTP connection.
+  # Custom transports have no pooled connection to avoid, so they are kept.
+  defp side_state(%{transport_owner: nil} = state), do: state
+
+  defp side_state(state) do
     transport_options = state.transport_options
 
     post = fn uri, body, options ->
       one_shot_post(uri, body, Keyword.merge(transport_options, options))
     end
 
-    request(%{state | transport: post}, message, options)
+    %{state | transport: post}
   end
+
+  defp heartbeat(state, options) do
+    with {:ok, _response} <-
+           state |> request(%HeartbeatRequest{}, options) |> expect(SuccessResponse),
+         do: :ok
+  end
+
+  # Only the managed transport gets a heartbeat process: custom transports are
+  # test doubles that answer a scripted sequence of requests.
+  defp start_heartbeat(%{transport_owner: nil} = state), do: {:ok, state}
+
+  defp start_heartbeat(state) do
+    interval = div(state.heartbeat_timeout * 1000, 3)
+    lease = side_state(state)
+
+    {:ok, pid} = Heartbeat.start_link({fn -> heartbeat(lease, timeout: interval) end, interval})
+    {:ok, %{state | heartbeat: pid}}
+  end
+
+  defp stop_transport(nil), do: :ok
 
   defp stop_transport(owner) do
     GenServer.stop(owner, :normal, @disconnect_timeout)
   catch
-    :exit, _reason -> Process.exit(owner, :kill)
+    :exit, _reason ->
+      Process.exit(owner, :kill)
+      :ok
   end
 
   defp disconnect_on_fatal({:error, %Error{} = error, state}) do
@@ -1084,7 +1110,14 @@ defmodule QuackDB.DBConnection do
 
   defp connect_quack(state) do
     with {:ok, state} <- start_transport(state) do
-      do_connect_quack(state)
+      case do_connect_quack(state) do
+        {:ok, state} ->
+          start_heartbeat(state)
+
+        {:error, _error} = error ->
+          stop_transport(state.transport_owner)
+          error
+      end
     end
   end
 

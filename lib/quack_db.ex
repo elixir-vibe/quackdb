@@ -12,9 +12,10 @@ defmodule QuackDB do
     * `:uri` and `:token` locate and authenticate the Quack server.
     * `:heartbeat_timeout` is the connection lease in seconds the client asks
       for (default `60`). The server drops a connection that sends no request
-      for that long; DBConnection's idle pings send heartbeats, so only a
-      connection checked out and left unused for longer can expire. An
-      expired connection reconnects.
+      for that long, so each connection sends a heartbeat every third of the
+      lease over a separate HTTP connection. Long queries, slow streams, and
+      long transactions keep their connection. A connection whose lease
+      expires anyway reconnects.
     * `:client_id` identifies this client in the server's logs.
     * `:acknowledge_results` confirms every fully received result, so a
       server with `quack_enable_reconnects` drops its cached copy right away
