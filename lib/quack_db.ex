@@ -331,12 +331,22 @@ defmodule QuackDB do
 
   Run it from another process than the one waiting on the query. The
   connection id appears in every `QuackDB.Result`, `QuackDB.Error`, and
-  telemetry event, and a query interrupted this way fails with a
-  `:query_cancelled` error:
+  `[:quackdb, :query, :start]` telemetry event, including those of Ecto
+  queries, and a query interrupted this way fails with a `:query_cancelled`
+  error:
 
-      task = Task.async(fn -> QuackDB.query(conn, "SELECT count(*) FROM big_table") end)
-      QuackDB.cancel("http://[::1]:9494", connection_id)
-      {:error, %QuackDB.Error{code: :query_cancelled}} = Task.await(task)
+      :telemetry.attach("report-connection", [:quackdb, :query, :start], fn _event, _measurements, metadata, parent ->
+        send(parent, {:running, metadata.connection_id})
+      end, self())
+
+      task = Task.async(fn -> MyApp.AnalyticsRepo.all(yearly_report) end)
+
+      receive do
+        {:running, connection_id} -> QuackDB.cancel("http://[::1]:9494", connection_id)
+      end
+
+      Task.await(task)
+      #=> ** (QuackDB.Error) Interrupted: query was cancelled
 
   Pass `query_uuid: uuid` to cancel only that query. Transport timeouts and
   disconnects already cancel their query on the server.

@@ -38,6 +38,7 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 - Connecting to DuckDB 2.0 failed with `unknown error response field 2` (#8).
 - Dictionary, ARRAY, and VARIANT vectors decoded in quadratic time: a 2048-row dictionary vector took 1.2 ms instead of about 60 µs, and a 4000-element VARIANT array 29 ms instead of about 0.5 ms.
 - Empty STRUCT values, which DuckDB 2.0 allows (`SELECT {}`), failed to decode.
+- Ecto reads, `update_all`, and `delete_all` ignored schema prefixes and queried the unqualified table: `from(... prefix: ...)`, `@schema_prefix`, and `Repo.all(query, prefix: ...)` now qualify the source, as inserts and migrations already did. A dotted prefix such as `"finance.reports"` names a nested schema or `catalog.schema`.
 
 ## 0.5.29 - 2026-10-17
 

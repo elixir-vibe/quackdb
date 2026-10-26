@@ -328,4 +328,23 @@ defmodule QuackDB.Integration.DuckDB2Test do
     [[value] | _rows] = QuackDB.query!(copied, sql).rows
     assert :binary.referenced_byte_size(value) == byte_size(value)
   end
+
+  test "Repo queries accept copy_binaries" do
+    import Ecto.Query
+
+    start_repo!()
+    table = unique_table("duckdb2_copy_events")
+
+    QuackDB.IntegrationRepo.query!(
+      "CREATE TEMP TABLE #{table} AS SELECT i AS id, repeat('x', 200) AS payload FROM range(5000) t(i)"
+    )
+
+    query = from(event in table, order_by: event.id, select: event.payload)
+
+    [payload | _payloads] = QuackDB.IntegrationRepo.all(query)
+    assert :binary.referenced_byte_size(payload) > 100 * byte_size(payload)
+
+    [payload | _payloads] = QuackDB.IntegrationRepo.all(query, copy_binaries: true)
+    assert :binary.referenced_byte_size(payload) == byte_size(payload)
+  end
 end

@@ -957,10 +957,12 @@ The client accepts QuackDB options such as `:uri`, `:token`, and `:transport`, p
 QuackDB.query(MyApp.QuackDB, "SELECT 1", [], timeout: 10_000)
 ```
 
-Decoded strings and blobs of 64 bytes or more are slices of the HTTP response they arrived in, so a process that keeps a few of them from a large result keeps the whole response in memory. Pass `copy_binaries: true`, per query or when starting the connection, to copy them off the response. It about doubles decode time for string columns and costs nothing for other columns:
+Decoded strings and blobs of 64 bytes or more are slices of the HTTP response they arrived in, so a process that keeps a few of them from a large result keeps the whole response in memory. Pass `copy_binaries: true`, per query or in the Repo or connection configuration, to copy them off the response. It about doubles decode time for string columns and costs nothing for other columns:
 
 ```elixir
-QuackDB.query!(MyApp.QuackDB, "SELECT name, payload FROM events LIMIT 1", [], copy_binaries: true)
+latest = from(event in Event, order_by: [desc: event.inserted_at], limit: 10, select: event.payload)
+
+MyApp.AnalyticsRepo.all(latest, copy_binaries: true)
 ```
 
 See the `QuackDB` module documentation for the heartbeat, retry, and acknowledgement options.

@@ -217,11 +217,16 @@ defmodule QuackDB.DDL do
   @doc """
   Builds a `CREATE SCHEMA` statement.
 
-  A list names a nested schema, which DuckDB 2.0 creates inside its parent:
+  A list names a nested schema, which DuckDB 2.0 creates inside its parent.
+  In an Ecto migration:
 
-      QuackDB.query!(conn, DDL.create_schema(:finance))
-      QuackDB.query!(conn, DDL.create_schema([:finance, :reports]))
-      QuackDB.query!(conn, DDL.create_table({[:finance, :reports], :ledger}, id: :integer))
+      alias QuackDB.DDL
+
+      def up do
+        execute DDL.create_schema(:finance)
+        execute DDL.create_schema([:finance, :reports])
+        execute DDL.create_table({[:finance, :reports], :ledger}, id: :integer)
+      end
 
   Supports `if_not_exists: true`.
   """
@@ -248,11 +253,20 @@ defmodule QuackDB.DDL do
   Builds a DuckDB 2.0 `CREATE TRIGGER` statement that runs `statement`, a SQL
   statement such as an `INSERT` or `UPDATE`, when `event` changes `table`.
 
-      QuackDB.query!(conn, DDL.create_trigger(:events_count, :events,
-        "UPDATE event_stats SET total = total + (SELECT count(*) FROM inserted)",
-        event: :insert,
-        referencing: [new_table: :inserted]
-      ))
+  Triggers are schema, so they usually live in an Ecto migration. The body is
+  DuckDB SQL because it reads the transition table:
+
+      alias QuackDB.DDL
+
+      def up do
+        execute DDL.create_trigger(:events_count, :events,
+          "UPDATE event_stats SET total = total + (SELECT count(*) FROM inserted)",
+          event: :insert,
+          referencing: [new_table: :inserted]
+        )
+      end
+
+      def down, do: execute(DDL.drop_trigger(:events_count, :events))
 
   Options:
 
