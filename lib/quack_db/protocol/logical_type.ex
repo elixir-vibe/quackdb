@@ -426,7 +426,7 @@ defmodule QuackDB.Protocol.LogicalType do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
       cond do
         field_id == @field_end ->
-          {:ok, info, rest}
+          {:ok, default_type_info(info), rest}
 
         field_id == 100 ->
           with {:ok, type, rest} <- Reader.read_uleb128(rest) do
@@ -449,6 +449,10 @@ defmodule QuackDB.Protocol.LogicalType do
       end
     end
   end
+
+  # DuckDB omits an empty child list, as for DuckDB 2.0's empty STRUCTs.
+  defp default_type_info(%{type: 5} = info), do: Map.put_new(info, :children, [])
+  defp default_type_info(info), do: info
 
   defp decode_type_info_field_200(binary, %{type: 2} = info) do
     with {:ok, width, rest} <- Reader.read_uleb128(binary),

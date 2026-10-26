@@ -158,6 +158,12 @@ defmodule QuackDB.Integration.DuckDB2Test do
 
     assert %QuackDB.Result{rows: [[{1, "a"}]]} = QuackDB.query!(connection, "SELECT (1, 'a')")
 
+    assert %QuackDB.Result{rows: [[%{}, 0], [nil, 1]]} =
+             QuackDB.query!(
+               connection,
+               "SELECT CASE WHEN i = 0 THEN {} END, i FROM range(2) t(i) ORDER BY i"
+             )
+
     assert %QuackDB.Result{
              rows: [[%QuackDB.NanosecondTimestamp{nanoseconds: 1_767_323_045_123_456_789}]]
            } =
