@@ -104,15 +104,9 @@ defmodule QuackDB.DBConnection do
 
   @impl true
   def ping(state) do
-    case request(state, %HeartbeatRequest{}, []) do
-      {:ok, {_header, %SuccessResponse{}}} ->
-        {:ok, state}
-
-      {:ok, {header, _body}} ->
-        {:disconnect, unexpected_message(:success_response, header), state}
-
-      {:error, error} ->
-        {:disconnect, error, state}
+    case state |> request(%HeartbeatRequest{}, []) |> expect(SuccessResponse) do
+      {:ok, _response} -> {:ok, state}
+      {:error, error} -> {:disconnect, error, state}
     end
   end
 
@@ -238,28 +232,31 @@ defmodule QuackDB.DBConnection do
   @spec cancel(String.t() | URI.t(), String.t(), Keyword.t()) :: :ok | {:error, Error.t()}
   def cancel(uri, connection_id, options \\ []) when is_binary(connection_id) do
     message = %CancelRequest{query_uuid: Keyword.get(options, :query_uuid, 0)}
-    body = Codec.encode(message, connection_id: connection_id)
 
     with {:ok, uri} <- normalize_uri(uri),
-         {:ok, response} <- QuackDB.Transport.post(uri, body, transport_options(options)),
-         {:ok, decoded} <- Codec.decode(response) do
-      case decoded do
-        {_header, %SuccessResponse{}} -> :ok
-        {_header, %ErrorResponse{} = response} -> {:error, Error.server(response)}
-        {header, _body} -> {:error, unexpected_message(:success_response, header)}
-      end
+         state = %__MODULE__{uri: uri, connection_id: connection_id, transport: &one_shot_post/3},
+         {:ok, _response} <-
+           state |> request(message, transport_options(options)) |> expect(SuccessResponse) do
+      :ok
     end
   end
 
   defp normalize_uri(%URI{} = uri), do: {:ok, uri}
   defp normalize_uri(uri) when is_binary(uri), do: QuackDB.URI.normalize(uri)
 
+  defp one_shot_post(uri, body, options), do: QuackDB.Transport.post(uri, body, options)
+
   defp side_request(%{transport_owner: nil} = state, message, options),
     do: request(state, message, options)
 
   defp side_request(state, message, options) do
-    body = Codec.encode(message, connection_id: state.connection_id)
-    QuackDB.Transport.post(state.uri, body, Keyword.merge(state.transport_options, options))
+    transport_options = state.transport_options
+
+    post = fn uri, body, options ->
+      one_shot_post(uri, body, Keyword.merge(transport_options, options))
+    end
+
+    request(%{state | transport: post}, message, options)
   end
 
   defp stop_transport(owner) do
@@ -275,13 +272,80 @@ defmodule QuackDB.DBConnection do
   defp disconnect_on_fatal(result), do: result
 
   # A timed-out request leaves its query running on the server; the closed
-  # HTTP connection reconnects for the cancel.
-  defp cancel_after_timeout(%Error{metadata: %{reason: :timeout}}, query_uuid, state, options) do
+  # HTTP connection reconnects for the cancel. Returns the result unchanged.
+  defp cancel_on_timeout(
+         {:error, %Error{metadata: %{reason: :timeout}}} = result,
+         query_uuid,
+         state,
+         options
+       ) do
     _ignored = request(state, %CancelRequest{query_uuid: query_uuid}, options)
-    :ok
+    result
   end
 
-  defp cancel_after_timeout(_error, _query_uuid, _state, _options), do: :ok
+  defp cancel_on_timeout(result, _query_uuid, _state, _options), do: result
+
+  # Sends one message and returns its decoded reply with the timing and size
+  # metrics telemetry reports. Server error responses become QuackDB errors.
+  defp exchange(state, message, options) do
+    {encode_duration, request} = timed(fn -> encode_request(message, state, options) end)
+
+    {transport_duration, transport_result} =
+      timed(fn -> state.transport.(state.uri, request, options) end)
+
+    metrics = %{
+      encode_duration: encode_duration,
+      transport_duration: transport_duration,
+      request_bytes: IO.iodata_length(request)
+    }
+
+    case transport_result do
+      {:ok, response} ->
+        {decode_duration, result} = timed(fn -> decode_reply(response) end)
+
+        {result,
+         metrics
+         |> Map.put(:decode_duration, decode_duration)
+         |> Map.put(:response_bytes, byte_size(response))}
+
+      {:error, _error} = error ->
+        {error, metrics}
+    end
+  end
+
+  defp request(state, message, options) do
+    {result, _metrics} = exchange(state, message, options)
+    result
+  end
+
+  defp encode_request(message, state, options) do
+    Codec.encode(message,
+      connection_id: state.connection_id,
+      client_query_id: Keyword.get(options, :client_query_id)
+    )
+  end
+
+  defp decode_reply(response) do
+    case Codec.decode(response) do
+      {:ok, {_header, %ErrorResponse{} = error}} -> {:error, Error.server(error)}
+      result -> result
+    end
+  end
+
+  defp expect({:ok, {_header, %module{} = message}}, module), do: {:ok, message}
+  defp expect({:ok, {header, _message}}, module), do: {:error, unexpected_message(module, header)}
+  defp expect({:error, _error} = error, _module), do: error
+
+  defp unexpected_message(module, header) do
+    expected =
+      module |> Module.split() |> List.last() |> Macro.underscore() |> String.replace("_", " ")
+
+    Error.new(:unexpected_message, "expected #{expected}, got #{header.type}", source: :protocol)
+  end
+
+  defp failure(error, query, state) do
+    {:error, annotate_error(error, query, state), %{state | status: failed_status(state.status)}}
+  end
 
   defp declare_query(%Query{} = query, params, options, state) do
     with {:ok, statement} <- QuackDB.SQL.format(query.statement, params) do
@@ -294,44 +358,31 @@ defmodule QuackDB.DBConnection do
   defp do_declare_query(%Query{} = query, statement, options, state) do
     {query_id, state} = next_query_id(state)
     options = Keyword.put(options, :client_query_id, query_id)
-    query_uuid = new_query_uuid()
 
-    request =
-      %PrepareRequest{
-        sql_query: statement,
-        query_uuid: query_uuid,
-        inline_rows:
-          Keyword.get_lazy(options, :inline_rows, fn -> Keyword.get(options, :max_rows, 500) end)
-      }
-      |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
+    message = %PrepareRequest{
+      sql_query: statement,
+      query_uuid: new_query_uuid(),
+      inline_rows:
+        Keyword.get_lazy(options, :inline_rows, fn -> Keyword.get(options, :max_rows, 500) end)
+    }
 
-    with {:ok, response} <- state.transport.(state.uri, request, options),
-         {:ok, decoded} <- Codec.decode(response),
-         {:ok, query, cursor, cursor_state} <-
-           normalize_declare_response(decoded, query, options, state) do
-      state = put_cursor_state(state, cursor.ref, cursor_state)
-      {:ok, query, cursor, state}
-    else
+    prepared =
+      state
+      |> request(message, options)
+      |> expect(PrepareResponse)
+      |> cancel_on_timeout(message.query_uuid, state, options)
+
+    case prepared do
+      {:ok, response} ->
+        {query, cursor, cursor_state} = declared_cursor(response, query, options, state)
+        {:ok, query, cursor, put_cursor_state(state, cursor.ref, cursor_state)}
+
       {:error, error} ->
-        cancel_after_timeout(error, query_uuid, state, options)
-
-        {:error, annotate_error(error, query, state),
-         %{state | status: failed_status(state.status)}}
+        failure(error, query, state)
     end
   end
 
-  defp normalize_declare_response(
-         {_header, %ErrorResponse{} = response},
-         _query,
-         _options,
-         _state
-       ) do
-    {:error, Error.server(response)}
-  end
-
-  defp normalize_declare_response({_header, %PrepareResponse{} = response}, query, options, state) do
-    ref = make_ref()
-
+  defp declared_cursor(%PrepareResponse{} = response, query, options, state) do
     query = %{
       query
       | columns: response.result_names,
@@ -340,7 +391,7 @@ defmodule QuackDB.DBConnection do
     }
 
     cursor = %QuackDB.Cursor{
-      ref: ref,
+      ref: make_ref(),
       query_uuid: response.query_uuid,
       columns: response.result_names,
       result_types: response.result_types,
@@ -348,31 +399,15 @@ defmodule QuackDB.DBConnection do
       statement: query.statement
     }
 
-    cursor_state =
-      if Keyword.get(options, :result_format) == :columnar do
-        %{
-          mode: :columnar,
-          queued_chunks: response.results,
-          next_batch: 1,
-          done?: not response.needs_more_fetch
-        }
-      else
-        %{
+    queue =
+      if Keyword.get(options, :result_format) == :columnar,
+        do: %{mode: :columnar, queued_chunks: response.results},
+        else: %{
           mode: :rows,
-          queued_rows: materialize_rows(response.results, response.result_names),
-          next_batch: 1,
-          done?: not response.needs_more_fetch
+          queued_rows: materialize_rows(response.results, response.result_names)
         }
-      end
 
-    {:ok, query, cursor, cursor_state}
-  end
-
-  defp normalize_declare_response({header, _body}, _query, _options, _state) do
-    {:error,
-     Error.new(:unexpected_message, "expected prepare response, got #{header.type}",
-       source: :protocol
-     )}
+    {query, cursor, Map.merge(queue, %{next_batch: 1, done?: not response.needs_more_fetch})}
   end
 
   defp append_rows(%Query{} = query, table, rows, options, state) do
@@ -391,7 +426,7 @@ defmodule QuackDB.DBConnection do
         state
       )
     else
-      {:error, error} -> append_error(error, query, state)
+      {:error, error} -> failure(error, query, state)
     end
   end
 
@@ -403,12 +438,8 @@ defmodule QuackDB.DBConnection do
       build_chunk = &DataChunk.from_columns(&1, options)
       send_data_append(query, table, resolved, row_count, {batches, build_chunk}, options, state)
     else
-      {:error, error} -> append_error(error, query, state)
+      {:error, error} -> failure(error, query, state)
     end
-  end
-
-  defp append_error(error, query, state) do
-    {:error, annotate_error(error, query, state), %{state | status: failed_status(state.status)}}
   end
 
   defp append_batches([], options) do
@@ -544,7 +575,7 @@ defmodule QuackDB.DBConnection do
             {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
 
           {:error, error, metrics} ->
-            {append_error(error, query, state), metrics}
+            {failure(error, query, state), metrics}
         end
 
       append_duration = System.monotonic_time() - append_started_at
@@ -562,7 +593,7 @@ defmodule QuackDB.DBConnection do
       inline_rows: 0
     }
 
-    with {:ok, prepared} <- prepare_send_data(prepare, state, options),
+    with {:ok, prepared} <- state |> request(prepare, options) |> expect(PrepareResponse),
          {:ok, metrics} <- send_batches(stream_id, batches, build_chunk, options, state),
          {:ok, chunks} <- fetch_remaining_chunks(prepared, state, options) do
       {:ok, append_result(prepared, chunks, options, state), metrics}
@@ -570,14 +601,6 @@ defmodule QuackDB.DBConnection do
       {:error, error} ->
         _ignored = request(state, %CancelRequest{query_uuid: query_uuid}, options)
         {:error, error, empty_append_metrics()}
-    end
-  end
-
-  defp prepare_send_data(prepare, state, options) do
-    case request(state, prepare, options) do
-      {:ok, {_header, %PrepareResponse{} = response}} -> {:ok, response}
-      {:ok, {header, _body}} -> {:error, unexpected_message(:prepare_response, header)}
-      {:error, _error} = error -> error
     end
   end
 
@@ -621,9 +644,8 @@ defmodule QuackDB.DBConnection do
     |> case do
       {:ok, metrics, sent} ->
         terminal = %SendDataRequest{stream_id: stream_id, total_batches: sent}
-        encoded = encode_request(terminal, state, options)
 
-        with {:ok, _terminal_metrics} <- send_encoded(encoded, options, state, 0) do
+        with {:ok, _terminal_metrics} <- send_data(terminal, 0, state, options) do
           {:ok, metrics}
         end
 
@@ -633,77 +655,32 @@ defmodule QuackDB.DBConnection do
   end
 
   defp send_batch(stream_id, batch, batch_index, build_chunk, options, state) do
-    encode_started_at = System.monotonic_time()
-
-    with {:ok, chunk} <- build_chunk.(batch) do
-      if chunk.row_count == 0 do
+    case timed(fn -> build_chunk.(batch) end) do
+      {_build_duration, {:ok, %{row_count: 0}}} ->
         {:ok, :empty}
-      else
+
+      {build_duration, {:ok, chunk}} ->
         message = %SendDataRequest{
           stream_id: stream_id,
           batch_index: batch_index,
           chunks: DataChunk.split(chunk, @max_chunk_rows)
         }
 
-        encoded = encode_request(message, state, options)
-        send_encoded(encoded, options, state, System.monotonic_time() - encode_started_at)
-      end
+        send_data(message, build_duration, state, options)
+
+      {_build_duration, {:error, _error} = error} ->
+        error
     end
   end
 
-  defp encode_request(message, state, options) do
-    Codec.encode(message,
-      connection_id: state.connection_id,
-      client_query_id: Keyword.get(options, :client_query_id)
-    )
-  end
+  # Building the chunk counts as encoding in append telemetry.
+  defp send_data(message, build_duration, state, options) do
+    {result, metrics} = exchange(state, message, options)
 
-  defp send_encoded(encoded, options, state, encode_duration) do
-    {transport_duration, transport_result} =
-      timed(fn -> state.transport.(state.uri, encoded, options) end)
-
-    with {:ok, response} <- transport_result do
-      {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
-
-      with {:ok, decoded} <- decode_result,
-           :ok <- normalize_send_data_response(decoded) do
-        {:ok,
-         append_batch_metrics(
-           encode_duration,
-           transport_duration,
-           decode_duration,
-           encoded,
-           response
-         )}
-      end
+    with {:ok, _response} <- expect(result, SendDataResponse) do
+      {:ok,
+       metrics |> Map.update!(:encode_duration, &(&1 + build_duration)) |> Map.put(:batches, 1)}
     end
-  end
-
-  defp normalize_send_data_response({_header, %SendDataResponse{}}), do: :ok
-
-  defp normalize_send_data_response({_header, %ErrorResponse{} = response}) do
-    {:error, Error.server(response)}
-  end
-
-  defp normalize_send_data_response({header, _body}) do
-    {:error, unexpected_message(:send_data_response, header)}
-  end
-
-  defp append_batch_metrics(
-         encode_duration,
-         transport_duration,
-         decode_duration,
-         request,
-         response
-       ) do
-    %{
-      batches: 1,
-      encode_duration: encode_duration,
-      transport_duration: transport_duration,
-      decode_duration: decode_duration,
-      request_bytes: IO.iodata_length(request),
-      response_bytes: byte_size(response)
-    }
   end
 
   defp empty_append_metrics do
@@ -715,19 +692,6 @@ defmodule QuackDB.DBConnection do
       request_bytes: 0,
       response_bytes: 0
     }
-  end
-
-  defp query_metrics(encode_duration, request) do
-    %{
-      encode_duration: encode_duration,
-      request_bytes: IO.iodata_length(request)
-    }
-  end
-
-  defp put_transport_metrics(metrics, transport_duration, response) do
-    metrics
-    |> Map.put(:transport_duration, transport_duration)
-    |> Map.put(:response_bytes, byte_size(response))
   end
 
   defp merge_append_metrics(left, right) do
@@ -777,99 +741,47 @@ defmodule QuackDB.DBConnection do
   defp do_execute_statement(%Query{} = query, statement, params, options, state) do
     {query_id, state} = next_query_id(state)
     options = Keyword.put(options, :client_query_id, query_id)
-    query_uuid = new_query_uuid()
+
+    message = %PrepareRequest{
+      sql_query: statement,
+      query_uuid: new_query_uuid(),
+      inline_rows: Keyword.get(options, :inline_rows)
+    }
 
     Telemetry.span(
       state.telemetry_prefix,
       :query,
       query_metadata(query, params, options, state),
       fn ->
-        {encode_duration, request} =
+        {result, metrics} = exchange(state, message, options)
+
+        {normalize_duration, result} =
           timed(fn ->
-            %PrepareRequest{
-              sql_query: statement,
-              query_uuid: query_uuid,
-              inline_rows: Keyword.get(options, :inline_rows)
-            }
-            |> Codec.encode(connection_id: state.connection_id, client_query_id: query_id)
+            with {:ok, response} <-
+                   result
+                   |> expect(PrepareResponse)
+                   |> cancel_on_timeout(message.query_uuid, state, options) do
+              query_result(response, query, state, options)
+            end
           end)
 
-        metrics = query_metrics(encode_duration, request)
+        result =
+          case result do
+            {:ok, query, result} ->
+              {:ok, query, result, %{state | status: successful_status(state.status)}}
 
-        {result, metrics} =
-          execute_query_request({query, query_uuid}, request, options, state, metrics)
+            {:error, error} ->
+              failure(error, query, state)
+          end
 
-        {result, query_stop_metadata(result, metrics)}
+        {result,
+         query_stop_metadata(result, Map.put(metrics, :normalize_duration, normalize_duration))}
       end
     )
   end
 
-  defp execute_query_request({query, query_uuid}, request, options, state, metrics) do
-    {transport_duration, transport_result} =
-      timed(fn -> state.transport.(state.uri, request, options) end)
-
-    case transport_result do
-      {:ok, response} ->
-        metrics = put_transport_metrics(metrics, transport_duration, response)
-        decode_query_response(query, response, options, state, metrics)
-
-      {:error, error} ->
-        cancel_after_timeout(error, query_uuid, state, options)
-
-        result =
-          {:error, annotate_error(error, query, state),
-           %{state | status: failed_status(state.status)}}
-
-        {result, Map.put(metrics, :transport_duration, transport_duration)}
-    end
-  end
-
-  defp decode_query_response(query, response, options, state, metrics) do
-    {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
-    metrics = Map.put(metrics, :decode_duration, decode_duration)
-
-    case decode_result do
-      {:ok, decoded} ->
-        normalize_query_result(query, decoded, options, state, metrics)
-
-      {:error, error} ->
-        result =
-          {:error, annotate_error(error, query, state),
-           %{state | status: failed_status(state.status)}}
-
-        {result, metrics}
-    end
-  end
-
-  defp normalize_query_result(query, decoded, options, state, metrics) do
-    {normalize_duration, normalize_result} =
-      timed(fn -> normalize_query_response(decoded, query, state, options) end)
-
-    metrics = Map.put(metrics, :normalize_duration, normalize_duration)
-
-    case normalize_result do
-      {:ok, query, result} ->
-        {{:ok, query, result, %{state | status: successful_status(state.status)}}, metrics}
-
-      {:error, error} ->
-        result =
-          {:error, annotate_error(error, query, state),
-           %{state | status: failed_status(state.status)}}
-
-        {result, metrics}
-    end
-  end
-
-  defp normalize_query_response(
-         {_header, %ErrorResponse{} = response},
-         _query,
-         _state,
-         _options
-       ) do
-    {:error, Error.server(response)}
-  end
-
-  defp normalize_query_response({_header, %PrepareResponse{} = response}, query, state, options) do
+  # Fetches the rest of the result and builds the row-oriented result.
+  defp query_result(%PrepareResponse{} = response, query, state, options) do
     with {:ok, chunks} <- fetch_remaining_chunks(response, state, options) do
       rows = materialize_rows(response.results ++ chunks, response.result_names)
 
@@ -881,7 +793,7 @@ defmodule QuackDB.DBConnection do
       }
 
       result =
-        %Result{
+        Result.normalize(%Result{
           command: command(query.statement),
           columns: response.result_names,
           rows: rows,
@@ -892,18 +804,10 @@ defmodule QuackDB.DBConnection do
             needs_more_fetch: response.needs_more_fetch,
             query_uuid: response.query_uuid
           }
-        }
-        |> Result.normalize()
+        })
 
       {:ok, query, result}
     end
-  end
-
-  defp normalize_query_response({header, _body}, _query, _state, _options) do
-    {:error,
-     Error.new(:unexpected_message, "expected prepare response, got #{header.type}",
-       source: :protocol
-     )}
   end
 
   defp fetch_remaining_chunks(
@@ -954,68 +858,37 @@ defmodule QuackDB.DBConnection do
           ack_index: batch_index - 1
         }
 
-        {encode_duration, request} =
-          timed(fn -> Codec.encode(message, connection_id: state.connection_id) end)
-
-        metrics = query_metrics(encode_duration, request)
         retries = Keyword.get(options, :fetch_retries, @default_fetch_retries)
+        {result, metrics} = exchange_with_retries(state, message, options, retries)
 
-        {result, metrics} =
-          execute_fetch_request(batch_index, request, options, state, metrics, retries)
+        {normalize_duration, result} =
+          timed(fn ->
+            with {:ok, response} <- expect(result, FetchResponse),
+                 do: fetched_batch(response, batch_index)
+          end)
 
-        with {:error, error} <- result do
-          cancel_after_timeout(error, query_uuid, state, options)
-        end
+        result = cancel_on_timeout(result, query_uuid, state, options)
 
-        {result, fetch_stop_metadata(result, metrics)}
+        {result,
+         fetch_stop_metadata(result, Map.put(metrics, :normalize_duration, normalize_duration))}
       end
     )
   end
 
   # The server keeps a served batch until a later request acknowledges it, so
   # a fetch that lost its HTTP connection can ask for the same batch again.
-  defp execute_fetch_request(batch_index, request, options, state, metrics, retries) do
-    case execute_fetch_request(batch_index, request, options, state, metrics) do
-      {{:error, %Error{source: :transport} = error}, _metrics}
-      when retries > 0 and error.metadata.reason != :timeout ->
-        execute_fetch_request(batch_index, request, options, state, metrics, retries - 1)
+  defp exchange_with_retries(state, message, options, retries) do
+    case exchange(state, message, options) do
+      {{:error, %Error{source: :transport, metadata: %{reason: reason}}}, _metrics}
+      when retries > 0 and reason != :timeout ->
+        exchange_with_retries(state, message, options, retries - 1)
 
-      result ->
-        result
+      exchange ->
+        exchange
     end
   end
 
-  defp execute_fetch_request(batch_index, request, options, state, metrics) do
-    {transport_duration, transport_result} =
-      timed(fn -> state.transport.(state.uri, request, options) end)
-
-    case transport_result do
-      {:ok, response} ->
-        metrics = put_transport_metrics(metrics, transport_duration, response)
-        decode_fetch_response(batch_index, response, metrics)
-
-      {:error, error} ->
-        {{:error, error}, Map.put(metrics, :transport_duration, transport_duration)}
-    end
-  end
-
-  defp decode_fetch_response(batch_index, response, metrics) do
-    {decode_duration, decode_result} = timed(fn -> Codec.decode(response) end)
-    metrics = Map.put(metrics, :decode_duration, decode_duration)
-
-    case decode_result do
-      {:ok, decoded} ->
-        {normalize_duration, result} =
-          timed(fn -> normalize_fetch_response(decoded, batch_index) end)
-
-        {result, Map.put(metrics, :normalize_duration, normalize_duration)}
-
-      {:error, error} ->
-        {{:error, error}, metrics}
-    end
-  end
-
-  defp normalize_fetch_response({_header, %FetchResponse{results: []} = response}, batch_index) do
+  defp fetched_batch(%FetchResponse{results: []} = response, batch_index) do
     case response.total_batches do
       total when total in [nil, batch_index - 1] ->
         {:ok, :done}
@@ -1030,7 +903,7 @@ defmodule QuackDB.DBConnection do
     end
   end
 
-  defp normalize_fetch_response({_header, %FetchResponse{} = response}, batch_index) do
+  defp fetched_batch(%FetchResponse{} = response, batch_index) do
     if response.batch_index in [nil, batch_index] do
       {:ok, {:batch, response.results}}
     else
@@ -1041,14 +914,6 @@ defmodule QuackDB.DBConnection do
          source: :protocol
        )}
     end
-  end
-
-  defp normalize_fetch_response({_header, %ErrorResponse{} = response}, _batch_index) do
-    {:error, Error.server(response)}
-  end
-
-  defp normalize_fetch_response({header, _body}, _batch_index) do
-    {:error, unexpected_message(:fetch_response, header)}
   end
 
   # With reconnects enabled the server keeps the last result until the client
@@ -1137,29 +1002,10 @@ defmodule QuackDB.DBConnection do
     }
   end
 
-  defp request(state, message, options) do
-    encoded =
-      Codec.encode(message,
-        connection_id: state.connection_id,
-        client_query_id: Keyword.get(options, :client_query_id)
-      )
-
-    with {:ok, response} <- state.transport.(state.uri, encoded, options) do
-      case Codec.decode(response) do
-        {:ok, {_header, %ErrorResponse{} = response}} -> {:error, Error.server(response)}
-        other -> other
-      end
-    end
-  end
-
   # Zero is reserved for the server's internal catalog traffic.
   defp new_query_uuid do
     <<_sign::1, uuid::127>> = :crypto.strong_rand_bytes(16)
     if uuid == 0, do: new_query_uuid(), else: uuid
-  end
-
-  defp unexpected_message(expected, header) do
-    Error.new(:unexpected_message, "expected #{expected}, got #{header.type}", source: :protocol)
   end
 
   defp put_cursor_state(state, ref, cursor_state) do
@@ -1238,31 +1084,41 @@ defmodule QuackDB.DBConnection do
   end
 
   defp do_connect_quack(state) do
-    request =
-      %ConnectionRequest{
-        auth_string: state.token,
-        client_duckdb_version: state.client_version,
-        client_platform: client_platform(),
-        client_id: state.client_id,
-        heartbeat_timeout_seconds: state.heartbeat_timeout
-      }
-      |> Codec.encode()
+    message = %ConnectionRequest{
+      auth_string: state.token,
+      client_duckdb_version: state.client_version,
+      client_platform: client_platform(),
+      client_id: state.client_id,
+      heartbeat_timeout_seconds: state.heartbeat_timeout
+    }
 
-    with {:ok, response} <- handshake(state, request),
-         {:ok, decoded} <- Codec.decode(response) do
-      normalize_connect_response(decoded, state)
-    end
-  end
+    case request(state, message, []) do
+      {:ok, {header, %ConnectionResponse{quack_version: 3} = response}} ->
+        {:ok,
+         %{
+           state
+           | connection_id: header.connection_id,
+             server: response,
+             heartbeat_timeout: response.heartbeat_timeout_seconds
+         }}
 
-  # A DuckDB 1.5 server cannot parse the version 3 handshake and answers with
-  # a bare HTTP 500.
-  defp handshake(state, request) do
-    case state.transport.(state.uri, request, []) do
+      {:ok, {_header, %ConnectionResponse{} = response}} ->
+        reason = "the server selected Quack protocol version #{response.quack_version}"
+        {:error, unsupported_quack_version(reason, response)}
+
+      # A DuckDB 1.5 server cannot parse the version 3 handshake and answers
+      # with a bare HTTP 500.
       {:error, %Error{code: :http_error, metadata: %{status: 500}} = error} ->
         {:error, unsupported_quack_version("the server rejected the handshake", error)}
 
-      result ->
-        result
+      {:error, %Error{source: :server, message: "Unsupported Quack version" <> _rest} = error} ->
+        {:error, unsupported_quack_version(error.message, error)}
+
+      {:ok, {header, _message}} ->
+        {:error, unexpected_message(ConnectionResponse, header)}
+
+      {:error, _error} = error ->
+        error
     end
   end
 
@@ -1291,42 +1147,6 @@ defmodule QuackDB.DBConnection do
 
   defp transport_options(options) do
     Keyword.take(options, [:connect_timeout, :receive_timeout, :shutdown_timeout, :mint_options])
-  end
-
-  defp normalize_connect_response(
-         {header, %ConnectionResponse{quack_version: 3} = response},
-         state
-       ) do
-    {:ok,
-     %{
-       state
-       | connection_id: header.connection_id,
-         server: response,
-         heartbeat_timeout: response.heartbeat_timeout_seconds
-     }}
-  end
-
-  defp normalize_connect_response({_header, %ConnectionResponse{} = response}, _state) do
-    reason = "the server selected Quack protocol version #{response.quack_version}"
-    {:error, unsupported_quack_version(reason, response)}
-  end
-
-  defp normalize_connect_response(
-         {_header, %ErrorResponse{message: "Unsupported Quack version" <> _rest} = response},
-         _state
-       ) do
-    {:error, unsupported_quack_version(response.message, Error.server(response))}
-  end
-
-  defp normalize_connect_response({_header, %ErrorResponse{} = response}, _state) do
-    {:error, Error.server(response)}
-  end
-
-  defp normalize_connect_response({header, _body}, _state) do
-    {:error,
-     Error.new(:unexpected_message, "expected connection response, got #{header.type}",
-       source: :protocol
-     )}
   end
 
   defp take_cursor_rows(cursor, max_rows) do
