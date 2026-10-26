@@ -3,8 +3,38 @@ defmodule QuackDB do
   DuckDB for Elixir applications: the DBConnection client.
 
   Queries, streams, transactions, and native appends over DuckDB's Quack
-  protocol. `QuackDB.Server` supervises a local DuckDB process, and
-  `Ecto.Adapters.QuackDB` puts Ecto on top of this client.
+  protocol (version 3, served by DuckDB 2.0). `QuackDB.Server` supervises a
+  local DuckDB process, and `Ecto.Adapters.QuackDB` puts Ecto on top of this
+  client.
+
+  ## Connection options
+
+    * `:uri` and `:token` locate and authenticate the Quack server.
+    * `:heartbeat_timeout` is the connection lease in seconds the client asks
+      for (default `60`). The server drops a connection that sends no request
+      for that long, so each connection sends a heartbeat every third of the
+      lease over a separate HTTP connection. Long queries, slow streams, and
+      long transactions keep their connection. A connection whose lease
+      expires anyway reconnects.
+    * `:client_id` identifies this client in the server's logs.
+    * `:acknowledge_results` confirms every fully received result, so a
+      server with `quack_enable_reconnects` drops its cached copy right away
+      instead of waiting for `quack_result_ttl`.
+    * `:fetch_retries` is how often a result batch is requested again after
+      its HTTP connection broke (default `1`). Batches are numbered, so a
+      retry never skips or repeats rows.
+    * `:copy_binaries` copies decoded strings and blobs off the HTTP response
+      (default `false`); it can also be passed per query. Without it, a
+      decoded string of 64 bytes or more is a slice of the response it
+      arrived in, so keeping it keeps the whole response, up to one result
+      batch, in memory. Copying about doubles decode time for string columns
+      and costs nothing for other columns. Use it when you keep a few values
+      from large results, for example in a cache or a long-lived process.
+    * `:connect_timeout`, `:receive_timeout`, `:shutdown_timeout`, and
+      `:mint_options` tune the HTTP transport.
+
+  Query options include `:inline_rows`, the number of rows the server may
+  return with the first response before the rest is fetched in batches.
   """
 
   alias QuackDB.Query
@@ -18,6 +48,11 @@ defmodule QuackDB do
           | {:receive_timeout, timeout()}
           | {:shutdown_timeout, timeout()}
           | {:mint_options, keyword()}
+          | {:heartbeat_timeout, pos_integer()}
+          | {:client_id, String.t()}
+          | {:acknowledge_results, boolean()}
+          | {:fetch_retries, non_neg_integer()}
+          | {:copy_binaries, boolean()}
   @type insert_row :: map() | Keyword.t()
   @type insert_column :: {atom() | String.t(), [term()]}
 
@@ -35,10 +70,16 @@ defmodule QuackDB do
   end
 
   @doc """
-  Appends row-oriented values to a DuckDB table through Quack's native append protocol.
+  Appends row-oriented values to a DuckDB table by streaming binary vectors into an `INSERT`.
 
-  Rows are maps or keywords. Pass `:columns` with type specs when values are empty,
-  contain only nils, or need a specific nested DuckDB type.
+  Rows are maps or keywords. Without `:columns`, every row's keys name the
+  columns and every value takes part in a column's type: integers widen to
+  `BIGINT` or `HUGEINT`, integers and floats make `DOUBLE`, decimals and
+  integers make one `DECIMAL`, and maps make a `STRUCT` of all their keys. Any
+  other mix, such as integers and strings, fails with `:mixed_append_types`
+  instead of truncating or dropping values. Pass `:columns` with type specs when
+  values are empty, contain only nils, mix shapes (`:variant` keeps them), or
+  need a specific DuckDB type.
 
   Plain Elixir maps infer as DuckDB `STRUCT` values. For explicit
   `{:map, key_type, value_type}` columns, ordinary Elixir maps are encoded as
@@ -57,6 +98,19 @@ defmodule QuackDB do
   Duplicate MAP keys decode with the later entry winning, matching `Map.put/3`.
   Keys and values are encoded through the declared DuckDB key/value types; for
   example, atom keys in `{:map, :varchar, :varchar}` columns become strings.
+
+  Declare VARIANT columns as `:variant`, so each value keeps its own shape,
+  and JSON columns as `:json`.
+
+  Options:
+
+    * `:columns` - `[{name, type}]` column types, also naming the inserted
+      columns. Omitted table columns get their defaults.
+    * `:schema` - the table's schema, or a nested schema path as a list.
+    * `:batch_size` - rows per request; requests carry vectors of at most
+      2048 rows.
+    * `:on_conflict` - `:raise` (default), `:nothing`, or `{:nothing, targets}`.
+    * `:returning` - columns to return; the result then carries those rows.
   """
   @spec insert_rows(DBConnection.conn(), String.t() | atom(), [insert_row()], Keyword.t()) ::
           {:ok, QuackDB.Result.t()} | {:error, Exception.t()}
@@ -84,7 +138,7 @@ defmodule QuackDB do
   end
 
   @doc """
-  Appends column-oriented values to a DuckDB table through Quack's native append protocol.
+  Appends column-oriented values to a DuckDB table by streaming binary vectors into an `INSERT`.
 
   Column values are provided as `{name, values}` pairs. All columns must have the
   same row count. Pass `:columns` with type specs when values are empty, contain
@@ -268,7 +322,44 @@ defmodule QuackDB do
     |> stream(statement, params, options)
     |> Elixir.Stream.map(&QuackDB.Result.to_columnar/1)
     |> Elixir.Stream.reject(&(&1.names == []))
+    |> drop_trailing_empty_batches()
   end
+
+  # The server can report more batches until its stream ends cleanly, which
+  # leaves an empty final fetch. An empty result still yields one batch.
+  defp drop_trailing_empty_batches(batches),
+    do: Elixir.Stream.transform(batches, :first, &drop_trailing_empty_batch/2)
+
+  defp drop_trailing_empty_batch(%QuackDB.Columns{num_rows: 0}, :emitted), do: {[], :emitted}
+  defp drop_trailing_empty_batch(batch, _state), do: {[batch], :emitted}
+
+  @doc """
+  Interrupts the query running on the remote connection `connection_id`.
+
+  Run it from another process than the one waiting on the query. The
+  connection id appears in every `QuackDB.Result`, `QuackDB.Error`, and
+  `[:quackdb, :query, :start]` telemetry event, including those of Ecto
+  queries, and a query interrupted this way fails with a `:query_cancelled`
+  error:
+
+      :telemetry.attach("report-connection", [:quackdb, :query, :start], fn _event, _measurements, metadata, parent ->
+        send(parent, {:running, metadata.connection_id})
+      end, self())
+
+      task = Task.async(fn -> MyApp.AnalyticsRepo.all(yearly_report) end)
+
+      receive do
+        {:running, connection_id} -> QuackDB.cancel("http://[::1]:9494", connection_id)
+      end
+
+      Task.await(task)
+      #=> ** (QuackDB.Error) Interrupted: query was cancelled
+
+  Pass `query_uuid: uuid` to cancel only that query. Transport timeouts and
+  disconnects already cancel their query on the server.
+  """
+  @spec cancel(String.t() | URI.t(), String.t(), Keyword.t()) :: :ok | {:error, Exception.t()}
+  defdelegate cancel(uri, connection_id, options \\ []), to: QuackDB.DBConnection
 
   @spec ping(DBConnection.conn(), Keyword.t()) :: :ok | {:error, Exception.t()}
   def ping(connection, options \\ []) do

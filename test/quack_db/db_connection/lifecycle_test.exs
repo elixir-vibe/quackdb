@@ -46,6 +46,7 @@ defmodule QuackDB.DBConnection.LifecycleTest do
 
     assert :ok = QuackDB.DBConnection.disconnect(:shutdown, state)
 
+    assert_received :cancel
     assert_received :disconnect
   end
 
@@ -61,6 +62,10 @@ defmodule QuackDB.DBConnection.LifecycleTest do
 
       case Codec.decode(request) do
         {:ok, {%Header{type: :connection_request}, %ConnectionRequest{}}} ->
+          {:ok, connection_response()}
+
+        {:ok, {%Header{type: :cancel_request}, _body}} ->
+          send(parent, :cancel)
           {:ok, connection_response()}
 
         {:ok, {%Header{type: :disconnect_message}, _body}} ->

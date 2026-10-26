@@ -73,6 +73,18 @@ defmodule QuackDB.SQL do
   @spec set(atom() | String.t(), parameter()) :: iodata()
   def set(name, value), do: ["SET ", identifier!(name, :setting), " = ", literal!(value), ";"]
 
+  @doc """
+  Builds `SET VARIABLE name = value;`. Queries read it as `$name` in DuckDB
+  2.0, or with `QuackDB.Ecto.Analytics.variable/1`.
+  """
+  @spec set_variable(atom() | String.t(), parameter()) :: iodata()
+  def set_variable(name, value),
+    do: ["SET VARIABLE ", identifier!(name, :variable), " = ", literal!(value), ";"]
+
+  @doc "Builds `RESET VARIABLE name;`."
+  @spec reset_variable(atom() | String.t()) :: iodata()
+  def reset_variable(name), do: ["RESET VARIABLE ", identifier!(name, :variable), ";"]
+
   @doc "Builds a `SET GLOBAL name = value;` statement."
   @spec set_global(atom() | String.t(), parameter()) :: iodata()
   def set_global(name, value),
@@ -310,18 +322,7 @@ defmodule QuackDB.SQL do
     {:ok, ["JSON '", String.replace(value, "'", "''"), "'"]}
   end
 
-  if Code.ensure_loaded?(Jason) do
-    def literal({:json, value}) do
-      literal({:json, Jason.encode!(value)})
-    end
-  else
-    def literal({:json, value}) do
-      error(
-        :unsupported_parameter,
-        "cannot encode JSON SQL parameter without Jason: #{inspect(value)}"
-      )
-    end
-  end
+  def literal({:json, value}), do: literal({:json, JSON.encode!(value)})
 
   def literal(value) when is_binary(value) do
     cond do

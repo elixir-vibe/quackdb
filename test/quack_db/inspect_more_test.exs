@@ -24,13 +24,13 @@ defmodule QuackDB.InspectMoreTest do
   test "inspects cursors compactly" do
     cursor = %QuackDB.Cursor{
       ref: make_ref(),
-      result_uuid: 42,
+      query_uuid: 42,
       columns: ["n"],
       connection_id: "1234567890abcdef"
     }
 
     assert inspect(cursor) ==
-             "#QuackDB.Cursor<result_uuid: 42, columns: [\"n\"], connection_id: \"1234567890ab…\">"
+             "#QuackDB.Cursor<query_uuid: 42, columns: [\"n\"], connection_id: \"1234567890ab…\">"
   end
 
   test "inspects DuckDB-specific scalar structs compactly" do

@@ -278,6 +278,9 @@ if Code.ensure_loaded?(Ecto.Adapters.SQL.Connection) do
 
     def execute_ddl(statement) when is_binary(statement), do: [statement]
 
+    # Lets migrations execute QuackDB.DDL builders, which return iodata.
+    def execute_ddl(statement) when is_list(statement), do: [IO.iodata_to_binary(statement)]
+
     defp assert_table_options!(%Table{} = table) do
       cond do
         table.comment ->

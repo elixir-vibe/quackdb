@@ -7,7 +7,9 @@ defmodule QuackDB.SQL.Fragment do
   fragments while keeping the number of top-level insert/update APIs small.
   """
 
-  @type table :: atom() | String.t() | {atom() | String.t() | nil, atom() | String.t()}
+  @type identifier_name :: atom() | String.t()
+  @type schema :: identifier_name() | [identifier_name()]
+  @type table :: identifier_name() | {schema() | nil, identifier_name()}
   @type column :: atom() | String.t()
   @type alias_name :: atom() | String.t()
   @type order_direction :: :asc | :desc
@@ -17,15 +19,25 @@ defmodule QuackDB.SQL.Fragment do
           | {column(), order_direction()}
           | {column(), order_direction(), keyword()}
 
-  @doc "Quotes a table name, optionally with a schema/prefix tuple."
+  @doc """
+  Quotes a table name, optionally with a schema/prefix tuple.
+
+  A list prefix names a nested schema path, as in DuckDB 2.0's
+  `finance.reports.ledger`.
+  """
   @spec table(table()) :: iodata()
   def table({nil, name}), do: QuackDB.Type.quote_identifier(name)
 
-  def table({prefix, name}) do
-    [QuackDB.Type.quote_identifier(prefix), ?., QuackDB.Type.quote_identifier(name)]
-  end
+  def table({prefix, name}), do: [schema(prefix), ?., QuackDB.Type.quote_identifier(name)]
 
   def table(name), do: QuackDB.Type.quote_identifier(name)
+
+  @doc "Quotes a schema name or a nested schema path such as `[:finance, :reports]`."
+  @spec schema(schema()) :: iodata()
+  def schema([_ | _] = path),
+    do: path |> Enum.map(&QuackDB.Type.quote_identifier/1) |> Enum.intersperse(?.)
+
+  def schema(name), do: QuackDB.Type.quote_identifier(name)
 
   @doc "Quotes a table alias."
   @spec alias_name(alias_name()) :: iodata()

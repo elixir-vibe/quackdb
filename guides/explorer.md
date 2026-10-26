@@ -5,7 +5,7 @@ QuackDB can hand query results to Explorer and can append Explorer dataframes th
 The Explorer integration is optional. Add Explorer when you want dataframe helpers:
 
 ```elixir
-{:quackdb, "~> 0.5.29"},
+{:quackdb, "~> 0.6.0"},
 {:explorer, "~> 0.11"}
 ```
 
@@ -52,7 +52,7 @@ Streams and other enumerables of row maps/keywords can be appended without mater
 
 ```elixir
 File.stream!("events.ndjson")
-|> Stream.map(&Jason.decode!/1)
+|> Stream.map(&JSON.decode!/1)
 |> QuackDB.insert_stream!(conn, "events", chunk_every: 10_000)
 ```
 

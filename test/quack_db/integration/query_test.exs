@@ -21,24 +21,23 @@ defmodule QuackDB.Integration.QueryTest do
                "SELECT i, i % 10 AS bucket FROM range(1000) t(i) WHERE i > 10 ORDER BY bucket LIMIT 5"
              )
 
-    assert profile.latency > 0
-    assert profile.cpu_time > 0
-    assert profile.cumulative_rows_scanned == 1000
+    assert profile.query.total_time > 0
+    assert profile.query.cpu_time > 0
+    assert profile.query.total_intermediate_rows > 0
     assert [_ | _] = operators = QuackDB.Profile.flatten(profile)
-    assert Enum.any?(operators, &(&1.name in ["RANGE", "SEQ_SCAN "]))
+    assert Enum.any?(operators, &(&1.name == "TABLE_SCAN"))
 
     report = QuackDB.Profile.report(profile, limit: 3)
     assert report =~ "DuckDB query profile"
     assert report =~ "Rows scanned:"
   end
 
-  test "detailed profiles retain dynamically named optimizer metrics" do
+  test "profiles retain dynamically named optimizer metrics" do
     connection = start_connection!()
-    QuackDB.query!(connection, "SET profiling_mode = 'detailed'")
     profile = QuackDB.Profile.analyze!(connection, "SELECT sum(i) FROM range(100) t(i)")
-    assert map_size(profile.optimizers) > 0
+    assert map_size(profile.optimizer) > 0
 
-    assert Enum.all?(profile.optimizers, fn {key, value} ->
+    assert Enum.all?(profile.optimizer, fn {key, value} ->
              is_binary(key) and is_number(value)
            end)
 
@@ -122,9 +121,13 @@ defmodule QuackDB.Integration.QueryTest do
 
   test "fetches large result sets from a real Quack server" do
     connection = start_connection!()
+    # Small batches and few inline rows force FETCH round trips.
+    QuackDB.query!(connection, "SET quack_target_batch_bytes = 65536")
 
     assert {:ok, %QuackDB.Result{} = result} =
-             QuackDB.query(connection, "SELECT i::INTEGER AS n FROM range(0, 50000) t(i)")
+             QuackDB.query(connection, "SELECT i::INTEGER AS n FROM range(0, 50000) t(i)", [],
+               inline_rows: 1_000
+             )
 
     assert result.metadata.needs_more_fetch == true
     assert result.num_rows == 50_000

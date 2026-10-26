@@ -1,5 +1,15 @@
 # Benchmarks
 
+## Protocol decode
+
+`decode.exs` times decoding of one DuckDB 2048-row vector per column type, with no server, and decodes 2048 and 8192 values of the vector kinds that once scaled quadratically. Each line is the median of seven rounds.
+
+```bash
+mix run bench/decode.exs
+```
+
+`test/quack_db/protocol/decode_scaling_test.exs` asserts the same linear scaling with reduction counts, which are deterministic.
+
 ## Wide append
 
 `wide_append.exs` reproduces Exograph's wide fragment staging append shape with synthetic data: blob hashes, a wide AST blob, `BIGINT[]` term vectors, `BIGINT[]` sub-hash vectors, metadata strings, and timestamps.

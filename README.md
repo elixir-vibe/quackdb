@@ -70,7 +70,7 @@ You never have to write SQL. What Ecto queries do not model has an Elixir builde
 ```elixir
 def deps do
   [
-    {:quackdb, "~> 0.5.29"}
+    {:quackdb, "~> 0.6.0"}
   ]
 end
 ```
@@ -83,7 +83,7 @@ Optional integrations light up when their packages are present:
 {:geo, "~> 4.1"}          # %Geo.*{} spatial values
 ```
 
-QuackDB needs DuckDB 1.5.6 or newer with the `quack` extension. With `duckdb: :managed` it downloads and verifies DuckDB's official CLI binary on first start, so nothing else has to be installed.
+QuackDB needs DuckDB 2.0 with the `quack` extension; it speaks Quack protocol version 3, which DuckDB 1.5 does not serve. With `duckdb: :managed` it downloads and verifies DuckDB's official CLI binary on first start, so nothing else has to be installed.
 
 ## Quick start
 
@@ -158,16 +158,16 @@ Repo.query!(sql, params)
 
 ## Writes
 
-Rows, columns, Explorer dataframes, `Table.Reader` data, and streams go in through DuckDB's native append protocol instead of generated `INSERT` statements:
+Rows, columns, Explorer dataframes, `Table.Reader` data, and streams go in as binary DuckDB vectors that the server reads straight into an `INSERT`, instead of as generated `VALUES` SQL. The same path takes `ON CONFLICT` and `RETURNING`:
 
 ```elixir
 QuackDB.insert_rows!(conn, "events", [[id: 1, name: "duck", tags: ["bird", "wetland"]]])
 
 File.stream!("events.ndjson")
-|> Stream.map(&Jason.decode!/1)
+|> Stream.map(&JSON.decode!/1)
 |> QuackDB.insert_stream!(MyApp.AnalyticsRepo, "events", chunk_every: 10_000)
 
-MyApp.AnalyticsRepo.insert_all(MyApp.Event, rows, insert_method: :append)
+MyApp.AnalyticsRepo.insert_all(MyApp.Event, rows, insert_method: :append, returning: [:id])
 ```
 
 See the [Writes guide](https://hexdocs.pm/quackdb/writes.html) and [Explorer](https://hexdocs.pm/quackdb/explorer.html).

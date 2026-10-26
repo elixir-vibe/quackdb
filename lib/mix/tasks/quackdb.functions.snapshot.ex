@@ -15,9 +15,9 @@ defmodule Mix.Tasks.Quackdb.Functions.Snapshot do
 
   @shortdoc "Writes a DuckDB function-catalog snapshot"
   @default_output "priv/duckdb_functions/current.exs"
-  @function_types [:aggregate, :macro, :scalar]
+  @function_types [:aggregate, :macro, :scalar, :window]
   @function_type_names Map.new(@function_types, &{Atom.to_string(&1), &1})
-  @candidate_types [:aggregate, :macro]
+  @candidate_types [:aggregate, :macro, :window]
   @skip_prefix_reasons [
     {"__internal_", "DuckDB internal generated function"},
     {"duckdb_", "DuckDB catalog/helper namespace"},
@@ -100,7 +100,7 @@ defmodule Mix.Tasks.Quackdb.Functions.Snapshot do
         stability,
         categories
       FROM duckdb_functions()
-      WHERE function_type IN ('scalar', 'aggregate', 'macro')
+      WHERE function_type IN ('scalar', 'aggregate', 'macro', 'window')
       ORDER BY function_type, function_name, parameter_types
       """)
 

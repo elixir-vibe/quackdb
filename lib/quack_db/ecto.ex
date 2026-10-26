@@ -33,6 +33,7 @@ if Code.ensure_loaded?(Ecto.Query) do
     - `QuackDB.Ecto.Map`.
     - `QuackDB.Ecto.Struct`.
     - `QuackDB.Ecto.Series`.
+    - `QuackDB.Ecto.Variant`.
     - `QuackDB.Ecto.Star`.
     - `QuackDB.Ecto.WindowFrames`.
 
@@ -54,6 +55,7 @@ if Code.ensure_loaded?(Ecto.Query) do
         use QuackDB.Ecto, struct: false
         use QuackDB.Ecto, series: false
         use QuackDB.Ecto, star: false
+        use QuackDB.Ecto, variant: false
         use QuackDB.Ecto, window_frames: false
         use QuackDB.Ecto, query: false
     """
@@ -157,6 +159,7 @@ if Code.ensure_loaded?(Ecto.Query) do
           maybe_import(enabled?.(:struct), QuackDB.Ecto.Struct,
             except: [contains: 2, extract: 2, values: 1, position: 2, concat: 2]
           ),
+          maybe_import(enabled?.(:variant), QuackDB.Ecto.Variant),
           maybe_import(enabled?.(:window_frames), QuackDB.Ecto.WindowFrames),
           maybe_import(enabled?.(:regex), QuackDB.Ecto.Regex),
           text_import(enabled?.(:text), shared_predicates?),

@@ -15,15 +15,7 @@ defmodule QuackDBTest do
            {:ok, {%Header{type: :connection_request}, _body}},
            Codec.decode(IO.iodata_to_binary(request))
          ) do
-        response = [
-          Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-          <<1::little-16, 5, "1.5.0">>,
-          <<2::little-16, 6, "darwin">>,
-          <<3::little-16, 1>>,
-          <<0xFFFF::little-16>>
-        ]
-
-        {:ok, IO.iodata_to_binary(response)}
+        {:ok, QuackDB.TestTransports.connection_response()}
       else
         chunk = QuackDB.ProtocolFixtures.integer_chunk_wrapper([1])
         {:ok, QuackDB.ProtocolFixtures.prepare_response(chunks: [chunk])}
@@ -42,15 +34,7 @@ defmodule QuackDBTest do
            {:ok, {%Header{type: :connection_request}, _body}},
            Codec.decode(IO.iodata_to_binary(request))
          ) do
-        response = [
-          Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-          <<1::little-16, 5, "1.5.0">>,
-          <<2::little-16, 6, "darwin">>,
-          <<3::little-16, 1>>,
-          <<0xFFFF::little-16>>
-        ]
-
-        {:ok, IO.iodata_to_binary(response)}
+        {:ok, QuackDB.TestTransports.connection_response()}
       else
         chunk =
           QuackDB.ProtocolFixtures.scalar_chunk_wrapper([
@@ -79,15 +63,7 @@ defmodule QuackDBTest do
            {:ok, {%Header{type: :connection_request}, _body}},
            Codec.decode(IO.iodata_to_binary(request))
          ) do
-        response = [
-          Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-          <<1::little-16, 5, "1.5.0">>,
-          <<2::little-16, 6, "darwin">>,
-          <<3::little-16, 1>>,
-          <<0xFFFF::little-16>>
-        ]
-
-        {:ok, IO.iodata_to_binary(response)}
+        {:ok, QuackDB.TestTransports.connection_response()}
       else
         chunk =
           QuackDB.ProtocolFixtures.scalar_chunk_wrapper([

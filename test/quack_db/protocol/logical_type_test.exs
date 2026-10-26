@@ -129,9 +129,39 @@ defmodule QuackDB.Protocol.LogicalTypeTest do
     end
   end
 
-  defp logical_type_with_info(info) do
+  # DuckDB omits fields left at their defaults.
+  test "defaults an omitted DECIMAL scale to zero" do
+    binary =
+      logical_type_with_info([
+        Writer.field(100, Writer.uleb128(2)),
+        Writer.field(200, Writer.uleb128(18)),
+        Writer.end_object()
+      ])
+
+    assert {:ok, %LogicalType{name: :decimal, type_info: %{width: 18, scale: 0}}, ""} =
+             LogicalType.decode(binary)
+  end
+
+  test "decodes a GEOMETRY coordinate reference system" do
+    crs = fn fields -> [fields, Writer.end_object()] end
+
+    binary = fn crs_fields ->
+      logical_type_with_info(:geometry, [
+        Writer.field(100, Writer.uleb128(13)),
+        Writer.field(200, crs.(crs_fields)),
+        Writer.end_object()
+      ])
+    end
+
+    assert {:ok, %LogicalType{name: :geometry, type_info: %{crs: "OGC:CRS84"}}, ""} =
+             LogicalType.decode(binary.(Writer.field(100, Writer.string("OGC:CRS84"))))
+
+    assert {:ok, %LogicalType{type_info: %{crs: nil}}, ""} = LogicalType.decode(binary.([]))
+  end
+
+  defp logical_type_with_info(name \\ :decimal, info) do
     [
-      Writer.field(100, Writer.uleb128(LogicalType.id(:decimal))),
+      Writer.field(100, Writer.uleb128(LogicalType.id(name))),
       Writer.field(101, Writer.nullable(info, &Function.identity/1)),
       Writer.end_object()
     ]

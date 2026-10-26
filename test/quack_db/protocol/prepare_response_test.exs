@@ -17,7 +17,7 @@ defmodule QuackDB.Protocol.PrepareResponseTest do
 
     assert [%LogicalType{name: :integer}] = response.result_types
     assert response.result_names == ["n"]
-    assert response.result_uuid == 42
+    assert response.query_uuid == 42
     assert response.needs_more_fetch == false
     assert [chunk] = response.results
     assert QuackDB.Protocol.DataChunk.rows(chunk) == [[1]]

@@ -212,11 +212,11 @@ defmodule QuackDB.DBConnection.StreamTest do
            ProtocolFixtures.prepare_response(
              chunks: [ProtocolFixtures.integer_chunk_wrapper([1])],
              needs_more_fetch?: true,
-             result_uuid: stream_id
+             query_uuid: stream_id
            )}
 
         {:ok, {%Header{type: :fetch_request}, fetch}} ->
-          stream_id = fetch.uuid
+          stream_id = fetch.query_uuid
 
           fetch_count =
             Agent.get_and_update(fetch_counts_agent, fn counts ->
@@ -261,7 +261,7 @@ defmodule QuackDB.DBConnection.StreamTest do
            ProtocolFixtures.prepare_response(
              chunks: [ProtocolFixtures.integer_chunk_wrapper([1])],
              needs_more_fetch?: true,
-             result_uuid: 42
+             query_uuid: 42
            )}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 20 AS n"}}} ->
@@ -325,7 +325,7 @@ defmodule QuackDB.DBConnection.StreamTest do
            ProtocolFixtures.prepare_response(
              chunks: [initial_chunk],
              needs_more_fetch?: true,
-             result_uuid: 42
+             query_uuid: 42
            )}
 
         {:ok, {%Header{type: :prepare_request}, %PrepareRequest{sql_query: "SELECT 1 AS n"}}} ->

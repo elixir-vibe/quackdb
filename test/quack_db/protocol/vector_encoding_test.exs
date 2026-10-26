@@ -228,7 +228,40 @@ defmodule QuackDB.Protocol.VectorEncodingTest do
     assert {:error, %QuackDB.Error{code: :invalid_list_entry, message: message}} =
              DataChunk.decode_wrapper(binary)
 
-    assert message == "LIST entry must include offset and length fields, got %{offset: 0}"
+    assert message == "LIST entry must carry an offset and a length field"
+  end
+
+  test "decodes list entries that do not follow child order" do
+    list_type = LogicalType.new(:list, %{type: 4, child_type: LogicalType.new(:integer)})
+
+    binary =
+      QuackDB.ProtocolFixtures.data_chunk(
+        3,
+        [LogicalType.encode(list_type)],
+        [
+          [
+            Writer.field(100, Writer.bool(false)),
+            Writer.field(104, Writer.uleb128(3)),
+            Writer.field(
+              105,
+              Writer.list(
+                [%{offset: 2, length: 1}, %{offset: 0, length: 2}, %{offset: 1, length: 2}],
+                &list_entry/1
+              )
+            ),
+            Writer.field(
+              106,
+              QuackDB.Protocol.Vector.encode(LogicalType.new(:integer), [10, 20, 30], 3)
+            ),
+            Writer.end_object()
+          ]
+        ]
+      )
+      |> then(&[Writer.field(300, &1), Writer.end_object()])
+      |> IO.iodata_to_binary()
+
+    assert {:ok, chunk, ""} = DataChunk.decode_wrapper(binary)
+    assert DataChunk.rows(chunk) == [[[30]], [[10, 20]], [[20, 30]]]
   end
 
   test "reports list entry bounds violations" do

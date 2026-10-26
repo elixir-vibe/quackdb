@@ -2,9 +2,9 @@ defmodule QuackDB.Sequence do
   @moduledoc """
   Helpers for DuckDB sequences.
 
-  Native append writes full column vectors and does not evaluate column defaults.
-  Use `next_values/4` to allocate sequence-backed IDs before appending rows
-  with explicit primary keys.
+  Appends fill omitted columns from their defaults, including `nextval`
+  sequences. Use `next_values/4` when you need the IDs before writing, for
+  example to reference them from rows written in the same batch.
   """
 
   @doc """

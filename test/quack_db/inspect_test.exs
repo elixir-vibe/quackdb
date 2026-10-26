@@ -26,7 +26,7 @@ defmodule QuackDB.InspectTest do
     query = %QuackDB.Query{
       statement: String.duplicate("SELECT 1 ", 20),
       columns: ["n"],
-      result_uuid: 42
+      query_uuid: 42
     }
 
     inspected = inspect(query)
@@ -35,7 +35,7 @@ defmodule QuackDB.InspectTest do
     assert inspected =~ "statement: \"SELECT 1"
     assert inspected =~ "…"
     assert inspected =~ "columns: [\"n\"]"
-    assert inspected =~ "result_uuid: 42"
+    assert inspected =~ "query_uuid: 42"
   end
 
   test "inspects errors with context" do

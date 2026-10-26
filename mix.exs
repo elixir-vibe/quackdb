@@ -4,12 +4,13 @@ defmodule QuackDB.MixProject do
   def project do
     [
       app: :quackdb,
-      version: "0.5.29",
+      version: "0.6.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
       elixirc_paths: elixirc_paths(Mix.env()),
+      test_ignore_filters: [&String.starts_with?(&1, "test/fixtures/")],
       package: package(),
       description: "DuckDB for Elixir: supervised server, DBConnection client, and Ecto adapter",
       source_url: "https://github.com/elixir-vibe/quackdb",

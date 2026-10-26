@@ -2,20 +2,12 @@ defmodule QuackDB.BinaryTest do
   use ExUnit.Case, async: false
 
   test "exposes pinned version and known checksum targets" do
-    assert QuackDB.Binary.default_version() == "1.5.6"
+    assert QuackDB.Binary.default_version() == "2.0.0"
 
-    assert {"1.5.5", "linux-amd64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.5", "linux-amd64-musl"} in QuackDB.Binary.known_targets()
-    assert {"1.5.5", "linux-arm64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.5", "linux-arm64-musl"} in QuackDB.Binary.known_targets()
-    assert {"1.5.5", "osx-amd64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.5", "osx-arm64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.6", "linux-amd64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.6", "linux-amd64-musl"} in QuackDB.Binary.known_targets()
-    assert {"1.5.6", "linux-arm64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.6", "linux-arm64-musl"} in QuackDB.Binary.known_targets()
-    assert {"1.5.6", "osx-amd64"} in QuackDB.Binary.known_targets()
-    assert {"1.5.6", "osx-arm64"} in QuackDB.Binary.known_targets()
+    for target <-
+          ~w(linux-amd64 linux-amd64-musl linux-arm64 linux-arm64-musl osx-amd64 osx-arm64 osx-universal) do
+      assert {"2.0.0", target} in QuackDB.Binary.known_targets()
+    end
   end
 
   test "distinguishes musl and glibc Linux architecture triples" do
@@ -55,7 +47,7 @@ defmodule QuackDB.BinaryTest do
   end
 
   test "respects explicit path option" do
-    path = System.find_executable("duckdb")
+    path = QuackDB.TestHelper.duckdb_2_path()
 
     if path do
       assert {:ok, ^path} = QuackDB.Binary.path(path: path)
@@ -63,7 +55,7 @@ defmodule QuackDB.BinaryTest do
   end
 
   test "respects QUACKDB_BINARY_PATH override" do
-    path = System.find_executable("duckdb")
+    path = QuackDB.TestHelper.duckdb_2_path()
 
     if path do
       previous = System.get_env("QUACKDB_BINARY_PATH")
@@ -85,6 +77,19 @@ defmodule QuackDB.BinaryTest do
       assert {:error, %QuackDB.Error{code: :invalid_duckdb_binary}} = QuackDB.Binary.path()
     after
       restore_env("QUACKDB_BINARY_PATH", previous)
+    end
+  end
+
+  test "rejects DuckDB CLIs older than 2.0" do
+    case System.find_executable("duckdb") do
+      nil ->
+        :ok
+
+      path ->
+        if path != QuackDB.TestHelper.duckdb_2_path() do
+          assert {:error, %QuackDB.Error{code: code}} = QuackDB.Binary.path(path: path)
+          assert code in [:invalid_duckdb_binary, :unsupported_duckdb_version]
+        end
     end
   end
 

@@ -483,7 +483,7 @@ defmodule QuackDB.Integration.Ecto.QueryTest do
       )
 
     assert {:ok, plan} = plan
-    assert plan =~ "EMPTY_RESULT"
+    assert plan =~ "Empty Result"
   end
 
   test "Ecto Repo.insert/2 supports on_conflict nothing" do

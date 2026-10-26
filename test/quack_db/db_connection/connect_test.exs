@@ -29,9 +29,9 @@ defmodule QuackDB.DBConnection.ConnectTest do
     assert state.uri.scheme == "http"
     assert state.uri.path == "/quack"
     assert state.connection_id == "conn-1"
-    assert state.server.server_duckdb_version == "1.5.0"
+    assert state.server.server_duckdb_version == "v2.0.0"
     assert state.server.server_platform == "darwin"
-    assert state.server.quack_version == 1
+    assert state.server.quack_version == 3
 
     assert_received {:connection_request,
                      %ConnectionRequest{
@@ -87,5 +87,34 @@ defmodule QuackDB.DBConnection.ConnectTest do
     assert error.code == :unexpected_message
     assert error.source == :protocol
     assert error.message == "expected connection response, got prepare_response"
+  end
+
+  test "connect reports servers that do not speak protocol version 3" do
+    old_response =
+      IO.iodata_to_binary([
+        Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
+        <<3::little-16, 1>>,
+        <<0xFFFF::little-16>>
+      ])
+
+    rejected =
+      IO.iodata_to_binary(
+        Codec.encode(%QuackDB.Protocol.Message.ErrorResponse{
+          message: "Unsupported Quack version - server only supports version 1 of quack"
+        })
+      )
+
+    http_500 =
+      {:error,
+       QuackDB.Error.new(:http_error, "HTTP 500", source: :transport, metadata: %{status: 500})}
+
+    for reply <- [{:ok, old_response}, {:ok, rejected}, http_500] do
+      transport = fn _uri, _request, _options -> reply end
+
+      assert {:error, %QuackDB.Error{code: :unsupported_quack_version, message: message}} =
+               QuackDB.DBConnection.connect(uri: "http://localhost:9494", transport: transport)
+
+      assert message =~ "requires Quack protocol version 3 (DuckDB 2.0)"
+    end
   end
 end

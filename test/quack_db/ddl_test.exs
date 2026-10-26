@@ -291,4 +291,48 @@ defmodule QuackDB.DDLTest do
       QuackDB.DDL.create_table("empty", [])
     end
   end
+
+  test "builds nested schema statements" do
+    assert IO.iodata_to_binary(DDL.create_schema([:finance, :reports], if_not_exists: true)) ==
+             ~s(CREATE SCHEMA IF NOT EXISTS "finance"."reports")
+
+    assert IO.iodata_to_binary(DDL.drop_schema(:finance, if_exists: true, cascade: true)) ==
+             ~s(DROP SCHEMA IF EXISTS "finance" CASCADE)
+
+    assert IO.iodata_to_binary(DDL.create_table({[:finance, :reports], :ledger}, id: :integer)) =~
+             ~s(CREATE TABLE "finance"."reports"."ledger")
+  end
+
+  test "builds trigger statements" do
+    assert IO.iodata_to_binary(
+             DDL.create_trigger(:events_count, :events, "UPDATE stats SET n = n + 1",
+               event: :insert,
+               referencing: [new_table: :inserted],
+               or_replace: true
+             )
+           ) ==
+             ~s(CREATE OR REPLACE TRIGGER "events_count" AFTER INSERT ON "events" REFERENCING NEW TABLE AS "inserted" FOR EACH STATEMENT UPDATE stats SET n = n + 1)
+
+    assert IO.iodata_to_binary(
+             DDL.create_trigger(:audit, {:main, :events}, "INSERT INTO log VALUES (NEW.id)",
+               event: {:update, [:score, :name]},
+               for_each: :row,
+               if_not_exists: true
+             )
+           ) ==
+             ~s|CREATE TRIGGER IF NOT EXISTS "audit" AFTER UPDATE OF "score", "name" ON "main"."events" FOR EACH ROW INSERT INTO log VALUES (NEW.id)|
+
+    assert IO.iodata_to_binary(DDL.drop_trigger(:audit, :events, if_exists: true)) ==
+             ~s(DROP TRIGGER IF EXISTS "audit" ON "events")
+
+    for options <- [
+          [],
+          [event: :truncate],
+          [event: :insert, timing: :instead_of],
+          [event: :insert, for_each: :column],
+          [event: :insert, when: "x"]
+        ] do
+      assert_raise ArgumentError, fn -> DDL.create_trigger(:t, :events, "SELECT 1", options) end
+    end
+  end
 end

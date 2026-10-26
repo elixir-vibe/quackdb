@@ -83,6 +83,7 @@ end
 | `TIMESTAMP_NS` | `QuackDB.NanosecondTimestamp.t()` | Supported | Preserves nanoseconds since Unix epoch. |
 | `TIME WITH TIME ZONE` | `QuackDB.TimeWithTimeZone.t()` | Supported | Preserves time-of-day and UTC offset seconds. |
 | `TIMESTAMPTZ` | `DateTime.t()` | Supported | Decoded as UTC. |
+| `TIMESTAMPTZ_NS` | `QuackDB.NanosecondTimestamp.t()` | Supported | The UTC instant in nanoseconds; Elixir's `DateTime` stops at microseconds. |
 | `INTERVAL` | `QuackDB.Interval.t()` | Supported | Preserves DuckDB month, day, and microsecond components. |
 
 ## Nested types
@@ -93,12 +94,16 @@ end
 | `STRUCT` | map with string keys | Supported | Null child values are preserved. |
 | `ARRAY` | list | Supported | Fixed-size arrays are returned as Elixir lists. |
 | `MAP` | map | Supported | Map entries are converted to Elixir maps; duplicate-key policy follows `Map.put/3`. |
+| `TUPLE` | tuple | Supported | DuckDB 2.0's unnamed structs, such as `SELECT (1, 'a')`. |
+| `VARIANT` | any of the above | Supported | Objects become maps with string keys, arrays become lists, and scalars decode like their column type. Shredded VARIANT columns read from storage decode the same way. |
+
+`QuackDB.Ecto.Variant` builds `variant_extract/2`, `variant_type/1`, `variant_keys/1`, and related expressions for querying inside VARIANT values.
 
 ## Append encoding
 
 `QuackDB.insert_rows/4` supports scalar append values plus nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` columns when explicit column specs are provided. Temporal append values use Elixir's Calendar conversion APIs and are encoded in DuckDB's ISO calendar representation.
 
-Plain Elixir maps infer as DuckDB `STRUCT` values. For explicit `{:map, key_type, value_type}` columns, QuackDB accepts either DuckDB-style key/value entries or ordinary Elixir maps:
+Inferred types account for every value in a column: integers widen to `BIGINT` or `HUGEINT` as needed, integers mixed with floats become `DOUBLE` (while a `DOUBLE` holds them exactly), decimals and integers share one `DECIMAL` wide enough for all of them, and plain Elixir maps infer as DuckDB `STRUCT` values with the union of their keys. Any other mix fails with `:mixed_append_types` instead of truncating, dropping, or NULLing values. For explicit `{:map, key_type, value_type}` columns, QuackDB accepts either DuckDB-style key/value entries or ordinary Elixir maps:
 
 ```elixir
 QuackDB.insert_rows!(conn, "events", [[labels: %{env: "prod", region: "eu"}]],
@@ -110,7 +115,15 @@ QuackDB.insert_rows!(conn, "events", [[labels: [%{key: "env", value: "prod"}]]],
 )
 ```
 
-Both encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-value Elixir map semantics are not implied; DuckDB MAP columns still have one key type and one value type. Duplicate MAP keys decode with the later entry winning, matching `Map.put/3`. Keys and values are encoded through the declared DuckDB types, so atom keys in `{:map, :varchar, :varchar}` columns become strings.
+VARIANT columns take any JSON-shaped value when declared as `:variant`; QuackDB sends JSON text and DuckDB casts it on insert, so objects, arrays, and scalars keep their shapes. Without the declaration, inference refuses to mix maps, lists, and scalars in one column, with a `:mixed_append_types` error. A VARIANT column with mixed shapes needs it:
+
+```elixir
+QuackDB.insert_rows!(conn, "events", [[payload: %{kind: "duck"}], [payload: [1, 2]]],
+  columns: [payload: :variant]
+)
+```
+
+Both MAP forms encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-value Elixir map semantics are not implied; DuckDB MAP columns still have one key type and one value type. Duplicate MAP keys decode with the later entry winning, matching `Map.put/3`. Keys and values are encoded through the declared DuckDB types, so atom keys in `{:map, :varchar, :varchar}` columns become strings.
 
 ## Vector encodings
 
@@ -120,6 +133,7 @@ Both encode as DuckDB `MAP(VARCHAR, VARCHAR)`. Arbitrary mixed-key or mixed-valu
 | Constant | Supported |
 | Dictionary | Supported |
 | Sequence | Supported |
+| Shredded (`VARIANT`) | Supported |
 | FSST | Unsupported; QuackDB has an optional internal `:fsst` bridge, but current DuckDB Quack serialization flattens FSST vectors rather than exposing a compressed payload |
 
 ## SQL parameter literals
@@ -137,7 +151,7 @@ Supported parameter values:
 - `Decimal.t()`
 - strings
 - `{:blob, binary}`
-- `{:json, map_or_list_or_scalar}` when `Jason` is available
+- `{:json, map_or_list_or_scalar}`
 - `Date.t()`
 - `Time.t()`
 - `NaiveDateTime.t()`

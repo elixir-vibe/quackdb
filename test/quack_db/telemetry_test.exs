@@ -48,7 +48,7 @@ defmodule QuackDB.TelemetryTest do
     assert metadata.client_query_id == 1
 
     assert_received {:telemetry, [:quackdb, :fetch, :start], %{system_time: _}, metadata}
-    assert metadata.result_uuid == 42
+    assert metadata.query_uuid == 42
     assert metadata.connection_id == "conn-1"
     assert metadata.client_query_id == 1
 
@@ -78,7 +78,10 @@ defmodule QuackDB.TelemetryTest do
 
   test "emits append telemetry" do
     connection =
-      start_supervised!({QuackDB, uri: "http://localhost:9494", transport: transport()})
+      start_supervised!(
+        {QuackDB,
+         uri: "http://localhost:9494", transport: QuackDB.TestTransports.append_transport(self())}
+      )
 
     assert %QuackDB.Result{num_rows: 2} =
              QuackDB.insert_rows!(connection, "events", [[id: 1], [id: 2]])
@@ -135,15 +138,7 @@ defmodule QuackDB.TelemetryTest do
     fn _uri, request, options ->
       case request |> IO.iodata_to_binary() |> Codec.decode() do
         {:ok, {%Header{type: :connection_request}, _body}} ->
-          response = [
-            Codec.encode_header(%Header{type: :connection_response, connection_id: "conn-1"}),
-            <<1::little-16, 5, "1.5.0">>,
-            <<2::little-16, 6, "darwin">>,
-            <<3::little-16, 1>>,
-            <<0xFFFF::little-16>>
-          ]
-
-          {:ok, IO.iodata_to_binary(response)}
+          {:ok, QuackDB.TestTransports.connection_response()}
 
         {:ok, {%Header{type: :prepare_request, client_query_id: query_id}, _request}} ->
           assert Keyword.fetch!(options, :client_query_id) == query_id
@@ -158,14 +153,6 @@ defmodule QuackDB.TelemetryTest do
 
         {:ok, {%Header{type: :fetch_request}, _request}} ->
           {:ok, ProtocolFixtures.fetch_response([])}
-
-        {:ok, {%Header{type: :append_request, client_query_id: query_id}, _request}} ->
-          assert Keyword.fetch!(options, :client_query_id) == query_id
-
-          response =
-            Codec.encode(%QuackDB.Protocol.Message.SuccessResponse{}, connection_id: "conn-1")
-
-          {:ok, IO.iodata_to_binary(response)}
       end
     end
   end

@@ -4,11 +4,14 @@ defmodule QuackDB.Protocol.ScalarDecodingTest do
   alias QuackDB.Protocol.DataChunk
 
   test "rejects BIGNUM payloads whose declared magnitude size is truncated" do
-    assert_raise QuackDB.Error, ~r/BIGNUM payload size does not match header/, fn ->
-      "data_chunk_bignum_bad_size.bin"
-      |> malformed_fixture!()
-      |> DataChunk.decode_wrapper()
-    end
+    assert {:error,
+            %QuackDB.Error{
+              code: :invalid_bignum,
+              message: "BIGNUM payload size does not match header"
+            }} =
+             "data_chunk_bignum_bad_size.bin"
+             |> malformed_fixture!()
+             |> DataChunk.decode_wrapper()
   end
 
   test "rejects data chunks whose vectors outnumber logical types" do

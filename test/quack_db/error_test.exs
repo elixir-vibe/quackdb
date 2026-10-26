@@ -2,6 +2,7 @@ defmodule QuackDB.ErrorTest do
   use ExUnit.Case, async: true
 
   alias QuackDB.Error
+  alias QuackDB.Protocol.Message.ErrorResponse
 
   test "classifies update conflicts as retriable transaction conflicts" do
     assert %Error{code: :transaction_conflict, retriable?: true, source: :server} =
@@ -19,13 +20,11 @@ defmodule QuackDB.ErrorTest do
         "future_field" => 123
       })
 
-    for message <- [json, "Failed to append: " <> json] do
-      error = Error.server(message)
-      assert error.message == message
-      assert error.code == :server_error
-      refute error.retriable?
-      assert error.metadata == %{exception_type: "Constraint", exception_message: "Duplicate key"}
-    end
+    error = Error.server(json)
+    assert error.message == json
+    assert error.code == :server_error
+    refute error.retriable?
+    assert error.metadata == %{exception_type: "Constraint", exception_message: "Duplicate key"}
   end
 
   test "structured conflicts retain retry classification" do
@@ -47,7 +46,6 @@ defmodule QuackDB.ErrorTest do
           "null",
           "42",
           "{}",
-          "Failed to append: {",
           ~s({"exception_type":"Constraint"}),
           ~s({"exception_type":23,"exception_message":"bad"}),
           ~s({"exception_type":"Constraint","exception_message":null})
@@ -66,6 +64,49 @@ defmodule QuackDB.ErrorTest do
       })
 
     assert Error.server(message).metadata.exception_type == "FutureClassNeverAnAtom"
+  end
+
+  test "keeps DuckDB's exception type and transferable details from typed error responses" do
+    error =
+      Error.server(%ErrorResponse{
+        message: "Table with name nope does not exist!",
+        exception_type: "Catalog",
+        extra_info: %{"name" => "nope", "type" => "Table"}
+      })
+
+    assert error.code == :server_error
+    assert error.message == "Table with name nope does not exist!"
+    assert Error.exception_type(error) == "Catalog"
+    assert error.metadata.extra_info == %{"name" => "nope", "type" => "Table"}
+    refute Map.has_key?(error.metadata, :must_invalidate)
+    refute Error.disconnect?(error)
+  end
+
+  test "classifies interrupted queries as cancelled" do
+    for type <- ["INTERRUPT", "Interrupt"] do
+      error =
+        Error.server(%ErrorResponse{
+          message: "Interrupted: query was cancelled",
+          exception_type: type
+        })
+
+      assert error.code == :query_cancelled
+      refute error.retriable?
+    end
+  end
+
+  test "invalidated and expired connections require a reconnect" do
+    invalidated =
+      Error.server(%ErrorResponse{message: "database is invalidated", must_invalidate: true})
+
+    assert invalidated.code == :connection_invalidated
+    assert invalidated.metadata.must_invalidate
+    assert Error.disconnect?(invalidated)
+
+    expired = Error.server("Connection heartbeat lease expired")
+    assert expired.code == :connection_expired
+    assert expired.retriable?
+    assert Error.disconnect?(expired)
   end
 
   test "keeps other server errors non-retriable" do

@@ -26,6 +26,34 @@ defmodule QuackDB.Integration.AppendTest do
     TestHelper.drop_table!(conn, table)
   end
 
+  test "insert_rows infers types from every row without losing values", %{conn: conn} do
+    table = TestHelper.unique_table("append_inferred")
+
+    TestHelper.create_table!(conn, table,
+      id: :bigint,
+      score: :double,
+      note: :varchar,
+      payload: "STRUCT(a DOUBLE, b VARCHAR)"
+    )
+
+    QuackDB.insert_rows!(conn, table, [
+      [id: 1, score: 1, payload: %{a: 1}],
+      [id: 10_000_000_000, score: 2.5, note: "late key", payload: %{a: 2.5, b: "x"}]
+    ])
+
+    assert %QuackDB.Result{
+             rows: [
+               [1, 1.0, nil, %{"a" => 1.0, "b" => nil}],
+               [10_000_000_000, 2.5, "late key", %{"a" => 2.5, "b" => "x"}]
+             ]
+           } = QuackDB.query!(conn, "SELECT id, score, note, payload FROM #{table} ORDER BY id")
+
+    assert {:error, %QuackDB.Error{code: :mixed_append_types}} =
+             QuackDB.insert_rows(conn, table, [[id: 1, note: "a"], [id: 2, note: 3]])
+
+    TestHelper.drop_table!(conn, table)
+  end
+
   test "Explorer dataframes append through column-oriented native append", %{
     conn: conn,
     table: table

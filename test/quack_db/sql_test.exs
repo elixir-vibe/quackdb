@@ -9,8 +9,18 @@ defmodule QuackDB.SQLTest do
   test "builds SET statements" do
     assert QuackDB.SQL.set(:threads, 8) |> IO.iodata_to_binary() == "SET threads = 8;"
 
-    assert QuackDB.SQL.set_global(:quack_fetch_batch_chunks, 4) |> IO.iodata_to_binary() ==
-             "SET GLOBAL quack_fetch_batch_chunks = 4;"
+    assert QuackDB.SQL.set_global(:quack_target_batch_bytes, 4) |> IO.iodata_to_binary() ==
+             "SET GLOBAL quack_target_batch_bytes = 4;"
+  end
+
+  test "builds DuckDB variable statements" do
+    assert QuackDB.SQL.set_variable(:threshold, 10) |> IO.iodata_to_binary() ==
+             "SET VARIABLE threshold = 10;"
+
+    assert QuackDB.SQL.reset_variable("threshold") |> IO.iodata_to_binary() ==
+             "RESET VARIABLE threshold;"
+
+    assert_raise ArgumentError, fn -> QuackDB.SQL.set_variable("bad name", 1) end
   end
 
   test "builds EXPLAIN statements" do

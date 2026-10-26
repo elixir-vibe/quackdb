@@ -250,7 +250,7 @@ defmodule QuackDB.Integration.Ecto.ConstraintTest do
       assert error.code == :ecto_feature_not_supported
       assert error.metadata.feature == :migration_constraint
       assert {:error, %QuackDB.Error{message: message}} = Repo.query(sql)
-      assert message =~ "No support for that ALTER TABLE option yet"
+      assert message =~ "No support for"
     end
   end
 end

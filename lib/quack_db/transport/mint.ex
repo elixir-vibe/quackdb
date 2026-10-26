@@ -121,8 +121,11 @@ defmodule QuackDB.Transport.Mint do
         end
     after
       timeout ->
-        {:error, Error.new(:transport_error, "HTTP response timed out", source: :transport),
-         close_connection(state)}
+        {:error,
+         Error.new(:transport_error, "HTTP response timed out",
+           source: :transport,
+           metadata: %{reason: :timeout}
+         ), close_connection(state)}
     end
   end
 
