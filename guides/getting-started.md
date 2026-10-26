@@ -5,7 +5,7 @@ QuackDB connects Elixir applications to a DuckDB process through DuckDB's Quack 
 ## Requirements
 
 - Elixir 1.19 or newer
-- DuckDB 2.0 with the `quack` extension (Quack protocol version 3)
+- DuckDB 2.0 with the `quack` extension (Quack protocol version 3). Connecting to a DuckDB 1.5 server fails with `:unsupported_quack_version`; QuackDB 0.5 is the release line for DuckDB 1.5.
 - A running Quack server
 
 ## Install

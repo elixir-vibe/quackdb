@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 - Unreleased
+## 0.6.0 - 2026-10-26
 
 QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quack protocol version 3. DuckDB 1.5 servers are no longer supported: the two protocol versions are not wire-compatible, and connecting to an older server fails with `:unsupported_quack_version`.
 
@@ -10,6 +10,7 @@ QuackDB now targets DuckDB 2.0 and its stable Quack extension, which speaks Quac
 - `QuackDB.Server` no longer sets the removed `quack_fetch_batch_chunks` setting, which made DuckDB 2.0 exit during boot (#8). DuckDB 2.0 sizes result batches by bytes with `quack_target_batch_bytes`.
 - Native appends no longer use the removed `APPEND_REQUEST` message. Each append is one `INSERT INTO table (columns) SELECT * FROM scan_data_from_quack_client(...)` statement fed by numbered send-data batches. Omitted columns now get their defaults and sequence values, and append errors no longer carry the `Failed to append:` prefix.
 - `QuackDB.Profile` follows DuckDB 2.0's grouped profile JSON: `query`, `parser`, `planner`, `physical_planner`, `optimizer`, `io`, `system`, and `operators`. Operators carry `type`, `timing`, `intermediate_rows`, and `rows_scanned`; the flat 1.5 fields such as `latency` and `operator_timing` are gone.
+- Append type inference considers every row and value instead of the first. Rows with keys the first row lacks now append those columns too, and columns that mix shapes, such as maps and integers, fail with `:mixed_append_types` instead of dropping or NULLing values. Declare `:columns` (or `:variant`) for such data.
 - `result_uuid` is renamed `query_uuid` in `QuackDB.Query`, `QuackDB.Cursor`, result metadata, and fetch telemetry, matching the protocol.
 - DuckDB 2.0 itself changes some output: function-call column names follow the new parser (`"version"()`), integer division by zero raises, `EXPLAIN` renders boxes with readable operator names, and database files written by 2.0 cannot be opened by DuckDB 1.5.
 

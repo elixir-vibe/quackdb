@@ -151,6 +151,33 @@ from event in "events",
 
 DuckDB regexes use RE2, so `~r` literals are intended for the syntax subset shared with Elixir regexes.
 
+### JSON values and variables
+
+DuckDB 2.0's `json_set/3`, `json_insert/3`, `json_replace/3`, and `json_remove/2` change JSON documents in place, so they work in `update_all` as well as in selects. Paths are lists or JSON path strings, and values are converted with `to_json`:
+
+```elixir
+use QuackDB.Ecto
+
+from(event in "events",
+  where: event.id == ^id,
+  update: [set: [payload: json_remove(json_set(event.payload, [:status], "archived"), [:draft])]]
+)
+|> MyApp.AnalyticsRepo.update_all([])
+```
+
+`variable/1` reads a DuckDB variable as `$name`. Variables belong to one connection, so set and read them in one checkout:
+
+```elixir
+alias QuackDB.SQL
+
+MyApp.AnalyticsRepo.checkout(fn ->
+  MyApp.AnalyticsRepo.query!(SQL.set_variable(:min_score, 10))
+  MyApp.AnalyticsRepo.all(from event in "events", where: event.score >= variable(:min_score), select: event.id)
+end)
+```
+
+VARIANT columns have their own helpers, such as `variant_extract/2` and `variant_type/1`; see [Type support](type-support.md).
+
 ### Pivoting and grouping extensions
 
 DuckDB statement-level syntax such as `PIVOT`, `UNPIVOT`, `GROUPING SETS`, `ROLLUP`, and `CUBE` has builders in `QuackDB.SQL`:
@@ -269,6 +296,35 @@ defmodule MyApp.Repo.Migrations.AddArchived do
   end
 end
 ```
+
+DDL that the migration DSL has no form for, such as nested schemas and DuckDB 2.0 triggers, comes from `QuackDB.DDL`; `execute` takes its builders directly:
+
+```elixir
+defmodule MyApp.Repo.Migrations.AddReports do
+  use Ecto.Migration
+
+  alias QuackDB.DDL
+
+  def up do
+    execute DDL.create_schema(:finance)
+    execute DDL.create_schema([:finance, :reports])
+    execute DDL.create_table({[:finance, :reports], :ledger}, amount: :integer)
+
+    execute DDL.create_trigger(:count_events, :events,
+      "UPDATE event_stats SET total = total + (SELECT count(*) FROM inserted)",
+      event: :insert,
+      referencing: [new_table: :inserted]
+    )
+  end
+
+  def down do
+    execute DDL.drop_trigger(:count_events, :events)
+    execute DDL.drop_schema(:finance, cascade: true)
+  end
+end
+```
+
+Ecto queries reach tables in a nested schema through a dotted prefix, such as `@schema_prefix "finance.reports"`.
 
 ## Types
 

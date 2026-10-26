@@ -447,4 +447,43 @@ defmodule QuackDB.Integration.DuckDB2Test do
       QuackDB.IntegrationRepo.query!(DDL.drop_schema(root, cascade: true))
     end
   end
+
+  # The JSON and variable examples in guides/ecto.md.
+  test "Ecto updates JSON in place and reads variables in one checkout" do
+    import Ecto.Query
+    import QuackDB.Ecto.Analytics, only: [json_remove: 2, json_set: 3, variable: 1]
+
+    alias QuackDB.IntegrationRepo, as: Repo
+
+    start_repo!()
+    table = unique_table("duckdb2_json_events")
+    Repo.query!("CREATE TEMP TABLE #{table} (id INTEGER, score INTEGER, payload JSON)")
+    Repo.query!(~s|INSERT INTO #{table} VALUES (1, 5, '{"draft": true}'), (2, 20, '{}')|)
+
+    assert {1, _rows} =
+             from(event in table,
+               where: event.id == ^1,
+               update: [
+                 set: [
+                   payload: json_remove(json_set(event.payload, [:status], "archived"), [:draft])
+                 ]
+               ]
+             )
+             |> Repo.update_all([])
+
+    assert [~s|{"status":"archived"}|] =
+             Repo.all(from(event in table, where: event.id == 1, select: event.payload))
+
+    assert [2] =
+             Repo.checkout(fn ->
+               Repo.query!(QuackDB.SQL.set_variable(:min_score, 10))
+
+               Repo.all(
+                 from(event in table,
+                   where: event.score >= variable(:min_score),
+                   select: event.id
+                 )
+               )
+             end)
+  end
 end
