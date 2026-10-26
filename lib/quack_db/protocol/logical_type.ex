@@ -185,49 +185,72 @@ defmodule QuackDB.Protocol.LogicalType do
 
   def holds_binaries?(%__MODULE__{} = type), do: physical_type(type) == :varchar
 
+  @doc """
+  Returns the physical storage type of a logical type, raising for types
+  QuackDB cannot encode or decode, such as UNION.
+  """
   @spec physical_type(t()) :: atom()
-  def physical_type(%__MODULE__{name: :boolean}), do: :bool
-  def physical_type(%__MODULE__{name: :tinyint}), do: :int8
-  def physical_type(%__MODULE__{name: :utinyint}), do: :uint8
-  def physical_type(%__MODULE__{name: :smallint}), do: :int16
-  def physical_type(%__MODULE__{name: :usmallint}), do: :uint16
-  def physical_type(%__MODULE__{name: name}) when name in [:sqlnull, :date, :integer], do: :int32
-  def physical_type(%__MODULE__{name: :uinteger}), do: :uint32
+  def physical_type(type) do
+    case fetch_physical_type(type) do
+      {:ok, physical_type} -> physical_type
+      {:error, error} -> raise error
+    end
+  end
 
-  def physical_type(%__MODULE__{name: name}) when name in [:bigint | @int64_temporal],
-    do: :int64
+  @doc "Returns the physical storage type of a logical type, or an `:unsupported_type` error."
+  @spec fetch_physical_type(t()) :: {:ok, atom()} | {:error, Error.t()}
+  def fetch_physical_type(type) do
+    case physical_type_of(type) do
+      nil -> error(:unsupported_type, "unsupported logical type #{inspect(type)}")
+      physical_type -> {:ok, physical_type}
+    end
+  end
 
-  def physical_type(%__MODULE__{name: :ubigint}), do: :uint64
-  def physical_type(%__MODULE__{name: :float}), do: :float
-  def physical_type(%__MODULE__{name: :double}), do: :double
+  defp physical_type_of(%__MODULE__{name: :boolean}), do: :bool
+  defp physical_type_of(%__MODULE__{name: :tinyint}), do: :int8
+  defp physical_type_of(%__MODULE__{name: :utinyint}), do: :uint8
+  defp physical_type_of(%__MODULE__{name: :smallint}), do: :int16
+  defp physical_type_of(%__MODULE__{name: :usmallint}), do: :uint16
 
-  def physical_type(%__MODULE__{name: name})
-      when name in [:varchar, :char, :blob, :bit, :bignum, :geometry], do: :varchar
-
-  def physical_type(%__MODULE__{name: :hugeint}), do: :int128
-  def physical_type(%__MODULE__{name: :uhugeint}), do: :uint128
-  def physical_type(%__MODULE__{name: :uuid}), do: :int128
-  def physical_type(%__MODULE__{name: :interval}), do: :interval
-
-  def physical_type(%__MODULE__{name: name}) when name in [:struct, :tuple, :variant],
-    do: :struct
-
-  def physical_type(%__MODULE__{name: name}) when name in [:list, :map], do: :list
-  def physical_type(%__MODULE__{name: :array}), do: :array
-
-  def physical_type(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 4,
-    do: :int16
-
-  def physical_type(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 9,
+  defp physical_type_of(%__MODULE__{name: name}) when name in [:sqlnull, :date, :integer],
     do: :int32
 
-  def physical_type(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 18,
+  defp physical_type_of(%__MODULE__{name: :uinteger}), do: :uint32
+
+  defp physical_type_of(%__MODULE__{name: name}) when name in [:bigint | @int64_temporal],
     do: :int64
 
-  def physical_type(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 38,
+  defp physical_type_of(%__MODULE__{name: :ubigint}), do: :uint64
+  defp physical_type_of(%__MODULE__{name: :float}), do: :float
+  defp physical_type_of(%__MODULE__{name: :double}), do: :double
+
+  defp physical_type_of(%__MODULE__{name: name})
+       when name in [:varchar, :char, :blob, :bit, :bignum, :geometry], do: :varchar
+
+  defp physical_type_of(%__MODULE__{name: :hugeint}), do: :int128
+  defp physical_type_of(%__MODULE__{name: :uhugeint}), do: :uint128
+  defp physical_type_of(%__MODULE__{name: :uuid}), do: :int128
+  defp physical_type_of(%__MODULE__{name: :interval}), do: :interval
+
+  defp physical_type_of(%__MODULE__{name: name}) when name in [:struct, :tuple, :variant],
+    do: :struct
+
+  defp physical_type_of(%__MODULE__{name: name}) when name in [:list, :map], do: :list
+  defp physical_type_of(%__MODULE__{name: :array}), do: :array
+
+  defp physical_type_of(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 4,
+    do: :int16
+
+  defp physical_type_of(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 9,
+    do: :int32
+
+  defp physical_type_of(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 18,
+    do: :int64
+
+  defp physical_type_of(%__MODULE__{name: :decimal, type_info: %{width: width}}) when width <= 38,
     do: :int128
 
-  def physical_type(%__MODULE__{name: :enum, type_info: %{values: values}}) do
+  defp physical_type_of(%__MODULE__{name: :enum, type_info: %{values: values}}) do
     cond do
       Enum.count_until(values, 0xFF + 1) <= 0xFF -> :uint8
       Enum.count_until(values, 0xFFFF + 1) <= 0xFFFF -> :uint16
@@ -235,15 +258,9 @@ defmodule QuackDB.Protocol.LogicalType do
     end
   end
 
-  def physical_type(%__MODULE__{name: :enum}), do: :uint32
+  defp physical_type_of(%__MODULE__{name: :enum}), do: :uint32
 
-  def physical_type(type),
-    do:
-      raise(
-        Error.new(:unsupported_type, "unsupported logical type #{inspect(type)}",
-          source: :protocol
-        )
-      )
+  defp physical_type_of(_type), do: nil
 
   @spec fixed_size(atom()) :: pos_integer()
   def fixed_size(type) when type in [:bool, :int8, :uint8], do: 1
@@ -456,7 +473,9 @@ defmodule QuackDB.Protocol.LogicalType do
     with {:ok, value, rest} <- read.(binary), do: {:ok, Map.put(object, key, value), rest}
   end
 
-  # DuckDB omits an empty child list, as for DuckDB 2.0's empty STRUCTs.
+  # DuckDB omits fields left at their defaults: a DECIMAL's zero scale, and
+  # the empty child list of DuckDB 2.0's empty STRUCTs.
+  defp default_type_info(%{type: 2} = info), do: Map.put_new(info, :scale, 0)
   defp default_type_info(%{type: 5} = info), do: Map.put_new(info, :children, [])
   defp default_type_info(info), do: info
 
@@ -482,6 +501,9 @@ defmodule QuackDB.Protocol.LogicalType do
   defp type_info_field_200(binary, %{type: 6} = info),
     do: put_field(binary, info, :values_count, &Reader.read_uleb128/1)
 
+  defp type_info_field_200(binary, %{type: 13} = info),
+    do: put_field(binary, info, :crs, &decode_crs/1)
+
   defp type_info_field_200(binary, info),
     do: put_field(binary, info, :value, &Reader.read_string/1)
 
@@ -496,6 +518,20 @@ defmodule QuackDB.Protocol.LogicalType do
 
   defp type_info_field_201(binary, info),
     do: put_field(binary, info, field_201_name(info), &Reader.read_uleb128/1)
+
+  # A GEOMETRY's coordinate reference system is an object holding its
+  # definition, such as "OGC:CRS84"; DuckDB omits an empty one.
+  defp decode_crs(binary),
+    do:
+      Reader.read_object(
+        binary,
+        nil,
+        &crs_field/3,
+        {:unknown_crs_field, "coordinate reference system"}
+      )
+
+  defp crs_field(100, binary, _definition), do: Reader.read_string(binary)
+  defp crs_field(_field_id, _binary, _definition), do: :unknown
 
   defp decode_child_type(binary) do
     with {:ok, child, rest} <-

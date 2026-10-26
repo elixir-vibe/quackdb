@@ -34,9 +34,13 @@ defmodule QuackDB.Protocol.Vector do
     end
   end
 
+  # Malformed values deep inside a vector throw {:invalid_value, error}; the
+  # public entry points turn that into an error result.
   @spec decode(binary(), LogicalType.t(), non_neg_integer()) :: Reader.read_result(t())
   def decode(binary, type, row_count) do
     decode_object(binary, type, row_count, %__MODULE__{type: type})
+  catch
+    {:invalid_value, %Error{} = error} -> {:error, error}
   end
 
   defp encode_flat(type, values, row_count) do
@@ -108,6 +112,15 @@ defmodule QuackDB.Protocol.Vector do
 
   defp encode_fixed_blob(type, physical_type, values) do
     values |> Enum.map(&encode_fixed_value(type, physical_type, &1)) |> IO.iodata_to_binary()
+  end
+
+  # DuckDB 2.0 still reads GEOMETRY as a list of blobs: its vector
+  # deserializer handles GEOMETRY before the VARCHAR layout below.
+  defp encode_variable_values(%LogicalType{name: :geometry} = type, values, :varchar, row_count) do
+    Writer.field(
+      102,
+      Writer.list(values, row_count, fn value -> Writer.blob(encode_string_like(type, value)) end)
+    )
   end
 
   # DuckDB 2.0 serializes strings as one lengths blob and one bytes blob.
@@ -325,18 +338,22 @@ defmodule QuackDB.Protocol.Vector do
   defp maybe_skip_geometry_version(binary, _type), do: {:ok, binary}
 
   defp read_values(binary, type, row_count, validity) do
-    physical_type = LogicalType.physical_type(type)
-
-    if LogicalType.fixed_size?(physical_type) do
-      byte_size = LogicalType.fixed_size(physical_type) * row_count
-
-      with {:ok, blob, rest} <- read_required(binary, 102, &Reader.read_blob/1),
-           :ok <- expect_blob_size(blob, byte_size),
-           {:ok, values} <- Value.decode_column(blob, type, physical_type, validity) do
-        {:ok, values, rest}
+    with {:ok, physical_type} <- LogicalType.fetch_physical_type(type) do
+      if LogicalType.fixed_size?(physical_type) do
+        read_fixed_values(binary, type, physical_type, row_count, validity)
+      else
+        decode_variable_values(binary, type, physical_type, row_count, validity)
       end
-    else
-      decode_variable_values(binary, type, physical_type, row_count, validity)
+    end
+  end
+
+  defp read_fixed_values(binary, type, physical_type, row_count, validity) do
+    byte_size = LogicalType.fixed_size(physical_type) * row_count
+
+    with {:ok, blob, rest} <- read_required(binary, 102, &Reader.read_blob/1),
+         :ok <- expect_blob_size(blob, byte_size),
+         {:ok, values} <- Value.decode_column(blob, type, physical_type, validity) do
+      {:ok, values, rest}
     end
   end
 
@@ -974,8 +991,12 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   @doc false
-  @spec decode_string_value(LogicalType.t(), binary()) :: term()
-  def decode_string_value(type, value), do: decode_string_like(type, value)
+  @spec decode_string_value(LogicalType.t(), binary()) :: {:ok, term()} | {:error, Error.t()}
+  def decode_string_value(type, value) do
+    {:ok, decode_string_like(type, value)}
+  catch
+    {:invalid_value, %Error{} = error} -> {:error, error}
+  end
 
   defp decode_string_like(%{name: name}, value) when name in [:blob, :geometry], do: value
   defp decode_string_like(%{name: :bit}, value), do: decode_bitstring(value)
@@ -986,9 +1007,7 @@ defmodule QuackDB.Protocol.Vector do
     if String.valid?(value) do
       value
     else
-      raise Error.new(:invalid_string, "expected valid UTF-8 string vector value",
-              source: :protocol
-            )
+      invalid_value!(:invalid_string, "expected valid UTF-8 string vector value")
     end
   end
 
@@ -1039,14 +1058,12 @@ defmodule QuackDB.Protocol.Vector do
     if byte_size(magnitude) == size do
       decode_unsigned_big_endian(magnitude)
     else
-      raise Error.new(:invalid_bignum, "BIGNUM payload size does not match header",
-              source: :protocol
-            )
+      invalid_value!(:invalid_bignum, "BIGNUM payload size does not match header")
     end
   end
 
   defp decode_positive_bignum(_value) do
-    raise Error.new(:invalid_bignum, "expected DuckDB BIGNUM payload", source: :protocol)
+    invalid_value!(:invalid_bignum, "expected DuckDB BIGNUM payload")
   end
 
   defp decode_unsigned_big_endian(value) do
@@ -1063,8 +1080,11 @@ defmodule QuackDB.Protocol.Vector do
   end
 
   defp decode_bitstring(_value) do
-    raise Error.new(:invalid_bitstring, "expected DuckDB BIT payload", source: :protocol)
+    invalid_value!(:invalid_bitstring, "expected DuckDB BIT payload")
   end
+
+  defp invalid_value!(code, message),
+    do: throw({:invalid_value, Error.new(code, message, source: :protocol)})
 
   defp read_required(binary, expected_field_id, read_value) do
     with {:ok, field_id, rest} <- Reader.read_field_id(binary),

@@ -187,9 +187,8 @@ defmodule QuackDB.Protocol.Variant do
   defp decode_value(type_id, payload, _row) when is_map_key(@string_decoders, type_id) do
     type = Map.fetch!(@string_decoders, type_id)
 
-    with {:ok, bytes, _rest} <- Reader.read_blob(payload) do
-      {:ok, QuackDB.Protocol.Vector.decode_string_value(type, bytes)}
-    end
+    with {:ok, bytes, _rest} <- Reader.read_blob(payload),
+         do: QuackDB.Protocol.Vector.decode_string_value(type, bytes)
   end
 
   defp decode_value(@decimal, payload, _row) do
