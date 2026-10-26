@@ -303,6 +303,30 @@ defmodule QuackDB.DDLTest do
              ~s(CREATE TABLE "finance"."reports"."ledger")
   end
 
+  test "attach and detach statements" do
+    assert IO.iodata_to_binary(
+             DDL.attach("ducklake:meta.ducklake", :lake,
+               data_path: "s3://bucket/lake/",
+               read_only: true,
+               if_not_exists: true
+             )
+           ) ==
+             ~s(ATTACH IF NOT EXISTS 'ducklake:meta.ducklake' AS "lake" ) <>
+               ~s[(DATA_PATH 's3://bucket/lake/', READ_ONLY TRUE)]
+
+    assert IO.iodata_to_binary(
+             DDL.attach("s3://bucket/events", "events", type: :delta, version: 5)
+           ) ==
+             ~s[ATTACH 's3://bucket/events' AS "events" (TYPE delta, VERSION 5)]
+
+    assert IO.iodata_to_binary(DDL.attach("it's.db", :db)) == ~s(ATTACH 'it''s.db' AS "db")
+    assert IO.iodata_to_binary(DDL.detach(:lake, if_exists: true)) == ~s(DETACH IF EXISTS "lake")
+
+    assert_raise ArgumentError, ~r/invalid DuckDB attach option/, fn ->
+      DDL.attach("x.db", :db, "type; DROP": :delta)
+    end
+  end
+
   test "builds trigger statements" do
     assert IO.iodata_to_binary(
              DDL.create_trigger(:events_count, :events, "UPDATE stats SET n = n + 1",

@@ -250,6 +250,69 @@ defmodule QuackDB.DDL do
   end
 
   @doc """
+  Builds an `ATTACH` statement that attaches `path` as the database `name`.
+
+  Options become DuckDB attach options, such as `:type`, `:read_only`, or a
+  DuckLake `:data_path`. Atoms are written as keywords, other values as
+  literals:
+
+      alias QuackDB.DDL
+
+      DDL.attach("ducklake:metadata.ducklake", :lake, data_path: "s3://bucket/lake/")
+      DDL.attach("s3://bucket/events", :events, type: :delta)
+      DDL.attach("s3://bucket/events", :events_v5, type: :delta, version: 5)
+
+  Supports `if_not_exists: true`.
+  """
+  @spec attach(String.t(), atom() | String.t(), keyword()) :: iodata()
+  def attach(path, name, options \\ []) when is_binary(path) and is_list(options) do
+    {if_not_exists, options} = Keyword.pop(options, :if_not_exists, false)
+
+    [
+      "ATTACH ",
+      if_not_exists(if_not_exists: if_not_exists),
+      QuackDB.SQL.literal!(path),
+      " AS ",
+      schema(name),
+      attach_options(options)
+    ]
+  end
+
+  @doc "Builds a `DETACH` statement. Supports `if_exists: true`."
+  @spec detach(atom() | String.t(), keyword()) :: iodata()
+  def detach(name, options \\ []) do
+    options = Keyword.validate!(options, if_exists: false)
+    ["DETACH ", if_exists(options), schema(name)]
+  end
+
+  defp attach_options([]), do: []
+
+  defp attach_options(options) do
+    options =
+      Enum.map(options, fn {key, value} ->
+        [attach_option_name(key), ?\s, attach_option_value(value)]
+      end)
+
+    [" (", Enum.intersperse(options, ", "), ")"]
+  end
+
+  defp attach_option_name(key) when is_atom(key) do
+    name = Atom.to_string(key)
+
+    unless QuackDB.Identifier.valid?(name) do
+      raise ArgumentError, "invalid DuckDB attach option: #{inspect(key)}"
+    end
+
+    String.upcase(name)
+  end
+
+  defp attach_option_value(value)
+       when is_atom(value) and not is_boolean(value) and not is_nil(value),
+       do: attach_option_name(value) |> String.downcase()
+
+  defp attach_option_value(value), do: QuackDB.SQL.literal!(value)
+
+  @doc """
   Builds a DuckDB 2.0 `CREATE TRIGGER` statement that runs `statement`, a SQL
   statement such as an `INSERT` or `UPDATE`, when `event` changes `table`.
 
