@@ -137,7 +137,16 @@ defmodule QuackDB.Protocol.DataChunk do
   follows fetch responses and send-data requests.
   """
   @spec decode(binary()) :: Reader.read_result(t())
-  def decode(binary), do: decode_chunk(binary, %__MODULE__{})
+  def decode(binary) do
+    with {:ok, chunk, rest} <-
+           Reader.read_object(
+             binary,
+             %__MODULE__{},
+             &chunk_field/3,
+             {:unknown_data_chunk_field, "data chunk"}
+           ),
+         do: validate_chunk(chunk, rest)
+  end
 
   @spec rows(t(), [String.t()] | nil) :: [[term()]]
   def rows(chunk, names \\ nil)
@@ -516,32 +525,23 @@ defmodule QuackDB.Protocol.DataChunk do
     end
   end
 
-  defp decode_chunk(binary, chunk) do
-    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      cond do
-        field_id == @field_end ->
-          validate_chunk(chunk, rest)
-
-        field_id == 100 ->
-          with {:ok, row_count, rest} <- Reader.read_uleb128(rest) do
-            decode_chunk(rest, %{chunk | row_count: row_count})
-          end
-
-        field_id == 101 ->
-          with {:ok, types, rest} <- Reader.read_list(rest, &LogicalType.decode/1) do
-            decode_chunk(rest, %{chunk | types: types})
-          end
-
-        field_id == 102 ->
-          with {:ok, columns, rest} <- decode_vector_list(rest, chunk.types, chunk.row_count) do
-            decode_chunk(rest, %{chunk | columns: columns})
-          end
-
-        true ->
-          error(:unknown_data_chunk_field, "unknown data chunk field #{field_id}")
-      end
-    end
+  defp chunk_field(100, binary, chunk) do
+    with {:ok, row_count, rest} <- Reader.read_uleb128(binary),
+         do: {:ok, %{chunk | row_count: row_count}, rest}
   end
+
+  defp chunk_field(101, binary, chunk) do
+    with {:ok, types, rest} <- Reader.read_list(binary, &LogicalType.decode/1),
+         do: {:ok, %{chunk | types: types}, rest}
+  end
+
+  # Vectors decode with the types and row count read before them.
+  defp chunk_field(102, binary, chunk) do
+    with {:ok, columns, rest} <- decode_vector_list(binary, chunk.types, chunk.row_count),
+         do: {:ok, %{chunk | columns: columns}, rest}
+  end
+
+  defp chunk_field(_field_id, _binary, _chunk), do: :unknown
 
   defp decode_vector_list(binary, types, row_count) do
     with {:ok, column_count, rest} <- Reader.read_uleb128(binary) do

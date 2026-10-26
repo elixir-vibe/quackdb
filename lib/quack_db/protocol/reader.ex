@@ -9,6 +9,8 @@ defmodule QuackDB.Protocol.Reader do
 
   @type read_result(value) :: {:ok, value, binary()} | {:error, Error.t()}
 
+  @field_end QuackDB.Protocol.field_end()
+
   @spec read_field_id(binary()) :: read_result(non_neg_integer())
   def read_field_id(<<field_id::little-unsigned-16, rest::binary>>) do
     {:ok, field_id, rest}
@@ -16,6 +18,38 @@ defmodule QuackDB.Protocol.Reader do
 
   def read_field_id(_binary) do
     error(:truncated_field_id, "expected a 16-bit field id")
+  end
+
+  @typedoc """
+  Reads the value of field `field_id` into the object decoded so far, or
+  returns `:unknown` for a field the object does not have.
+  """
+  @type field_reader(object) :: (non_neg_integer(), binary(), object ->
+                                   read_result(object) | :unknown)
+
+  @doc """
+  Reads a serialized object: fields until the end marker, each handed to
+  `read_field`. `kind` is the `{code, description}` for unknown fields, such
+  as `{:unknown_data_chunk_field, "data chunk"}`.
+  """
+  @spec read_object(binary(), object, field_reader(object), {atom(), String.t()}) ::
+          read_result(object)
+        when object: term()
+  def read_object(binary, object, read_field, {code, description} = kind) do
+    case read_field_id(binary) do
+      {:ok, @field_end, rest} ->
+        {:ok, object, rest}
+
+      {:ok, field_id, rest} ->
+        case read_field.(field_id, rest, object) do
+          {:ok, object, rest} -> read_object(rest, object, read_field, kind)
+          :unknown -> error(code, "unknown #{description} field #{field_id}")
+          {:error, _error} = error -> error
+        end
+
+      {:error, _error} = error ->
+        error
+    end
   end
 
   @spec read_bool(binary()) :: read_result(boolean())

@@ -11,8 +11,6 @@ defmodule QuackDB.Protocol.LogicalType do
 
   defstruct [:id, :name, :type_info]
 
-  @field_end QuackDB.Protocol.field_end()
-
   # Temporal types DuckDB stores as one signed 64-bit integer.
   @int64_temporal [
     :time,
@@ -387,27 +385,26 @@ defmodule QuackDB.Protocol.LogicalType do
     ]
   end
 
-  defp decode_type(binary, type) do
-    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      cond do
-        field_id == @field_end ->
-          {:ok, type, rest}
+  defp decode_type(binary, type),
+    do:
+      Reader.read_object(
+        binary,
+        type,
+        &type_field/3,
+        {:unknown_logical_type_field, "logical type"}
+      )
 
-        field_id == 100 ->
-          with {:ok, id, rest} <- Reader.read_uleb128(rest) do
-            decode_type(rest, %{type | id: id, name: name(id)})
-          end
-
-        field_id == 101 ->
-          with {:ok, info, rest} <- Reader.read_nullable(rest, &decode_type_info/1) do
-            decode_type(rest, %{type | type_info: info})
-          end
-
-        true ->
-          error(:unknown_logical_type_field, "unknown logical type field #{field_id}")
-      end
-    end
+  defp type_field(100, binary, type) do
+    with {:ok, id, rest} <- Reader.read_uleb128(binary),
+         do: {:ok, %{type | id: id, name: name(id)}, rest}
   end
+
+  defp type_field(101, binary, type) do
+    with {:ok, info, rest} <- Reader.read_nullable(binary, &decode_type_info/1),
+         do: {:ok, %{type | type_info: info}, rest}
+  end
+
+  defp type_field(_field_id, _binary, _type), do: :unknown
 
   defp expect_type_id(%__MODULE__{id: id}) when is_integer(id), do: :ok
 
@@ -420,105 +417,89 @@ defmodule QuackDB.Protocol.LogicalType do
     error(:invalid_logical_type_info, "logical type metadata is missing type field")
   end
 
-  defp decode_type_info(binary), do: decode_type_info(binary, %{})
+  defp decode_type_info(binary) do
+    with {:ok, info, rest} <-
+           Reader.read_object(
+             binary,
+             %{},
+             &type_info_field/3,
+             {:unknown_type_info_field, "logical type metadata"}
+           ),
+         do: {:ok, default_type_info(info), rest}
+  end
 
-  defp decode_type_info(binary, info) do
-    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      cond do
-        field_id == @field_end ->
-          {:ok, default_type_info(info), rest}
+  defp type_info_field(100, binary, info),
+    do: put_field(binary, info, :type, &Reader.read_uleb128/1)
 
-        field_id == 100 ->
-          with {:ok, type, rest} <- Reader.read_uleb128(rest) do
-            decode_type_info(rest, Map.put(info, :type, type))
-          end
+  defp type_info_field(101, binary, info),
+    do: put_field(binary, info, :alias, &Reader.read_string/1)
 
-        field_id == 101 ->
-          with {:ok, alias_name, rest} <- Reader.read_string(rest) do
-            decode_type_info(rest, Map.put(info, :alias, alias_name))
-          end
+  defp type_info_field(200, binary, info), do: type_info_field_200(binary, info)
+  defp type_info_field(201, binary, info), do: type_info_field_201(binary, info)
+  defp type_info_field(_field_id, _binary, _info), do: :unknown
 
-        field_id == 200 ->
-          decode_type_info_field_200(rest, info)
-
-        field_id == 201 ->
-          decode_type_info_field_201(rest, info)
-
-        true ->
-          error(:unknown_type_info_field, "unknown logical type metadata field #{field_id}")
-      end
-    end
+  defp put_field(binary, object, key, read) do
+    with {:ok, value, rest} <- read.(binary), do: {:ok, Map.put(object, key, value), rest}
   end
 
   # DuckDB omits an empty child list, as for DuckDB 2.0's empty STRUCTs.
   defp default_type_info(%{type: 5} = info), do: Map.put_new(info, :children, [])
   defp default_type_info(info), do: info
 
-  defp decode_type_info_field_200(binary, %{type: 2} = info) do
-    with {:ok, width, rest} <- Reader.read_uleb128(binary),
-         do: decode_type_info(rest, Map.put(info, :width, width))
+  # Fields 200 and 201 hold the metadata of the type info's kind.
+  defp type_info_field_200(binary, %{type: 2} = info),
+    do: put_field(binary, info, :width, &Reader.read_uleb128/1)
+
+  defp type_info_field_200(binary, %{type: 3} = info),
+    do: put_field(binary, info, :collation, &Reader.read_string/1)
+
+  defp type_info_field_200(binary, %{type: type} = info) when type in [4, 9],
+    do: put_field(binary, info, :child_type, &decode/1)
+
+  defp type_info_field_200(binary, %{type: 5} = info),
+    do:
+      put_field(
+        binary,
+        info,
+        :children,
+        &Reader.read_list(&1, fn rest -> decode_child_type(rest) end)
+      )
+
+  defp type_info_field_200(binary, %{type: 6} = info),
+    do: put_field(binary, info, :values_count, &Reader.read_uleb128/1)
+
+  defp type_info_field_200(binary, info),
+    do: put_field(binary, info, :value, &Reader.read_string/1)
+
+  defp type_info_field_201(binary, %{type: 6} = info),
+    do:
+      put_field(
+        binary,
+        info,
+        :values,
+        &Reader.read_list(&1, fn rest -> Reader.read_string(rest) end)
+      )
+
+  defp type_info_field_201(binary, info),
+    do: put_field(binary, info, field_201_name(info), &Reader.read_uleb128/1)
+
+  defp decode_child_type(binary) do
+    with {:ok, child, rest} <-
+           Reader.read_object(
+             binary,
+             %{},
+             &child_type_field/3,
+             {:unknown_child_type_field, "child type"}
+           ),
+         :ok <- expect_child_type(child),
+         do: {:ok, child, rest}
   end
 
-  defp decode_type_info_field_200(binary, %{type: 3} = info) do
-    with {:ok, collation, rest} <- Reader.read_string(binary),
-         do: decode_type_info(rest, Map.put(info, :collation, collation))
-  end
+  defp child_type_field(0, binary, child),
+    do: put_field(binary, child, :name, &Reader.read_string/1)
 
-  defp decode_type_info_field_200(binary, %{type: type} = info) when type in [4, 9] do
-    with {:ok, child_type, rest} <- decode(binary),
-         do: decode_type_info(rest, Map.put(info, :child_type, child_type))
-  end
-
-  defp decode_type_info_field_200(binary, %{type: 5} = info) do
-    with {:ok, children, rest} <- Reader.read_list(binary, &decode_child_type/1),
-         do: decode_type_info(rest, Map.put(info, :children, children))
-  end
-
-  defp decode_type_info_field_200(binary, %{type: 6} = info) do
-    with {:ok, count, rest} <- Reader.read_uleb128(binary),
-         do: decode_type_info(rest, Map.put(info, :values_count, count))
-  end
-
-  defp decode_type_info_field_200(binary, info) do
-    with {:ok, value, rest} <- Reader.read_string(binary),
-         do: decode_type_info(rest, Map.put(info, :value, value))
-  end
-
-  defp decode_type_info_field_201(binary, %{type: 6} = info) do
-    with {:ok, values, rest} <- Reader.read_list(binary, &Reader.read_string/1) do
-      decode_type_info(rest, Map.put(info, :values, values))
-    end
-  end
-
-  defp decode_type_info_field_201(binary, info) do
-    with {:ok, value, rest} <- Reader.read_uleb128(binary) do
-      decode_type_info(rest, Map.put(info, field_201_name(info), value))
-    end
-  end
-
-  defp decode_child_type(binary), do: decode_child_type(binary, %{})
-
-  defp decode_child_type(binary, child) do
-    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      cond do
-        field_id == @field_end ->
-          with :ok <- expect_child_type(child), do: {:ok, child, rest}
-
-        field_id == 0 ->
-          with {:ok, name, rest} <- Reader.read_string(rest) do
-            decode_child_type(rest, Map.put(child, :name, name))
-          end
-
-        field_id == 1 ->
-          with {:ok, type, rest} <- decode(rest) do
-            decode_child_type(rest, Map.put(child, :type, type))
-          end
-
-        true ->
-          error(:unknown_child_type_field, "unknown child type field #{field_id}")
-      end
-    end
-  end
+  defp child_type_field(1, binary, child), do: put_field(binary, child, :type, &decode/1)
+  defp child_type_field(_field_id, _binary, _child), do: :unknown
 
   defp expect_child_type(%{name: name, type: %__MODULE__{}}) when is_binary(name), do: :ok
 

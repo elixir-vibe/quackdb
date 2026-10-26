@@ -341,22 +341,17 @@ defmodule QuackDB.Protocol.Codec do
   # `%{field_id => {struct_key, reader}}`. Absent fields keep the struct
   # default, matching DuckDB's `WritePropertyWithDefault`.
   defp decode_fields(binary, acc, name, fields) do
-    with {:ok, field_id, rest} <- Reader.read_field_id(binary) do
-      case field_id do
-        @field_end ->
-          {:ok, acc, rest}
+    read_field = fn field_id, rest, acc ->
+      case fields do
+        %{^field_id => {key, read}} ->
+          with {:ok, value, rest} <- read.(rest), do: {:ok, Map.put(acc, key, value), rest}
 
-        field_id when is_map_key(fields, field_id) ->
-          {key, read} = Map.fetch!(fields, field_id)
-
-          with {:ok, value, rest} <- read.(rest) do
-            decode_fields(rest, Map.put(acc, key, value), name, fields)
-          end
-
-        field_id ->
-          error(:"unknown_#{name}_field", "unknown #{humanize(name)} field #{field_id}")
+        _fields ->
+          :unknown
       end
     end
+
+    Reader.read_object(binary, acc, read_field, {:"unknown_#{name}_field", humanize(name)})
   end
 
   defp humanize(:header), do: "message header"
