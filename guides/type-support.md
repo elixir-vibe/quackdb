@@ -103,7 +103,7 @@ end
 
 `QuackDB.insert_rows/4` supports scalar append values plus nested `LIST`, `STRUCT`, `ARRAY`, and `MAP` columns when explicit column specs are provided. Temporal append values use Elixir's Calendar conversion APIs and are encoded in DuckDB's ISO calendar representation.
 
-Plain Elixir maps infer as DuckDB `STRUCT` values. For explicit `{:map, key_type, value_type}` columns, QuackDB accepts either DuckDB-style key/value entries or ordinary Elixir maps:
+Inferred types account for every value in a column: integers widen to `BIGINT` or `HUGEINT` as needed, integers mixed with floats become `DOUBLE` (while a `DOUBLE` holds them exactly), decimals and integers share one `DECIMAL` wide enough for all of them, and plain Elixir maps infer as DuckDB `STRUCT` values with the union of their keys. Any other mix fails with `:mixed_append_types` instead of truncating, dropping, or NULLing values. For explicit `{:map, key_type, value_type}` columns, QuackDB accepts either DuckDB-style key/value entries or ordinary Elixir maps:
 
 ```elixir
 QuackDB.insert_rows!(conn, "events", [[labels: %{env: "prod", region: "eu"}]],
@@ -115,7 +115,7 @@ QuackDB.insert_rows!(conn, "events", [[labels: [%{key: "env", value: "prod"}]]],
 )
 ```
 
-VARIANT columns take any JSON-shaped value when declared as `:variant`; QuackDB sends JSON text and DuckDB casts it on insert, so objects, arrays, and scalars keep their shapes. Without the declaration, column types are inferred from the first non-nil value, so a VARIANT column with mixed shapes needs it:
+VARIANT columns take any JSON-shaped value when declared as `:variant`; QuackDB sends JSON text and DuckDB casts it on insert, so objects, arrays, and scalars keep their shapes. Without the declaration, inference refuses to mix maps, lists, and scalars in one column, with a `:mixed_append_types` error. A VARIANT column with mixed shapes needs it:
 
 ```elixir
 QuackDB.insert_rows!(conn, "events", [[payload: %{kind: "duck"}], [payload: [1, 2]]],

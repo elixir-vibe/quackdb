@@ -72,8 +72,14 @@ defmodule QuackDB do
   @doc """
   Appends row-oriented values to a DuckDB table by streaming binary vectors into an `INSERT`.
 
-  Rows are maps or keywords. Pass `:columns` with type specs when values are empty,
-  contain only nils, or need a specific nested DuckDB type.
+  Rows are maps or keywords. Without `:columns`, every row's keys name the
+  columns and every value takes part in a column's type: integers widen to
+  `BIGINT` or `HUGEINT`, integers and floats make `DOUBLE`, decimals and
+  integers make one `DECIMAL`, and maps make a `STRUCT` of all their keys. Any
+  other mix, such as integers and strings, fails with `:mixed_append_types`
+  instead of truncating or dropping values. Pass `:columns` with type specs when
+  values are empty, contain only nils, mix shapes (`:variant` keeps them), or
+  need a specific DuckDB type.
 
   Plain Elixir maps infer as DuckDB `STRUCT` values. For explicit
   `{:map, key_type, value_type}` columns, ordinary Elixir maps are encoded as

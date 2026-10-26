@@ -352,7 +352,7 @@ result.num_rows
 #=> 2
 ```
 
-Keyword rows preserve append order and allow QuackDB to infer the column list from the first row. Map rows are also accepted, but pass `:columns` for stable append order and types. Explicit columns are still required for empty batches or all-null columns. Use `batch_size: n` to split large inputs across multiple append requests while returning the total inserted row count.
+Keyword rows preserve append order and allow QuackDB to infer the columns from the rows: every row's keys become columns, and each column's type fits all of its values. Map rows are also accepted, but pass `:columns` for stable append order and types. Explicit columns are still required for empty batches or all-null columns. Use `batch_size: n` to split large inputs across multiple append requests while returning the total inserted row count.
 
 Native append columns can be declared with scalar `QuackDB.Type` specs and nested specs such as `{:list, :varchar}`, `{:struct, [source: :varchar, count: :integer]}`, `{:array, :integer, 3}`, and `{:map, :varchar, :varchar}`. Explicit MAP columns accept ordinary Elixir maps:
 

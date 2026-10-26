@@ -4,6 +4,7 @@ defmodule QuackDB.Protocol.DataChunk do
   """
 
   alias QuackDB.Error
+  alias QuackDB.Protocol.Inference
   alias QuackDB.Protocol.LogicalType
   alias QuackDB.Protocol.Reader
   alias QuackDB.Protocol.Vector
@@ -237,11 +238,7 @@ defmodule QuackDB.Protocol.DataChunk do
 
   defp infer_columns_from_column_values(values) do
     values
-    |> Enum.map(fn {name, column_values} ->
-      with {:ok, type} <- infer_type(column_values) do
-        {:ok, %{name: name, type: type}}
-      end
-    end)
+    |> Enum.map(fn {name, column_values} -> infer_column(name, column_values) end)
     |> collect_ok()
   end
 
@@ -322,31 +319,44 @@ defmodule QuackDB.Protocol.DataChunk do
 
   defp infer_columns([first | _] = rows) when is_list(first) do
     if Keyword.keyword?(first) do
-      first
-      |> Keyword.keys()
-      |> infer_columns_from_names(rows)
+      infer_columns_from_names(row_names(rows), rows)
     else
       error(:invalid_append_row, "append rows must be maps or keyword lists")
     end
   end
 
-  defp infer_columns([first | _] = rows) when is_map(first) do
-    first
-    |> Map.keys()
-    |> infer_columns_from_names(rows)
-  end
+  defp infer_columns([first | _] = rows) when is_map(first),
+    do: infer_columns_from_names(row_names(rows), rows)
 
   defp infer_columns_from_names(names, rows) do
     names
-    |> Enum.map(fn name ->
-      values = Enum.map(rows, &fetch_row_value(&1, name))
-
-      with {:ok, type} <- infer_type(values) do
-        {:ok, %{name: name, type: type}}
-      end
-    end)
+    |> Enum.map(fn name -> infer_column(name, Enum.map(rows, &fetch_row_value(&1, name))) end)
     |> collect_ok()
   end
+
+  defp infer_column(name, values) do
+    with {:ok, type} <- Inference.infer(to_string(name), values),
+         do: {:ok, %{name: name, type: type}}
+  end
+
+  # Every row's keys name columns, in first-seen order, so a key the first
+  # row lacks is not dropped.
+  defp row_names(rows) do
+    {names, _seen} =
+      Enum.reduce(rows, {[], %{}}, fn row, acc ->
+        row
+        |> row_keys()
+        |> Enum.reduce(acc, fn key, {names, seen} = acc ->
+          if is_map_key(seen, key), do: acc, else: {[key | names], Map.put(seen, key, true)}
+        end)
+      end)
+
+    Enum.reverse(names)
+  end
+
+  defp row_keys(row) when is_map(row), do: Map.keys(row)
+  defp row_keys(row) when is_list(row), do: Keyword.keys(row)
+  defp row_keys(_row), do: []
 
   defp normalize_column({name, type}) do
     with {:ok, type} <- normalize_type(type) do
@@ -413,86 +423,6 @@ defmodule QuackDB.Protocol.DataChunk do
 
   defp normalize_type(type) do
     error(:invalid_append_type, "invalid append type #{inspect(type)}")
-  end
-
-  defp infer_type(values) do
-    case Enum.find(values, &(!is_nil(&1))) do
-      nil ->
-        error(:missing_append_column_type, "cannot infer append type from only nil values")
-
-      value when is_boolean(value) ->
-        {:ok, LogicalType.new(:boolean)}
-
-      value when is_integer(value) and value in -2_147_483_648..2_147_483_647 ->
-        {:ok, LogicalType.new(:integer)}
-
-      value when is_integer(value) ->
-        {:ok, LogicalType.new(:bigint)}
-
-      value when is_float(value) ->
-        {:ok, LogicalType.new(:double)}
-
-      %Date{} ->
-        {:ok, LogicalType.new(:date)}
-
-      %Time{} ->
-        {:ok, LogicalType.new(:time)}
-
-      %NaiveDateTime{} ->
-        {:ok, LogicalType.new(:timestamp)}
-
-      %DateTime{} ->
-        {:ok, LogicalType.new(:timestamp_tz)}
-
-      %Decimal{} = decimal ->
-        {:ok, decimal_type(decimal)}
-
-      value when is_binary(value) ->
-        {:ok, LogicalType.new(:varchar)}
-
-      value when is_list(value) ->
-        infer_list_type(values)
-
-      value when is_map(value) ->
-        infer_struct_type(values, value)
-
-      value ->
-        error(:invalid_append_type, "cannot infer append type for #{inspect(value)}")
-    end
-  end
-
-  defp infer_list_type(values) do
-    child_values = Enum.flat_map(values, fn value -> if is_list(value), do: value, else: [] end)
-
-    with {:ok, child_type} <- infer_type(child_values) do
-      {:ok, LogicalType.new(:list, %{type: 4, child_type: child_type})}
-    end
-  end
-
-  defp infer_struct_type(values, sample) do
-    children =
-      sample
-      |> Map.keys()
-      |> Enum.map(fn name ->
-        child_values =
-          Enum.map(values, fn value ->
-            if is_map(value), do: fetch_row_value(value, name), else: nil
-          end)
-
-        with {:ok, type} <- infer_type(child_values) do
-          {:ok, %{name: to_string(name), type: type}}
-        end
-      end)
-
-    with {:ok, children} <- collect_ok(children) do
-      {:ok, LogicalType.new(:struct, %{type: 5, children: children})}
-    end
-  end
-
-  defp decimal_type(%Decimal{coef: coefficient, exp: exponent}) do
-    scale = max(-exponent, 0)
-    width = min(max(coefficient |> abs() |> Integer.digits() |> length(), scale + 1), 38)
-    LogicalType.new(:decimal, LogicalType.decimal_info(width, scale))
   end
 
   defp fetch_row_value(row, name), do: QuackDB.KeyLookup.fetch(row, name)
