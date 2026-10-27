@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Concurrent `QuackDB.Binary` installs into a cold cache no longer fail: the managed binary is now installed atomically.
+
 ## 0.7.0 - 2026-10-27
 
 ### Added

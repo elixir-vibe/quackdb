@@ -93,6 +93,54 @@ defmodule QuackDB.BinaryTest do
     end
   end
 
+  @tag :tmp_dir
+  test "concurrent installs into a cold cache all get a working binary", %{tmp_dir: tmp_dir} do
+    {:ok, target} =
+      QuackDB.Binary.target_for_system(
+        :os.type(),
+        List.to_string(:erlang.system_info(:system_architecture))
+      )
+
+    # A fake CLI padded to tens of megabytes, so writes take long enough to overlap.
+    cli = "#!/bin/sh\necho v2.0.0-test\nexit 0\n" <> String.duplicate("#\n", 16_000_000)
+    archive_path = Path.join([tmp_dir, "www", "v0.0.0-test", "duckdb-cli-#{target}.tar.gz"])
+    File.mkdir_p!(Path.dirname(archive_path))
+    :ok = :erl_tar.create(archive_path, [{~c"duckdb", cli}], [:compressed])
+    sha256 = :sha256 |> :crypto.hash(File.read!(archive_path)) |> Base.encode16(case: :lower)
+
+    {:ok, _apps} = Application.ensure_all_started(:inets)
+
+    {:ok, httpd} =
+      :inets.start(:httpd,
+        port: 0,
+        bind_address: {127, 0, 0, 1},
+        server_name: ~c"quackdb-test",
+        server_root: String.to_charlist(tmp_dir),
+        document_root: String.to_charlist(Path.join(tmp_dir, "www"))
+      )
+
+    on_exit(fn -> :inets.stop(:httpd, httpd) end)
+
+    options = [
+      version: "0.0.0-test",
+      base_url: "http://127.0.0.1:#{:httpd.info(httpd)[:port]}",
+      sha256: sha256,
+      cache_dir: Path.join(tmp_dir, "cache")
+    ]
+
+    results =
+      1..8
+      |> Task.async_stream(fn _ -> QuackDB.Binary.install(options) end,
+        max_concurrency: 8,
+        timeout: 60_000
+      )
+      |> Enum.map(fn {:ok, result} -> result end)
+
+    path = Path.join([tmp_dir, "cache", "0.0.0-test", target, "duckdb"])
+    assert Enum.uniq(results) == [{:ok, path}]
+    assert File.ls!(Path.dirname(path)) == ["duckdb"]
+  end
+
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)
 end
