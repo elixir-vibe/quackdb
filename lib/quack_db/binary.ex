@@ -105,10 +105,8 @@ defmodule QuackDB.Binary do
          :ok <- File.mkdir_p(Path.dirname(path)),
          {:ok, archive} <- fetch(download_url(target, options)),
          :ok <- verify_checksum(archive, target, options),
-         {:ok, binary} <- extract(archive),
-         :ok <- File.write(path, binary),
-         :ok <- File.chmod(path, 0o755) do
-      :ok
+         {:ok, binary} <- extract(archive) do
+      write_executable(path, binary)
     end
   end
 
@@ -177,6 +175,35 @@ defmodule QuackDB.Binary do
         expected: expected,
         actual: actual
       })
+    end
+  end
+
+  # Concurrent installs must never expose a partial or open-for-write file at `path`:
+  # executing a file that is open for writing fails with ETXTBSY, and so does opening a
+  # running executable for writing. Write a private file and rename it into place, which
+  # swaps the directory entry atomically and leaves already-running copies untouched.
+  defp write_executable(path, binary) do
+    tmp_path = "#{path}.#{System.pid()}-#{System.unique_integer([:positive])}.tmp"
+
+    try do
+      with :ok <- File.write(tmp_path, binary),
+           :ok <- File.chmod(tmp_path, 0o755),
+           :ok <- File.rename(tmp_path, path) do
+        :ok
+      else
+        {:error, reason} ->
+          error(
+            :install_failed,
+            "failed to install DuckDB binary: #{:file.format_error(reason)}",
+            %{
+              path: path,
+              reason: reason
+            }
+          )
+      end
+    after
+      # A no-op after a successful rename.
+      File.rm(tmp_path)
     end
   end
 
